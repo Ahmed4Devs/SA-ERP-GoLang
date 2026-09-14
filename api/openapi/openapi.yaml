@@ -1,0 +1,75 @@
+openapi: 3.1.0
+info:
+  title: Saudi ERP Platform API
+  description: Production-Grade Saudi ERP Platform REST API Specification
+  version: 0.1.0
+paths:
+  /:
+    get:
+      summary: Root service information
+      responses:
+        "200":
+          description: Service welcome message
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  version:
+                    type: string
+                  status:
+                    type: string
+  /healthz:
+    get:
+      summary: Liveness probe
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /readyz:
+    get:
+      summary: Readiness probe
+      responses:
+        "200":
+          description: Service is ready to accept traffic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Service is not ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - service
+        - version
+        - environment
+        - uptime_seconds
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN]
+        service:
+          type: string
+        version:
+          type: string
+        environment:
+          type: string
+        uptime_seconds:
+          type: number
+        timestamp:
+          type: string
+          format: date-time

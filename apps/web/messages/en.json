@@ -1,0 +1,50 @@
+{
+  "app": {
+    "title": "Saudi Commercial ERP Platform",
+    "subtitle": "Integrated Enterprise Platform compliant with ZATCA Phase 2 and GOSI standards",
+    "phase": "Phase 0: Bootstrap & Platform Baseline",
+    "ready": "System Operational & Ready",
+    "current_status": "Operational Status"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "organization": "Organization Setup",
+    "iam": "IAM & Security",
+    "accounting": "General Ledger",
+    "sales": "Sales & Customers",
+    "purchasing": "Purchasing & Vendors",
+    "inventory": "Inventory & Warehouses",
+    "treasury": "Treasury & Banking",
+    "hr": "Human Resources",
+    "payroll": "Payroll Engine",
+    "gosi": "GOSI Compliance",
+    "zatca": "ZATCA E-Invoicing",
+    "reports": "Financial Reports",
+    "settings": "System Settings"
+  },
+  "topbar": {
+    "search": "Quick search across records...",
+    "legal_entity": "Active Legal Entity: Riyadh Holding Co.",
+    "branch": "Riyadh Main Branch",
+    "notifications": "Notifications",
+    "theme": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "language": "Language",
+    "user_role": "System Administrator"
+  },
+  "status": {
+    "api_connected": "Connected to Backend (Go API)",
+    "db_ready": "Database Ready (PostgreSQL)",
+    "audit_active": "Audit Engine Active",
+    "zatca_compliant": "ZATCA Phase 2 Ready",
+    "uptime": "Uptime"
+  },
+  "metrics": {
+    "active_branches": "Active Branches",
+    "open_journals": "Open Journals",
+    "pending_approvals": "Pending Approvals",
+    "tax_periods": "Tax Periods"
+  }
+}
