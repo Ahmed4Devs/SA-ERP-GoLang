@@ -2,19 +2,16 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"erp/internal/platform/config"
-	"erp/internal/platform/health"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"erp/internal/platform/database"
+	platformhttp "erp/internal/platform/http"
+	"erp/internal/platform/observability"
 )
 
 func main() {
@@ -26,105 +23,45 @@ func main() {
 	}
 
 	// 2. Setup Structured Logger (slog)
-	var logHandler slog.Handler
-	logOpts := &slog.HandlerOptions{
-		Level: parseLogLevel(cfg.LogLevel),
-	}
-
-	if cfg.Environment == config.EnvProduction {
-		logHandler = slog.NewJSONHandler(os.Stdout, logOpts)
-	} else {
-		logHandler = slog.NewTextHandler(os.Stdout, logOpts)
-	}
-	logger := slog.New(logHandler)
+	logger := observability.NewLogger(cfg.AppName, string(cfg.Environment), cfg.LogLevel)
 	slog.SetDefault(logger)
 
-	logger.Info("Starting Saudi ERP API Server",
+	logger.Info("Starting Saudi ERP Platform API",
 		"service", cfg.AppName,
 		"version", cfg.AppVersion,
 		"env", string(cfg.Environment),
 		"port", cfg.HTTP.Port,
 	)
 
-	// 3. Setup HTTP Router & Middleware
-	r := chi.NewRouter()
-
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
-
-	// Basic security headers
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("X-Content-Type-Options", "nosniff")
-			w.Header().Set("X-Frame-Options", "DENY")
-			w.Header().Set("X-XSS-Protection", "1; mode=block")
-			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-			next.ServeHTTP(w, r)
-		})
-	})
-
-	// 4. Mount Health Check Endpoints
-	healthHandler := health.NewHandler(cfg)
-	r.Mount("/", healthHandler.Routes())
-
-	// Root welcome endpoint
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(fmt.Sprintf(`{"message":"Welcome to Saudi ERP API Platform","version":"%s","status":"operational"}`, cfg.AppVersion)))
-	})
-
-	// 5. Setup HTTP Server
-	server := &http.Server{
-		Addr:         ":" + cfg.HTTP.Port,
-		Handler:      r,
-		ReadTimeout:  cfg.HTTP.ReadTimeout,
-		WriteTimeout: cfg.HTTP.WriteTimeout,
-		IdleTimeout:  cfg.HTTP.IdleTimeout,
+	// 3. Initialize OpenTelemetry Tracing
+	tracerProvider, err := observability.InitTracer(cfg.AppName)
+	if err != nil {
+		logger.Warn("Failed to initialize OpenTelemetry tracer", "error", err)
+	} else {
+		defer func() {
+			_ = tracerProvider.Shutdown(context.Background())
+		}()
 	}
 
-	// 6. Start Server in Background
-	serverErrChan := make(chan error, 1)
-	go func() {
-		logger.Info("HTTP server listening", "addr", server.Addr)
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverErrChan <- err
-		}
-	}()
+	// 4. Setup Root Context with Signal Cancellation
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	// 7. Graceful Shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	// 5. Connect to PostgreSQL Pool (Optional/soft-fail on bootstrap if offline)
+	db, err := database.NewPool(ctx, cfg)
+	if err != nil {
+		logger.Warn("Database pool initialization deferred or unavailable", "error", err)
+	} else {
+		defer db.Close()
+		logger.Info("Database pool connected successfully")
+	}
 
-	select {
-	case err := <-serverErrChan:
-		logger.Error("Server failed to start", "error", err)
+	// 6. Setup Production HTTP Server
+	server := platformhttp.NewServer(cfg, logger, db)
+
+	// 7. Start HTTP Server with Graceful Shutdown
+	if err := server.Start(ctx); err != nil {
+		logger.Error("HTTP server exited with error", "error", err)
 		os.Exit(1)
-	case sig := <-quit:
-		logger.Info("Shutdown signal received", "signal", sig.String())
-
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		if err := server.Shutdown(ctx); err != nil {
-			logger.Error("Server forced to shutdown", "error", err)
-		} else {
-			logger.Info("Server exited gracefully")
-		}
-	}
-}
-
-func parseLogLevel(level string) slog.Level {
-	switch level {
-	case "debug":
-		return slog.LevelDebug
-	case "warn":
-		return slog.LevelWarn
-	case "error":
-		return slog.LevelError
-	default:
-		return slog.LevelInfo
 	}
 }

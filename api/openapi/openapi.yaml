@@ -47,6 +47,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      responses:
+        "200":
+          description: Prometheus formatted metric collection
+          content:
+            text/plain:
+              schema:
+                type: string
 components:
   schemas:
     HealthResponse:
