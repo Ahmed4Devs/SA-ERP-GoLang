@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 
 	"erp/internal/platform/config"
+	"erp/internal/platform/database"
 )
 
 func main() {
@@ -27,9 +29,39 @@ func main() {
 
 	case "migrate":
 		migrateCmd := flag.NewFlagSet("migrate", flag.ExitOnError)
-		direction := migrateCmd.String("dir", "up", "Migration direction: up or down")
+		direction := migrateCmd.String("dir", "up", "Migration direction: up, down, or status")
+		migrationsDir := migrateCmd.String("path", "database/migrations", "Path to migrations directory")
 		_ = migrateCmd.Parse(os.Args[2:])
-		fmt.Printf("Database migration requested: direction=%s (Goose engine will be wired in Phase 1)\n", *direction)
+
+		cfg, err := config.Load()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+			os.Exit(1)
+		}
+
+		ctx := context.Background()
+		switch *direction {
+		case "up":
+			if err := database.MigrateUp(ctx, cfg.Database.URL, *migrationsDir); err != nil {
+				fmt.Fprintf(os.Stderr, "Migration failed: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("Database migrations applied successfully")
+		case "down":
+			if err := database.MigrateDown(ctx, cfg.Database.URL, *migrationsDir); err != nil {
+				fmt.Fprintf(os.Stderr, "Rollback failed: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("Database rollback applied successfully")
+		case "status":
+			if err := database.MigrateStatus(ctx, cfg.Database.URL, *migrationsDir); err != nil {
+				fmt.Fprintf(os.Stderr, "Status check failed: %v\n", err)
+				os.Exit(1)
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown migration direction: %s (must be 'up', 'down', or 'status')\n", *direction)
+			os.Exit(1)
+		}
 
 	case "seed":
 		fmt.Println("Database seed requested: reference data seeds will execute in Phase 1")

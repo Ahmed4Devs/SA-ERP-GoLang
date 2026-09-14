@@ -55,7 +55,7 @@ func Load() (*Config, error) {
 			IdleTimeout:  getDurationEnv("HTTP_IDLE_TIMEOUT", 60*time.Second),
 		},
 		Database: DatabaseConfig{
-			URL:      getEnv("DATABASE_URL", "postgres://erp_user:erp_secret_password@localhost:5432/erp_dev?sslmode=disable"),
+			URL:      getEnv("DATABASE_URL", "postgres://postgres:toor@localhost:5432/erp_dev?sslmode=disable"),
 			MaxConns: int32(getIntEnv("DB_MAX_CONNS", 25)),
 			MinConns: int32(getIntEnv("DB_MIN_CONNS", 5)),
 		},
