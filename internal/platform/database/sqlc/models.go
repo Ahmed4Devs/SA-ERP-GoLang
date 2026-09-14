@@ -8,6 +8,103 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type IamApiKeys struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	KeyHash   string             `json:"key_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type IamLoginAttempts struct {
+	ID          pgtype.UUID        `json:"id"`
+	Identifier  string             `json:"identifier"`
+	IpAddress   string             `json:"ip_address"`
+	Success     bool               `json:"success"`
+	AttemptedAt pgtype.Timestamptz `json:"attempted_at"`
+}
+
+type IamMfaFactors struct {
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	FactorType string             `json:"factor_type"`
+	Secret     string             `json:"secret"`
+	IsVerified bool               `json:"is_verified"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type IamPasswordCredentials struct {
+	UserID       pgtype.UUID        `json:"user_id"`
+	PasswordHash string             `json:"password_hash"`
+	Algorithm    string             `json:"algorithm"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type IamPermissions struct {
+	ID        pgtype.UUID        `json:"id"`
+	Code      string             `json:"code"`
+	NameEn    string             `json:"name_en"`
+	NameAr    pgtype.Text        `json:"name_ar"`
+	Module    string             `json:"module"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type IamRolePermissions struct {
+	RoleID       pgtype.UUID `json:"role_id"`
+	PermissionID pgtype.UUID `json:"permission_id"`
+}
+
+type IamRoles struct {
+	ID          pgtype.UUID        `json:"id"`
+	Code        string             `json:"code"`
+	NameEn      string             `json:"name_en"`
+	NameAr      pgtype.Text        `json:"name_ar"`
+	Description pgtype.Text        `json:"description"`
+	IsSystem    bool               `json:"is_system"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type IamServiceAccounts struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	IsActive  bool               `json:"is_active"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type IamSessions struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	TokenHash    string             `json:"token_hash"`
+	IpAddress    pgtype.Text        `json:"ip_address"`
+	UserAgent    pgtype.Text        `json:"user_agent"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	LastActiveAt pgtype.Timestamptz `json:"last_active_at"`
+}
+
+type IamUserRoleAssignments struct {
+	UserID     pgtype.UUID        `json:"user_id"`
+	RoleID     pgtype.UUID        `json:"role_id"`
+	AssignedAt pgtype.Timestamptz `json:"assigned_at"`
+}
+
+type IamUsers struct {
+	ID                pgtype.UUID        `json:"id"`
+	Username          pgtype.Text        `json:"username"`
+	Email             pgtype.Text        `json:"email"`
+	PhoneNumber       pgtype.Text        `json:"phone_number"`
+	DisplayName       string             `json:"display_name"`
+	PreferredLocale   string             `json:"preferred_locale"`
+	PreferredTimezone string             `json:"preferred_timezone"`
+	Status            string             `json:"status"`
+	LastLoginAt       pgtype.Timestamptz `json:"last_login_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	DisabledAt        pgtype.Timestamptz `json:"disabled_at"`
+	Version           int64              `json:"version"`
+}
+
 type PlatformIdempotencyKeys struct {
 	ID             pgtype.UUID        `json:"id"`
 	Scope          string             `json:"scope"`

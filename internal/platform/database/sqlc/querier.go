@@ -12,17 +12,32 @@ import (
 
 type Querier interface {
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
+	CountRecentFailedAttempts(ctx context.Context, arg CountRecentFailedAttemptsParams) (int64, error)
+	CreateSession(ctx context.Context, arg CreateSessionParams) (IamSessions, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (IamUsers, error)
+	DeleteAllSessionsForUser(ctx context.Context, userID pgtype.UUID) error
+	DeleteExpiredSessions(ctx context.Context) error
+	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	FailIdempotencyKey(ctx context.Context, arg FailIdempotencyKeyParams) error
 	FetchPendingOutboxEvents(ctx context.Context, limit int32) ([]PlatformOutboxEvents, error)
 	GetCountry(ctx context.Context, code string) (RefCountries, error)
 	GetCurrency(ctx context.Context, code string) (RefCurrencies, error)
 	GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyParams) (PlatformIdempotencyKeys, error)
+	GetPasswordByUserID(ctx context.Context, userID pgtype.UUID) (IamPasswordCredentials, error)
+	GetSessionByTokenHash(ctx context.Context, tokenHash string) (GetSessionByTokenHashRow, error)
+	GetUserByID(ctx context.Context, id pgtype.UUID) (IamUsers, error)
+	GetUserByUsernameOrEmail(ctx context.Context, lower string) (IamUsers, error)
 	InsertIdempotencyKey(ctx context.Context, arg InsertIdempotencyKeyParams) (PlatformIdempotencyKeys, error)
 	InsertOutboxEvent(ctx context.Context, arg InsertOutboxEventParams) (PlatformOutboxEvents, error)
 	ListActiveCountries(ctx context.Context) ([]RefCountries, error)
 	ListActiveCurrencies(ctx context.Context) ([]RefCurrencies, error)
 	MarkOutboxEventPublished(ctx context.Context, id pgtype.UUID) error
+	RecordLoginAttempt(ctx context.Context, arg RecordLoginAttemptParams) error
 	RecordOutboxEventAttempt(ctx context.Context, arg RecordOutboxEventAttemptParams) error
+	SetPassword(ctx context.Context, arg SetPasswordParams) error
+	UpdateSessionLastActive(ctx context.Context, tokenHash string) error
+	UpdateUserLastLogin(ctx context.Context, id pgtype.UUID) error
+	UpdateUserStatus(ctx context.Context, arg UpdateUserStatusParams) error
 	UpsertCountry(ctx context.Context, arg UpsertCountryParams) error
 	UpsertCurrency(ctx context.Context, arg UpsertCurrencyParams) error
 }

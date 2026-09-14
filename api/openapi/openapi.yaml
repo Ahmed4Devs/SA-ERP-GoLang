@@ -57,6 +57,50 @@ paths:
             text/plain:
               schema:
                 type: string
+  /api/v1/auth/login:
+    post:
+      summary: Authenticate user and issue session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, password]
+              properties:
+                identifier:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Login successful, returns user and sets erp_session cookie
+        "401":
+          description: Invalid username or password
+        "429":
+          description: Too many failed attempts
+  /api/v1/auth/logout:
+    post:
+      summary: Terminate current session
+      responses:
+        "200":
+          description: Logged out
+  /api/v1/auth/logout-all:
+    post:
+      summary: Terminate all active sessions for current user
+      responses:
+        "200":
+          description: All sessions terminated
+        "401":
+          description: Authentication required
+  /api/v1/auth/me:
+    get:
+      summary: Get currently authenticated user profile
+      responses:
+        "200":
+          description: Current user profile
+        "401":
+          description: Authentication required
 components:
   schemas:
     HealthResponse:

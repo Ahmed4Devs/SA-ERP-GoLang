@@ -2,7 +2,7 @@
   "app": {
     "title": "Saudi Commercial ERP Platform",
     "subtitle": "Integrated Enterprise Platform compliant with ZATCA Phase 2 and GOSI standards",
-    "phase": "Phase 0: Bootstrap & Platform Baseline",
+    "phase": "Phase 3: Identity & Access Management (IAM)",
     "ready": "System Operational & Ready",
     "current_status": "Operational Status"
   },
@@ -46,5 +46,20 @@
     "open_journals": "Open Journals",
     "pending_approvals": "Pending Approvals",
     "tax_periods": "Tax Periods"
+  },
+  "auth": {
+    "login_title": "Sign in to Enterprise ERP",
+    "login_subtitle": "Enter your credentials to access the financial and operations workspace",
+    "identifier": "Username or Email Address",
+    "identifier_placeholder": "admin or admin@erp.sa",
+    "password": "Password",
+    "password_placeholder": "••••••••",
+    "remember_me": "Remember this device",
+    "sign_in": "Sign In",
+    "signing_in": "Verifying credentials...",
+    "invalid_credentials": "Invalid username or password",
+    "logout": "Sign Out",
+    "logout_all": "Terminate All Sessions",
+    "demo_hint": "Default Administrator: admin / Admin@ERP123!"
   }
 }

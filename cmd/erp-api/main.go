@@ -8,10 +8,12 @@ import (
 	"os/signal"
 	"syscall"
 
+	"erp/internal/iam"
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
 	platformhttp "erp/internal/platform/http"
 	"erp/internal/platform/observability"
+	"erp/internal/platform/transaction"
 )
 
 func main() {
@@ -58,6 +60,21 @@ func main() {
 
 	// 6. Setup Production HTTP Server
 	server := platformhttp.NewServer(cfg, logger, db)
+
+	// 7. Mount Domain Modules
+	if db != nil {
+		txManager := transaction.NewManager(db.Pool)
+		iamModule := iam.NewModule(cfg, db, txManager)
+		iamModule.RegisterRoutes(server.Router)
+
+		// Seed initial system administrator if missing
+		_, err := iamModule.AuthService.SeedAdmin(ctx, "admin", "admin@erp.sa", "مدير النظام الشامل", "Admin@ERP123!")
+		if err != nil {
+			logger.Debug("Initial admin user already exists or seeding skipped", "reason", err.Error())
+		} else {
+			logger.Info("Default admin user seeded successfully", "username", "admin", "email", "admin@erp.sa")
+		}
+	}
 
 	// 7. Start HTTP Server with Graceful Shutdown
 	if err := server.Start(ctx); err != nil {

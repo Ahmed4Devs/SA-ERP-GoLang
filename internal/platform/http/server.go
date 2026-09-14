@@ -35,6 +35,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *database.DB) *Server
 	// 1. Canonical Middleware Chain in strict execution order
 	router.Use(middleware.RequestID)
 	router.Use(chimiddleware.RealIP)
+	router.Use(middleware.CORS(middleware.DefaultCORSConfig()))
 	router.Use(observability.HTTPLoggingMiddleware(logger))
 	router.Use(metrics.HTTPMetricsMiddleware)
 	router.Use(middleware.SecurityHeaders(middleware.DefaultSecurityHeadersConfig(isProd)))
