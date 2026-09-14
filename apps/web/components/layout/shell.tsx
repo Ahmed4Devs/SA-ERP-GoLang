@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
   LayoutDashboard,
@@ -96,9 +97,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
+  const pathname = usePathname();
+
   const navItems = [
-    { key: "dashboard", href: "/", icon: LayoutDashboard, label: t.nav.dashboard, active: true },
-    { key: "organization", href: "#", icon: Building2, label: t.nav.organization },
+    { key: "dashboard", href: "/", icon: LayoutDashboard, label: t.nav.dashboard, active: pathname === "/" },
+    { key: "organization", href: "/organization", icon: Building2, label: t.nav.organization, active: pathname === "/organization" },
     { key: "iam", href: "#", icon: ShieldCheck, label: t.nav.iam },
     { key: "accounting", href: "#", icon: BookOpen, label: t.nav.accounting },
     { key: "sales", href: "#", icon: ShoppingBag, label: t.nav.sales },

@@ -1,6 +1,8 @@
 package iam
 
 import (
+	"net/http"
+
 	"erp/internal/iam/application/services"
 	"erp/internal/iam/infrastructure/crypto"
 	"erp/internal/iam/infrastructure/postgres"
@@ -46,4 +48,8 @@ func NewModule(cfg *config.Config, db *database.DB, txManager transaction.Manage
 
 func (m *Module) RegisterRoutes(r chi.Router) {
 	r.Mount("/api/v1/auth", m.Handler.Routes())
+}
+
+func (m *Module) AuthMiddleware() func(http.Handler) http.Handler {
+	return iamhttp.RequireAuth(m.AuthService)
 }

@@ -13,6 +13,13 @@ import (
 type Querier interface {
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
 	CountRecentFailedAttempts(ctx context.Context, arg CountRecentFailedAttemptsParams) (int64, error)
+	CreateAddress(ctx context.Context, arg CreateAddressParams) (OrganizationAddresses, error)
+	CreateBranch(ctx context.Context, arg CreateBranchParams) (OrganizationBranches, error)
+	CreateCostCenter(ctx context.Context, arg CreateCostCenterParams) (OrganizationCostCenters, error)
+	CreateDepartment(ctx context.Context, arg CreateDepartmentParams) (OrganizationDepartments, error)
+	CreateLegalEntity(ctx context.Context, arg CreateLegalEntityParams) (OrganizationLegalEntities, error)
+	CreateNumberSequence(ctx context.Context, arg CreateNumberSequenceParams) (OrganizationNumberSequences, error)
+	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (OrganizationOrganizations, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (IamSessions, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (IamUsers, error)
 	DeleteAllSessionsForUser(ctx context.Context, userID pgtype.UUID) error
@@ -20,21 +27,48 @@ type Querier interface {
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	FailIdempotencyKey(ctx context.Context, arg FailIdempotencyKeyParams) error
 	FetchPendingOutboxEvents(ctx context.Context, limit int32) ([]PlatformOutboxEvents, error)
+	GetAddressByID(ctx context.Context, id pgtype.UUID) (OrganizationAddresses, error)
+	GetBranchByEntityAndCode(ctx context.Context, arg GetBranchByEntityAndCodeParams) (OrganizationBranches, error)
+	GetBranchByID(ctx context.Context, id pgtype.UUID) (OrganizationBranches, error)
+	GetCostCenterByID(ctx context.Context, id pgtype.UUID) (OrganizationCostCenters, error)
 	GetCountry(ctx context.Context, code string) (RefCountries, error)
 	GetCurrency(ctx context.Context, code string) (RefCurrencies, error)
+	GetDepartmentByID(ctx context.Context, id pgtype.UUID) (OrganizationDepartments, error)
 	GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyParams) (PlatformIdempotencyKeys, error)
+	GetLegalEntityByID(ctx context.Context, id pgtype.UUID) (OrganizationLegalEntities, error)
+	GetLegalEntityByOrgAndCode(ctx context.Context, arg GetLegalEntityByOrgAndCodeParams) (OrganizationLegalEntities, error)
+	GetNumberSequenceByEntityAndCode(ctx context.Context, arg GetNumberSequenceByEntityAndCodeParams) (OrganizationNumberSequences, error)
+	GetNumberSequenceForUpdate(ctx context.Context, arg GetNumberSequenceForUpdateParams) (OrganizationNumberSequences, error)
+	GetOrganizationByCode(ctx context.Context, code string) (OrganizationOrganizations, error)
+	GetOrganizationByID(ctx context.Context, id pgtype.UUID) (OrganizationOrganizations, error)
 	GetPasswordByUserID(ctx context.Context, userID pgtype.UUID) (IamPasswordCredentials, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash string) (GetSessionByTokenHashRow, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (IamUsers, error)
 	GetUserByUsernameOrEmail(ctx context.Context, lower string) (IamUsers, error)
+	IncrementNumberSequence(ctx context.Context, arg IncrementNumberSequenceParams) (OrganizationNumberSequences, error)
 	InsertIdempotencyKey(ctx context.Context, arg InsertIdempotencyKeyParams) (PlatformIdempotencyKeys, error)
 	InsertOutboxEvent(ctx context.Context, arg InsertOutboxEventParams) (PlatformOutboxEvents, error)
 	ListActiveCountries(ctx context.Context) ([]RefCountries, error)
 	ListActiveCurrencies(ctx context.Context) ([]RefCurrencies, error)
+	ListAddressesByBranch(ctx context.Context, branchID pgtype.UUID) ([]OrganizationAddresses, error)
+	ListAddressesByLegalEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationAddresses, error)
+	ListAllActiveLegalEntities(ctx context.Context) ([]OrganizationLegalEntities, error)
+	ListBranchesByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationBranches, error)
+	ListCostCentersByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationCostCenters, error)
+	ListDepartmentsByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationDepartments, error)
+	ListLegalEntitiesByOrg(ctx context.Context, organizationID pgtype.UUID) ([]OrganizationLegalEntities, error)
+	ListNumberSequencesByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationNumberSequences, error)
+	ListOrganizations(ctx context.Context) ([]OrganizationOrganizations, error)
 	MarkOutboxEventPublished(ctx context.Context, id pgtype.UUID) error
 	RecordLoginAttempt(ctx context.Context, arg RecordLoginAttemptParams) error
 	RecordOutboxEventAttempt(ctx context.Context, arg RecordOutboxEventAttemptParams) error
+	ResetAndIncrementNumberSequence(ctx context.Context, arg ResetAndIncrementNumberSequenceParams) (OrganizationNumberSequences, error)
 	SetPassword(ctx context.Context, arg SetPasswordParams) error
+	UpdateBranch(ctx context.Context, arg UpdateBranchParams) (OrganizationBranches, error)
+	UpdateCostCenter(ctx context.Context, arg UpdateCostCenterParams) (OrganizationCostCenters, error)
+	UpdateDepartment(ctx context.Context, arg UpdateDepartmentParams) (OrganizationDepartments, error)
+	UpdateLegalEntity(ctx context.Context, arg UpdateLegalEntityParams) (OrganizationLegalEntities, error)
+	UpdateOrganization(ctx context.Context, arg UpdateOrganizationParams) (OrganizationOrganizations, error)
 	UpdateSessionLastActive(ctx context.Context, tokenHash string) error
 	UpdateUserLastLogin(ctx context.Context, id pgtype.UUID) error
 	UpdateUserStatus(ctx context.Context, arg UpdateUserStatusParams) error

@@ -105,6 +105,127 @@ type IamUsers struct {
 	Version           int64              `json:"version"`
 }
 
+type OrganizationAddresses struct {
+	ID               pgtype.UUID        `json:"id"`
+	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
+	BranchID         pgtype.UUID        `json:"branch_id"`
+	AddressType      string             `json:"address_type"`
+	BuildingNumber   string             `json:"building_number"`
+	StreetNameAr     string             `json:"street_name_ar"`
+	StreetNameEn     string             `json:"street_name_en"`
+	DistrictAr       string             `json:"district_ar"`
+	DistrictEn       string             `json:"district_en"`
+	CityAr           string             `json:"city_ar"`
+	CityEn           string             `json:"city_en"`
+	PostalCode       string             `json:"postal_code"`
+	AdditionalNumber pgtype.Text        `json:"additional_number"`
+	CountryCode      string             `json:"country_code"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type OrganizationBranches struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Code          string             `json:"code"`
+	NameAr        string             `json:"name_ar"`
+	NameEn        string             `json:"name_en"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Version       int64              `json:"version"`
+}
+
+type OrganizationBusinessUnits struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Code          string             `json:"code"`
+	NameAr        string             `json:"name_ar"`
+	NameEn        string             `json:"name_en"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Version       int64              `json:"version"`
+}
+
+type OrganizationCostCenters struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	ParentID      pgtype.UUID        `json:"parent_id"`
+	Code          string             `json:"code"`
+	NameAr        string             `json:"name_ar"`
+	NameEn        string             `json:"name_en"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Version       int64              `json:"version"`
+}
+
+type OrganizationDepartments struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	ParentID      pgtype.UUID        `json:"parent_id"`
+	Code          string             `json:"code"`
+	NameAr        string             `json:"name_ar"`
+	NameEn        string             `json:"name_en"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Version       int64              `json:"version"`
+}
+
+type OrganizationLegalEntities struct {
+	ID             pgtype.UUID        `json:"id"`
+	OrganizationID pgtype.UUID        `json:"organization_id"`
+	Code           string             `json:"code"`
+	NameAr         string             `json:"name_ar"`
+	NameEn         string             `json:"name_en"`
+	CrNumber       pgtype.Text        `json:"cr_number"`
+	BaseCurrency   string             `json:"base_currency"`
+	IsActive       bool               `json:"is_active"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	Version        int64              `json:"version"`
+}
+
+type OrganizationNumberSequences struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	SequenceCode  string             `json:"sequence_code"`
+	Prefix        string             `json:"prefix"`
+	Suffix        string             `json:"suffix"`
+	NextValue     int64              `json:"next_value"`
+	Step          int32              `json:"step"`
+	PaddingLength int32              `json:"padding_length"`
+	ResetInterval string             `json:"reset_interval"`
+	LastResetYear int32              `json:"last_reset_year"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Version       int64              `json:"version"`
+}
+
+type OrganizationOrganizations struct {
+	ID        pgtype.UUID        `json:"id"`
+	Code      string             `json:"code"`
+	NameAr    string             `json:"name_ar"`
+	NameEn    string             `json:"name_en"`
+	Status    string             `json:"status"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	Version   int64              `json:"version"`
+}
+
+type OrganizationTaxRegistrations struct {
+	ID                 pgtype.UUID        `json:"id"`
+	LegalEntityID      pgtype.UUID        `json:"legal_entity_id"`
+	TaxType            string             `json:"tax_type"`
+	RegistrationNumber string             `json:"registration_number"`
+	EffectiveFrom      pgtype.Date        `json:"effective_from"`
+	EffectiveTo        pgtype.Date        `json:"effective_to"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
 type PlatformIdempotencyKeys struct {
 	ID             pgtype.UUID        `json:"id"`
 	Scope          string             `json:"scope"`

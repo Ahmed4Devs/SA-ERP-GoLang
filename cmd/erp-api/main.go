@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"erp/internal/iam"
+	"erp/internal/organization"
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
 	platformhttp "erp/internal/platform/http"
@@ -64,6 +65,8 @@ func main() {
 	// 7. Mount Domain Modules
 	if db != nil {
 		txManager := transaction.NewManager(db.Pool)
+
+		// A. IAM Module
 		iamModule := iam.NewModule(cfg, db, txManager)
 		iamModule.RegisterRoutes(server.Router)
 
@@ -73,6 +76,22 @@ func main() {
 			logger.Debug("Initial admin user already exists or seeding skipped", "reason", err.Error())
 		} else {
 			logger.Info("Default admin user seeded successfully", "username", "admin", "email", "admin@erp.sa")
+		}
+
+		// B. Organization Module
+		orgModule := organization.NewModule(cfg, db, txManager)
+		orgModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+
+		// Seed initial Saudi enterprise organization & legal entity
+		seededLE, err := orgModule.SeedDefaultStructure(ctx)
+		if err != nil {
+			logger.Warn("Failed to seed default organization structure", "error", err)
+		} else if seededLE != nil {
+			logger.Info("Default Saudi organization hierarchy verified",
+				"legal_entity_id", seededLE.ID.String(),
+				"legal_entity_code", seededLE.Code,
+				"cr_number", seededLE.CRNumber,
+			)
 		}
 	}
 

@@ -2,7 +2,7 @@
   "app": {
     "title": "Saudi Commercial ERP Platform",
     "subtitle": "Integrated Enterprise Platform compliant with ZATCA Phase 2 and GOSI standards",
-    "phase": "Phase 3: Identity & Access Management (IAM)",
+    "phase": "Phase 4: Organization & Numbering Hierarchy",
     "ready": "System Operational & Ready",
     "current_status": "Operational Status"
   },
@@ -24,7 +24,7 @@
   },
   "topbar": {
     "search": "Quick search across records...",
-    "legal_entity": "Active Legal Entity: Riyadh Holding Co.",
+    "legal_entity": "Active Legal Entity: Horizon Advanced Co.",
     "branch": "Riyadh Main Branch",
     "notifications": "Notifications",
     "theme": "Theme",
@@ -61,5 +61,27 @@
     "logout": "Sign Out",
     "logout_all": "Terminate All Sessions",
     "demo_hint": "Default Administrator: admin / Admin@ERP123!"
+  },
+  "organization": {
+    "title": "Organization Hierarchy & Number Sequences",
+    "subtitle": "Manage Holdings, Legal Entities, Branches, Departments, Cost Centers, National Address, and Concurrency-Safe Sequence Engine",
+    "holding_title": "Holding Organizations",
+    "legal_entities_title": "Certified Legal Entities (Financial Boundary)",
+    "branches_title": "Branches & Operational Locations",
+    "departments_title": "Organizational Departments",
+    "cost_centers_title": "Cost Centers & Financial Dimensions",
+    "number_sequences_title": "Document Number Sequences",
+    "code": "Code",
+    "name_ar": "Arabic Name",
+    "name_en": "English Name",
+    "cr_number": "CR Number",
+    "currency": "Currency",
+    "status": "Status",
+    "active": "Active",
+    "inactive": "Inactive",
+    "national_address": "National Address",
+    "test_sequence_button": "Generate Next Sales Invoice Sequence",
+    "generated_badge": "Atomically Generated Number:",
+    "generating": "Generating..."
   }
 }
