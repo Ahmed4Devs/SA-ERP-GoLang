@@ -2,7 +2,7 @@
   "app": {
     "title": "منصة تخطيط الموارد للمنشآت السعودية",
     "subtitle": "نظام ERP متكامل ومتوافق مع هيئة الزكاة والضريبة والجمارك والتأمينات الاجتماعية",
-    "phase": "المرحلة 5: إدارة الصلاحيات ونطاق الكيان (Authorization)",
+    "phase": "المرحلة 6: سجل التدقيق المالي الثابت المشفر (Audit Trail)",
     "ready": "النظام جاهز للعمل",
     "current_status": "الحالة التشغيلية"
   },
@@ -10,6 +10,7 @@
     "dashboard": "لوحة المؤشرات",
     "organization": "إدارة المنشأة",
     "iam": "الهوية والصلاحيات",
+    "audit": "سجل التدقيق المالي",
     "accounting": "المحاسبة العامة",
     "sales": "المبيعات والعملاء",
     "purchasing": "المشتريات والموردين",
@@ -99,5 +100,34 @@
     "scope": "النطاق المالي",
     "global_scope": "شامل لكافة الكيانات (Global)",
     "scoped_entity": "مقيد بالكيان القانوني"
+  },
+  "audit": {
+    "title": "سجل التدقيق المالي والأمني (Immutable Audit Trail)",
+    "subtitle": "سجل تاريخي غير قابل للتعديل أو الحذف ومحمي بسلسلة تجزئة تشفيرية (Cryptographic SHA-256 Hash Chaining) وفق المعايير المحاسبية والتنظيمية السعودية",
+    "integrity_title": "سلامة السلسلة التشفيرية لسجل التدقيق",
+    "integrity_valid": "السلسلة التشفيرية سليمة وموثقة بنسبة 100% (Cryptographically Verified)",
+    "integrity_broken": "تنبيه: تم رصد خلل أو محاولة تلاعب بالسلسلة التشفيرية",
+    "verify_button": "فحص سلامة السلسلة الآن",
+    "verifying": "جاري التحقق من التجزئة...",
+    "total_records": "إجمالي السجلات المدققة",
+    "verified_records": "السجلات الموثقة",
+    "last_check": "تاريخ آخر فحص",
+    "events_table_title": "سجلات الحركات والعمليات المالية والتشغيلية",
+    "security_events_title": "أحداث الأمان وتسجيل الدخول",
+    "action": "نوع الحركة",
+    "resource_type": "نوع المورد",
+    "resource_id": "معرف السجل",
+    "user": "المستخدم",
+    "ip_address": "عنوان IP",
+    "timestamp": "التوقيت",
+    "record_hash": "التجزئة المشفرة (Hash)",
+    "previous_hash": "تجزئة السجل السابق",
+    "payload": "بيانات الحمولة (Payload)",
+    "view_payload": "عرض التفاصيل",
+    "filter_all": "الكل",
+    "filter_action": "تصفية حسب نوع الحركة",
+    "filter_resource": "تصفية حسب نوع المورد",
+    "search_placeholder": "بحث برقم المعرف أو الإجراء...",
+    "immutable_badge": "سجل ثابت غير قابل للتعديل (Strict Append-Only)"
   }
 }

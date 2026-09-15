@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"erp/internal/audit"
 	"erp/internal/authorization"
 	"erp/internal/iam"
 	"erp/internal/organization"
@@ -108,6 +109,11 @@ func main() {
 				logger.Info("SUPER_ADMIN role assigned to default administrator", "user_id", adminUser.ID.String())
 			}
 		}
+
+		// D. Audit Module (Append-Only Cryptographic Audit Trail)
+		auditModule := audit.NewModule(cfg, db)
+		auditModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		logger.Info("Audit module and access trail registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

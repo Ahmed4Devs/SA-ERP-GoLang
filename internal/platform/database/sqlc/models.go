@@ -8,6 +8,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AuditAccessEvents struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	ResourcePath string             `json:"resource_path"`
+	Method       string             `json:"method"`
+	StatusCode   int32              `json:"status_code"`
+	IpAddress    pgtype.Text        `json:"ip_address"`
+	LatencyMs    int32              `json:"latency_ms"`
+	OccurredAt   pgtype.Timestamptz `json:"occurred_at"`
+}
+
+type AuditEntityChanges struct {
+	ID          pgtype.UUID        `json:"id"`
+	EventID     pgtype.UUID        `json:"event_id"`
+	TableName   string             `json:"table_name"`
+	RecordID    string             `json:"record_id"`
+	BeforeState []byte             `json:"before_state"`
+	AfterState  []byte             `json:"after_state"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type AuditEvents struct {
+	ID            pgtype.UUID        `json:"id"`
+	UserID        pgtype.UUID        `json:"user_id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Action        string             `json:"action"`
+	ResourceType  string             `json:"resource_type"`
+	ResourceID    string             `json:"resource_id"`
+	Payload       []byte             `json:"payload"`
+	IpAddress     pgtype.Text        `json:"ip_address"`
+	UserAgent     pgtype.Text        `json:"user_agent"`
+	PreviousHash  pgtype.Text        `json:"previous_hash"`
+	RecordHash    string             `json:"record_hash"`
+	OccurredAt    pgtype.Timestamptz `json:"occurred_at"`
+}
+
+type AuditSecurityEvents struct {
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	EventType  string             `json:"event_type"`
+	Status     string             `json:"status"`
+	Details    []byte             `json:"details"`
+	IpAddress  pgtype.Text        `json:"ip_address"`
+	OccurredAt pgtype.Timestamptz `json:"occurred_at"`
+}
+
 type AuthzPermissions struct {
 	ID        pgtype.UUID        `json:"id"`
 	Code      string             `json:"code"`

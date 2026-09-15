@@ -2,7 +2,7 @@
   "app": {
     "title": "Saudi Commercial ERP Platform",
     "subtitle": "Integrated Enterprise Platform compliant with ZATCA Phase 2 and GOSI standards",
-    "phase": "Phase 5: RBAC & Legal Entity Authorization",
+    "phase": "Phase 6: Immutable Cryptographic Audit Trail",
     "ready": "System Operational & Ready",
     "current_status": "Operational Status"
   },
@@ -10,6 +10,7 @@
     "dashboard": "Dashboard",
     "organization": "Organization Setup",
     "iam": "IAM & Security",
+    "audit": "Audit Trail",
     "accounting": "General Ledger",
     "sales": "Sales & Customers",
     "purchasing": "Purchasing & Vendors",
@@ -98,6 +99,35 @@
     "role_code": "Role Code",
     "scope": "Financial Scope",
     "global_scope": "Global (All Entities)",
-    "scoped_entity": "Scoped Legal Entity"
+    "scoped_entity": "Scoped to Legal Entity"
+  },
+  "audit": {
+    "title": "Immutable Financial & Security Audit Trail",
+    "subtitle": "Append-only tamper-evident audit history protected by cryptographic SHA-256 hash chaining compliant with Saudi regulatory and financial governance standards",
+    "integrity_title": "Audit Cryptographic Chain Integrity",
+    "integrity_valid": "Audit Hash Chain 100% Verified & Intact",
+    "integrity_broken": "Warning: Cryptographic Chain Tampering Detected",
+    "verify_button": "Verify Chain Integrity Now",
+    "verifying": "Verifying Hash Chain...",
+    "total_records": "Total Audited Records",
+    "verified_records": "Verified Records",
+    "last_check": "Last Verification",
+    "events_table_title": "Financial & Operational Audit Event Trail",
+    "security_events_title": "Security & Authentication Events",
+    "action": "Action",
+    "resource_type": "Resource Type",
+    "resource_id": "Resource ID",
+    "user": "User",
+    "ip_address": "IP Address",
+    "timestamp": "Timestamp",
+    "record_hash": "Record Hash",
+    "previous_hash": "Previous Hash",
+    "payload": "Event Payload",
+    "view_payload": "View Details",
+    "filter_all": "All",
+    "filter_action": "Filter by Action",
+    "filter_resource": "Filter by Resource",
+    "search_placeholder": "Search by ID or action...",
+    "immutable_badge": "Strictly Append-Only Record"
   }
 }
