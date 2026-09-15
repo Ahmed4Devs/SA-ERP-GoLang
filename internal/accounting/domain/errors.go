@@ -18,4 +18,6 @@ var (
 	ErrCannotReverseUnposted     = errors.New("cannot_reverse_unposted: only posted journal entries can be reversed")
 	ErrNoLinesProvided           = errors.New("no_lines_provided: journal entry must contain at least two balanced lines")
 	ErrDuplicateLineNumber       = errors.New("duplicate_line_number: journal lines must have unique ascending numbers")
+	ErrDuplicatePosting          = errors.New("duplicate_posting: a journal entry with the same source already exists (idempotent reject)")
+	ErrInvalidPostingRequest     = errors.New("invalid_posting_request: posting request is missing required fields")
 )

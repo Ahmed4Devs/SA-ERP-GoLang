@@ -409,8 +409,8 @@ export function AccountingView() {
           ? `تم حفظ وترحيل القيد ${entryNum} فورياً للأستاذ العام بنجاح!`
           : `Journal entry ${entryNum} saved and posted immediately to General Ledger!`
         : locale === "ar"
-        ? `تم حفظ القيد ${entryNum} كمسودة متوازنة جاهزة للمراجعة.`
-        : `Journal entry ${entryNum} saved as draft.`
+          ? `تم حفظ القيد ${entryNum} كمسودة متوازنة جاهزة للمراجعة.`
+          : `Journal entry ${entryNum} saved as draft.`
     );
     setTimeout(() => setActionSuccessMsg(null), 4000);
   };
@@ -577,11 +577,10 @@ export function AccountingView() {
         <nav className="flex gap-2 overflow-x-auto pb-px" aria-label="Tabs">
           <button
             onClick={() => setActiveTab("coa")}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-              activeTab === "coa"
+            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${activeTab === "coa"
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted"
-            }`}
+              }`}
           >
             <FolderTree className="h-4 w-4" />
             <span>{t.accounting.tab_coa}</span>
@@ -590,11 +589,10 @@ export function AccountingView() {
 
           <button
             onClick={() => setActiveTab("journals")}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-              activeTab === "journals"
+            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${activeTab === "journals"
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted"
-            }`}
+              }`}
           >
             <FileSpreadsheet className="h-4 w-4" />
             <span>{t.accounting.tab_journals}</span>
@@ -603,11 +601,10 @@ export function AccountingView() {
 
           <button
             onClick={() => setActiveTab("new_entry")}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-              activeTab === "new_entry"
+            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${activeTab === "new_entry"
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted"
-            }`}
+              }`}
           >
             <PlusCircle className="h-4 w-4" />
             <span>{t.accounting.tab_new_entry}</span>
@@ -618,11 +615,10 @@ export function AccountingView() {
 
           <button
             onClick={() => setActiveTab("trial_balance")}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-              activeTab === "trial_balance"
+            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${activeTab === "trial_balance"
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted"
-            }`}
+              }`}
           >
             <DollarSign className="h-4 w-4" />
             <span>{t.accounting.tab_trial_balance}</span>
@@ -633,11 +629,10 @@ export function AccountingView() {
 
           <button
             onClick={() => setActiveTab("fiscal")}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-              activeTab === "fiscal"
+            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${activeTab === "fiscal"
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted"
-            }`}
+              }`}
           >
             <Calendar className="h-4 w-4" />
             <span>{t.accounting.tab_fiscal}</span>
@@ -740,17 +735,16 @@ export function AccountingView() {
 
                         <td className="py-2.5 px-4 text-center">
                           <span
-                            className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                              node.accountType === "ASSET"
+                            className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${node.accountType === "ASSET"
                                 ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
                                 : node.accountType === "LIABILITY"
-                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                : node.accountType === "EQUITY"
-                                ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
-                                : node.accountType === "REVENUE"
-                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
-                            }`}
+                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                  : node.accountType === "EQUITY"
+                                    ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                                    : node.accountType === "REVENUE"
+                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                      : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                              }`}
                           >
                             {node.accountType}
                           </span>
@@ -764,11 +758,10 @@ export function AccountingView() {
 
                         <td className="py-2.5 px-4 text-center">
                           <span
-                            className={`font-semibold ${
-                              node.normalBalance === "DEBIT"
+                            className={`font-semibold ${node.normalBalance === "DEBIT"
                                 ? "text-blue-600 dark:text-blue-400"
                                 : "text-amber-600 dark:text-amber-400"
-                            }`}
+                              }`}
                           >
                             {node.normalBalance === "DEBIT" ? t.accounting.debit : t.accounting.credit}
                           </span>
@@ -809,19 +802,18 @@ export function AccountingView() {
                 <button
                   key={st}
                   onClick={() => setEntryFilterStatus(st)}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                    entryFilterStatus === st
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${entryFilterStatus === st
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "bg-secondary text-secondary-foreground hover:bg-muted"
-                  }`}
+                    }`}
                 >
                   {st === "ALL"
                     ? "الكل"
                     : st === "DRAFT"
-                    ? t.accounting.status_draft
-                    : st === "POSTED"
-                    ? t.accounting.status_posted
-                    : t.accounting.status_reversed}
+                      ? t.accounting.status_draft
+                      : st === "POSTED"
+                        ? t.accounting.status_posted
+                        : t.accounting.status_reversed}
                 </button>
               ))}
             </div>
@@ -849,13 +841,12 @@ export function AccountingView() {
                   <div className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 bg-card hover:bg-muted/20">
                     <div className="flex items-start gap-3">
                       <div
-                        className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                          entry.status === "POSTED"
+                        className={`h-10 w-10 rounded-xl flex items-center justify-center flex-shrink-0 ${entry.status === "POSTED"
                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                             : entry.status === "DRAFT"
-                            ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                            : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
-                        }`}
+                              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                              : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                          }`}
                       >
                         {entry.status === "POSTED" ? (
                           <Lock className="h-5 w-5" />
@@ -872,19 +863,18 @@ export function AccountingView() {
                             {entry.entryNumber}
                           </span>
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              entry.status === "POSTED"
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${entry.status === "POSTED"
                                 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
                                 : entry.status === "DRAFT"
-                                ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                                : "bg-rose-500/15 text-rose-700 dark:text-rose-300"
-                            }`}
+                                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                                  : "bg-rose-500/15 text-rose-700 dark:text-rose-300"
+                              }`}
                           >
                             {entry.status === "POSTED"
                               ? t.accounting.status_posted
                               : entry.status === "DRAFT"
-                              ? t.accounting.status_draft
-                              : t.accounting.status_reversed}
+                                ? t.accounting.status_draft
+                                : t.accounting.status_reversed}
                           </span>
                           <span className="text-xs text-muted-foreground font-mono">
                             {entry.journalCode} • {locale === "ar" ? entry.journalNameAr : entry.journalNameEn}
@@ -1219,11 +1209,10 @@ export function AccountingView() {
 
             {/* Live Invariant Validation Callout */}
             <div
-              className={`p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
-                newEntryTotals.isBalanced
+              className={`p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${newEntryTotals.isBalanced
                   ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-200"
                   : "bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-200"
-              }`}
+                }`}
             >
               <div className="flex items-center gap-2.5">
                 {newEntryTotals.isBalanced ? (
@@ -1405,20 +1394,18 @@ export function AccountingView() {
                 return (
                   <div
                     key={p.id}
-                    className={`p-3.5 rounded-xl border transition-all ${
-                      isOpen
+                    className={`p-3.5 rounded-xl border transition-all ${isOpen
                         ? "bg-emerald-500/5 border-emerald-500/30"
                         : "bg-muted/40 border-muted"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-mono font-bold text-sm text-foreground">{p.name}</span>
                       <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          isOpen
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isOpen
                             ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
                             : "bg-rose-500/15 text-rose-700 dark:text-rose-300"
-                        }`}
+                          }`}
                       >
                         {isOpen ? "مفتوحة (OPEN)" : "مقفلة (LOCKED)"}
                       </span>
@@ -1442,11 +1429,10 @@ export function AccountingView() {
                             )
                           );
                         }}
-                        className={`px-2 py-1 rounded text-[11px] font-semibold transition-colors ${
-                          isOpen
+                        className={`px-2 py-1 rounded text-[11px] font-semibold transition-colors ${isOpen
                             ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20"
                             : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20"
-                        }`}
+                          }`}
                       >
                         {isOpen ? "إقفال الفترة" : "إعادة الفتح"}
                       </button>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	postingapp "erp/internal/accounting/application/posting"
 	"erp/internal/accounting/application/services"
 	"erp/internal/accounting/infrastructure/postgres"
 	"erp/internal/accounting/ports"
@@ -20,19 +21,23 @@ type Module struct {
 	pool              *pgxpool.Pool
 	AccountingService ports.AccountingService
 	LedgerService     ports.LedgerService
+	PostingEngine     ports.PostingEngine
 	Handler           *accountinghttp.AccountingHandler
 }
 
 func NewModule(cfg *config.Config, db *database.DB) *Module {
 	repo := postgres.NewAccountingRepository(db.Pool)
+	postingRepo := postgres.NewPostingRepository(db.Pool)
 	accountingSvc := services.NewAccountingService(repo)
 	ledgerSvc := services.NewLedgerService(repo)
+	postingEngine := postingapp.NewPostingEngine(postingRepo)
 	handler := accountinghttp.NewAccountingHandler(accountingSvc, ledgerSvc)
 
 	return &Module{
 		pool:              db.Pool,
 		AccountingService: accountingSvc,
 		LedgerService:     ledgerSvc,
+		PostingEngine:     postingEngine,
 		Handler:           handler,
 	}
 }
@@ -46,3 +51,4 @@ func (m *Module) SeedDefaultCOA(ctx context.Context, legalEntityID uuid.UUID) er
 	_, err := m.pool.Exec(ctx, "SELECT accounting.seed_default_coa($1)", legalEntityID)
 	return err
 }
+

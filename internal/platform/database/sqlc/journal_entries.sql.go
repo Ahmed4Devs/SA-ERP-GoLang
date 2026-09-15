@@ -279,6 +279,65 @@ func (q *Queries) GetJournalEntryByNumber(ctx context.Context, arg GetJournalEnt
 	return i, err
 }
 
+const getJournalEntryBySource = `-- name: GetJournalEntryBySource :one
+SELECT id, legal_entity_id, journal_id, fiscal_period_id, entry_number, accounting_date,
+       status, source_module, source_type, source_id, reference, description,
+       currency_code, exchange_rate, total_debit, total_credit,
+       created_by, approved_by, posted_by, created_at, approved_at, posted_at,
+       reversed_at, reversal_of_id, version
+FROM accounting.journal_entries
+WHERE legal_entity_id = $1
+  AND source_module = $2
+  AND source_type = $3
+  AND source_id = $4
+LIMIT 1
+`
+
+type GetJournalEntryBySourceParams struct {
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+	SourceModule  string      `json:"source_module"`
+	SourceType    pgtype.Text `json:"source_type"`
+	SourceID      pgtype.UUID `json:"source_id"`
+}
+
+func (q *Queries) GetJournalEntryBySource(ctx context.Context, arg GetJournalEntryBySourceParams) (AccountingJournalEntries, error) {
+	row := q.db.QueryRow(ctx, getJournalEntryBySource,
+		arg.LegalEntityID,
+		arg.SourceModule,
+		arg.SourceType,
+		arg.SourceID,
+	)
+	var i AccountingJournalEntries
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.JournalID,
+		&i.FiscalPeriodID,
+		&i.EntryNumber,
+		&i.AccountingDate,
+		&i.Status,
+		&i.SourceModule,
+		&i.SourceType,
+		&i.SourceID,
+		&i.Reference,
+		&i.Description,
+		&i.CurrencyCode,
+		&i.ExchangeRate,
+		&i.TotalDebit,
+		&i.TotalCredit,
+		&i.CreatedBy,
+		&i.ApprovedBy,
+		&i.PostedBy,
+		&i.CreatedAt,
+		&i.ApprovedAt,
+		&i.PostedAt,
+		&i.ReversedAt,
+		&i.ReversalOfID,
+		&i.Version,
+	)
+	return i, err
+}
+
 const listJournalEntriesByLegalEntity = `-- name: ListJournalEntriesByLegalEntity :many
 SELECT id, legal_entity_id, journal_id, fiscal_period_id, entry_number, accounting_date,
        status, source_module, source_type, source_id, reference, description,
@@ -570,6 +629,58 @@ func (q *Queries) UpdateJournalEntryStatus(ctx context.Context, arg UpdateJourna
 		&i.ReversedAt,
 		&i.ReversalOfID,
 		&i.Version,
+	)
+	return i, err
+}
+
+const upsertAccountBalance = `-- name: UpsertAccountBalance :one
+INSERT INTO accounting.account_balances (
+    legal_entity_id, account_id, fiscal_period_id,
+    opening_balance, period_debit, period_credit, closing_balance
+) VALUES (
+    $1, $2, $3,
+    $4, $5, $6, $7
+)
+ON CONFLICT (legal_entity_id, account_id, fiscal_period_id)
+DO UPDATE SET
+    period_debit = accounting.account_balances.period_debit + EXCLUDED.period_debit,
+    period_credit = accounting.account_balances.period_credit + EXCLUDED.period_credit,
+    closing_balance = accounting.account_balances.closing_balance + EXCLUDED.closing_balance,
+    updated_at = now()
+RETURNING id, legal_entity_id, account_id, fiscal_period_id, opening_balance, period_debit, period_credit, closing_balance, updated_at
+`
+
+type UpsertAccountBalanceParams struct {
+	LegalEntityID  pgtype.UUID    `json:"legal_entity_id"`
+	AccountID      pgtype.UUID    `json:"account_id"`
+	FiscalPeriodID pgtype.UUID    `json:"fiscal_period_id"`
+	OpeningBalance pgtype.Numeric `json:"opening_balance"`
+	PeriodDebit    pgtype.Numeric `json:"period_debit"`
+	PeriodCredit   pgtype.Numeric `json:"period_credit"`
+	ClosingBalance pgtype.Numeric `json:"closing_balance"`
+}
+
+func (q *Queries) UpsertAccountBalance(ctx context.Context, arg UpsertAccountBalanceParams) (AccountingAccountBalances, error) {
+	row := q.db.QueryRow(ctx, upsertAccountBalance,
+		arg.LegalEntityID,
+		arg.AccountID,
+		arg.FiscalPeriodID,
+		arg.OpeningBalance,
+		arg.PeriodDebit,
+		arg.PeriodCredit,
+		arg.ClosingBalance,
+	)
+	var i AccountingAccountBalances
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.AccountID,
+		&i.FiscalPeriodID,
+		&i.OpeningBalance,
+		&i.PeriodDebit,
+		&i.PeriodCredit,
+		&i.ClosingBalance,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

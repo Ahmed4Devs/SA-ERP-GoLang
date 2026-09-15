@@ -72,6 +72,7 @@ type Querier interface {
 	GetJournalByID(ctx context.Context, id pgtype.UUID) (AccountingJournals, error)
 	GetJournalEntryByID(ctx context.Context, id pgtype.UUID) (AccountingJournalEntries, error)
 	GetJournalEntryByNumber(ctx context.Context, arg GetJournalEntryByNumberParams) (AccountingJournalEntries, error)
+	GetJournalEntryBySource(ctx context.Context, arg GetJournalEntryBySourceParams) (AccountingJournalEntries, error)
 	GetLatestAuditEvent(ctx context.Context) (AuditEvents, error)
 	GetLegalEntityByID(ctx context.Context, id pgtype.UUID) (OrganizationLegalEntities, error)
 	GetLegalEntityByOrgAndCode(ctx context.Context, arg GetLegalEntityByOrgAndCodeParams) (OrganizationLegalEntities, error)
@@ -160,6 +161,7 @@ type Querier interface {
 	UpdateUserLastLogin(ctx context.Context, id pgtype.UUID) error
 	UpdateUserStatus(ctx context.Context, arg UpdateUserStatusParams) error
 	UpdateWorkflowInstanceStatus(ctx context.Context, arg UpdateWorkflowInstanceStatusParams) (WorkflowInstances, error)
+	UpsertAccountBalance(ctx context.Context, arg UpsertAccountBalanceParams) (AccountingAccountBalances, error)
 	UpsertCountry(ctx context.Context, arg UpsertCountryParams) error
 	UpsertCurrency(ctx context.Context, arg UpsertCurrencyParams) error
 }

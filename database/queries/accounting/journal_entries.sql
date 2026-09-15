@@ -112,3 +112,33 @@ ORDER BY l.line_number ASC;
 -- name: DeleteJournalLinesByEntryID :exec
 DELETE FROM accounting.journal_lines
 WHERE journal_entry_id = $1;
+
+-- name: GetJournalEntryBySource :one
+SELECT id, legal_entity_id, journal_id, fiscal_period_id, entry_number, accounting_date,
+       status, source_module, source_type, source_id, reference, description,
+       currency_code, exchange_rate, total_debit, total_credit,
+       created_by, approved_by, posted_by, created_at, approved_at, posted_at,
+       reversed_at, reversal_of_id, version
+FROM accounting.journal_entries
+WHERE legal_entity_id = $1
+  AND source_module = $2
+  AND source_type = $3
+  AND source_id = $4
+LIMIT 1;
+
+-- name: UpsertAccountBalance :one
+INSERT INTO accounting.account_balances (
+    legal_entity_id, account_id, fiscal_period_id,
+    opening_balance, period_debit, period_credit, closing_balance
+) VALUES (
+    $1, $2, $3,
+    $4, $5, $6, $7
+)
+ON CONFLICT (legal_entity_id, account_id, fiscal_period_id)
+DO UPDATE SET
+    period_debit = accounting.account_balances.period_debit + EXCLUDED.period_debit,
+    period_credit = accounting.account_balances.period_credit + EXCLUDED.period_credit,
+    closing_balance = accounting.account_balances.closing_balance + EXCLUDED.closing_balance,
+    updated_at = now()
+RETURNING id, legal_entity_id, account_id, fiscal_period_id, opening_balance, period_debit, period_credit, closing_balance, updated_at;
+

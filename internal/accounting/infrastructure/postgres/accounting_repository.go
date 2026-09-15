@@ -28,6 +28,17 @@ func NewAccountingRepository(pool *pgxpool.Pool) ports.AccountingRepository {
 	}
 }
 
+// NewPostingRepository returns the same repository implementation typed as
+// PostingRepository, which adds GetJournalEntryBySource and UpsertAccountBalance
+// on top of the base AccountingRepository interface.
+func NewPostingRepository(pool *pgxpool.Pool) ports.PostingRepository {
+	return &accountingRepository{
+		pool:    pool,
+		queries: sqlc.New(pool),
+	}
+}
+
+
 // Chart of Accounts
 func (r *accountingRepository) ListChartOfAccounts(ctx context.Context, legalEntityID uuid.UUID) ([]domain.ChartOfAccounts, error) {
 	rows, err := r.queries.ListChartOfAccountsByLegalEntity(ctx, toPgUUID(legalEntityID))
@@ -826,3 +837,51 @@ func toDomainJournalEntry(row *sqlc.AccountingJournalEntries) *domain.JournalEnt
 		Version:        row.Version,
 	}
 }
+
+// GetJournalEntryBySource checks for an existing journal entry by the
+// (legal_entity_id, source_module, source_type, source_id) triple.
+// Used by the PostingEngine for idempotency enforcement.
+func (r *accountingRepository) GetJournalEntryBySource(ctx context.Context, legalEntityID uuid.UUID, sourceModule, sourceType string, sourceID uuid.UUID) (*domain.JournalEntry, error) {
+	row, err := r.queries.GetJournalEntryBySource(ctx, sqlc.GetJournalEntryBySourceParams{
+		LegalEntityID: toPgUUID(legalEntityID),
+		SourceModule:  sourceModule,
+		SourceType:    toPgText(sourceType),
+		SourceID:      toPgUUID(sourceID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil // No existing entry — not an error, enables idempotency check
+		}
+		return nil, err
+	}
+	return toDomainJournalEntry(&row), nil
+}
+
+// UpsertAccountBalance atomically inserts or accumulates account period balances.
+// Uses PostgreSQL ON CONFLICT DO UPDATE for thread-safe accumulation.
+func (r *accountingRepository) UpsertAccountBalance(ctx context.Context, balance domain.AccountBalance) (*domain.AccountBalance, error) {
+	row, err := r.queries.UpsertAccountBalance(ctx, sqlc.UpsertAccountBalanceParams{
+		LegalEntityID:  toPgUUID(balance.LegalEntityID),
+		AccountID:      toPgUUID(balance.AccountID),
+		FiscalPeriodID: toPgUUID(balance.FiscalPeriodID),
+		OpeningBalance: toPgNumeric(balance.OpeningBalance),
+		PeriodDebit:    toPgNumeric(balance.PeriodDebit),
+		PeriodCredit:   toPgNumeric(balance.PeriodCredit),
+		ClosingBalance: toPgNumeric(balance.ClosingBalance),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &domain.AccountBalance{
+		ID:             toUUID(row.ID),
+		LegalEntityID:  toUUID(row.LegalEntityID),
+		AccountID:      toUUID(row.AccountID),
+		FiscalPeriodID: toUUID(row.FiscalPeriodID),
+		OpeningBalance: fromPgNumeric(row.OpeningBalance),
+		PeriodDebit:    fromPgNumeric(row.PeriodDebit),
+		PeriodCredit:   fromPgNumeric(row.PeriodCredit),
+		ClosingBalance: fromPgNumeric(row.ClosingBalance),
+		UpdatedAt:      row.UpdatedAt.Time,
+	}, nil
+}
+
