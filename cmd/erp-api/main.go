@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"erp/internal/accounting"
 	"erp/internal/audit"
 	"erp/internal/authorization"
 	"erp/internal/iam"
@@ -120,6 +121,18 @@ func main() {
 		workflowModule := workflow.NewModule(cfg, db)
 		workflowModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
 		logger.Info("Workflow module and approval engine registered")
+
+		// F. Accounting Module (General Ledger Foundation)
+		accountingModule := accounting.NewModule(cfg, db)
+		accountingModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := accountingModule.SeedDefaultCOA(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Chart of Accounts", "error", err)
+			} else {
+				logger.Info("Default Saudi Chart of Accounts and Fiscal Calendar verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Accounting module and general ledger registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

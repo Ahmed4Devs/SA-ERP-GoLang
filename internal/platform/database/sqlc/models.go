@@ -8,6 +8,138 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AccountingAccountBalances struct {
+	ID             pgtype.UUID        `json:"id"`
+	LegalEntityID  pgtype.UUID        `json:"legal_entity_id"`
+	AccountID      pgtype.UUID        `json:"account_id"`
+	FiscalPeriodID pgtype.UUID        `json:"fiscal_period_id"`
+	OpeningBalance pgtype.Numeric     `json:"opening_balance"`
+	PeriodDebit    pgtype.Numeric     `json:"period_debit"`
+	PeriodCredit   pgtype.Numeric     `json:"period_credit"`
+	ClosingBalance pgtype.Numeric     `json:"closing_balance"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AccountingAccounts struct {
+	ID               pgtype.UUID        `json:"id"`
+	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
+	ChartID          pgtype.UUID        `json:"chart_id"`
+	ParentID         pgtype.UUID        `json:"parent_id"`
+	Code             string             `json:"code"`
+	NameEn           string             `json:"name_en"`
+	NameAr           string             `json:"name_ar"`
+	AccountType      string             `json:"account_type"`
+	NormalBalance    string             `json:"normal_balance"`
+	AllowPosting     bool               `json:"allow_posting"`
+	IsControlAccount bool               `json:"is_control_account"`
+	IsActive         bool               `json:"is_active"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	Version          int64              `json:"version"`
+}
+
+type AccountingChartOfAccounts struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	Description   pgtype.Text        `json:"description"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Version       int64              `json:"version"`
+}
+
+type AccountingFiscalPeriods struct {
+	ID            pgtype.UUID        `json:"id"`
+	FiscalYearID  pgtype.UUID        `json:"fiscal_year_id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	PeriodNumber  int16              `json:"period_number"`
+	PeriodNameEn  string             `json:"period_name_en"`
+	PeriodNameAr  string             `json:"period_name_ar"`
+	Quarter       int16              `json:"quarter"`
+	StartDate     pgtype.Date        `json:"start_date"`
+	EndDate       pgtype.Date        `json:"end_date"`
+	Status        string             `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Version       int64              `json:"version"`
+}
+
+type AccountingFiscalYears struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	StartDate     pgtype.Date        `json:"start_date"`
+	EndDate       pgtype.Date        `json:"end_date"`
+	Status        string             `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Version       int64              `json:"version"`
+}
+
+type AccountingJournalEntries struct {
+	ID             pgtype.UUID        `json:"id"`
+	LegalEntityID  pgtype.UUID        `json:"legal_entity_id"`
+	JournalID      pgtype.UUID        `json:"journal_id"`
+	FiscalPeriodID pgtype.UUID        `json:"fiscal_period_id"`
+	EntryNumber    string             `json:"entry_number"`
+	AccountingDate pgtype.Date        `json:"accounting_date"`
+	Status         string             `json:"status"`
+	SourceModule   string             `json:"source_module"`
+	SourceType     pgtype.Text        `json:"source_type"`
+	SourceID       pgtype.UUID        `json:"source_id"`
+	Reference      pgtype.Text        `json:"reference"`
+	Description    string             `json:"description"`
+	CurrencyCode   string             `json:"currency_code"`
+	ExchangeRate   pgtype.Numeric     `json:"exchange_rate"`
+	TotalDebit     pgtype.Numeric     `json:"total_debit"`
+	TotalCredit    pgtype.Numeric     `json:"total_credit"`
+	CreatedBy      pgtype.UUID        `json:"created_by"`
+	ApprovedBy     pgtype.UUID        `json:"approved_by"`
+	PostedBy       pgtype.UUID        `json:"posted_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ApprovedAt     pgtype.Timestamptz `json:"approved_at"`
+	PostedAt       pgtype.Timestamptz `json:"posted_at"`
+	ReversedAt     pgtype.Timestamptz `json:"reversed_at"`
+	ReversalOfID   pgtype.UUID        `json:"reversal_of_id"`
+	Version        int64              `json:"version"`
+}
+
+type AccountingJournalLines struct {
+	ID                pgtype.UUID    `json:"id"`
+	JournalEntryID    pgtype.UUID    `json:"journal_entry_id"`
+	LegalEntityID     pgtype.UUID    `json:"legal_entity_id"`
+	LineNumber        int16          `json:"line_number"`
+	AccountID         pgtype.UUID    `json:"account_id"`
+	Description       pgtype.Text    `json:"description"`
+	CurrencyCode      string         `json:"currency_code"`
+	ExchangeRate      pgtype.Numeric `json:"exchange_rate"`
+	TransactionDebit  pgtype.Numeric `json:"transaction_debit"`
+	TransactionCredit pgtype.Numeric `json:"transaction_credit"`
+	BaseDebit         pgtype.Numeric `json:"base_debit"`
+	BaseCredit        pgtype.Numeric `json:"base_credit"`
+	BranchID          pgtype.UUID    `json:"branch_id"`
+	DepartmentID      pgtype.UUID    `json:"department_id"`
+	CostCenterID      pgtype.UUID    `json:"cost_center_id"`
+}
+
+type AccountingJournals struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	JournalType   string             `json:"journal_type"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Version       int64              `json:"version"`
+}
+
 type AuditAccessEvents struct {
 	ID           pgtype.UUID        `json:"id"`
 	UserID       pgtype.UUID        `json:"user_id"`
