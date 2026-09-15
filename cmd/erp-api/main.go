@@ -18,6 +18,7 @@ import (
 	platformhttp "erp/internal/platform/http"
 	"erp/internal/platform/observability"
 	"erp/internal/platform/transaction"
+	"erp/internal/tax"
 	"erp/internal/workflow"
 )
 
@@ -133,6 +134,18 @@ func main() {
 			}
 		}
 		logger.Info("Accounting module and general ledger registered")
+
+		// G. Tax Module (Saudi Effective-Dated VAT Engine & ZATCA Returns)
+		taxModule := tax.NewModule(cfg, db)
+		taxModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := taxModule.SeedDefaultTaxData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Tax Structure", "error", err)
+			} else {
+				logger.Info("Default Saudi VAT configuration and 2026 periods verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Tax module and ZATCA VAT engine registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

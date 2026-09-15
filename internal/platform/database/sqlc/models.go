@@ -480,6 +480,138 @@ type RefCurrencies struct {
 	IsActive      bool        `json:"is_active"`
 }
 
+type TaxExemptionReasons struct {
+	Code          string             `json:"code"`
+	CategoryCode  string             `json:"category_code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	DescriptionEn pgtype.Text        `json:"description_en"`
+	DescriptionAr pgtype.Text        `json:"description_ar"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type TaxTaxCategories struct {
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	DescriptionEn pgtype.Text        `json:"description_en"`
+	DescriptionAr pgtype.Text        `json:"description_ar"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type TaxTaxCodes struct {
+	ID                   pgtype.UUID        `json:"id"`
+	LegalEntityID        pgtype.UUID        `json:"legal_entity_id"`
+	Code                 string             `json:"code"`
+	NameEn               string             `json:"name_en"`
+	NameAr               string             `json:"name_ar"`
+	TaxCategoryCode      string             `json:"tax_category_code"`
+	TaxType              string             `json:"tax_type"`
+	SalesTaxAccountID    pgtype.UUID        `json:"sales_tax_account_id"`
+	PurchaseTaxAccountID pgtype.UUID        `json:"purchase_tax_account_id"`
+	IsRecoverable        bool               `json:"is_recoverable"`
+	IsActive             bool               `json:"is_active"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	Version              int64              `json:"version"`
+}
+
+type TaxTaxPeriods struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	PeriodNumber  int32              `json:"period_number"`
+	FiscalYear    int32              `json:"fiscal_year"`
+	PeriodType    string             `json:"period_type"`
+	StartDate     pgtype.Date        `json:"start_date"`
+	EndDate       pgtype.Date        `json:"end_date"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	Status        string             `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type TaxTaxRateVersions struct {
+	ID            pgtype.UUID        `json:"id"`
+	TaxCodeID     pgtype.UUID        `json:"tax_code_id"`
+	RatePercent   pgtype.Numeric     `json:"rate_percent"`
+	EffectiveFrom pgtype.Date        `json:"effective_from"`
+	EffectiveTo   pgtype.Date        `json:"effective_to"`
+	Description   pgtype.Text        `json:"description"`
+	CreatedBy     pgtype.UUID        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type TaxTaxReturns struct {
+	ID                    pgtype.UUID        `json:"id"`
+	LegalEntityID         pgtype.UUID        `json:"legal_entity_id"`
+	TaxPeriodID           pgtype.UUID        `json:"tax_period_id"`
+	ReturnNumber          string             `json:"return_number"`
+	FilingDate            pgtype.Date        `json:"filing_date"`
+	Status                string             `json:"status"`
+	TotalSalesTaxable     pgtype.Numeric     `json:"total_sales_taxable"`
+	TotalSalesVat         pgtype.Numeric     `json:"total_sales_vat"`
+	TotalPurchasesTaxable pgtype.Numeric     `json:"total_purchases_taxable"`
+	TotalPurchasesVat     pgtype.Numeric     `json:"total_purchases_vat"`
+	NetVatDue             pgtype.Numeric     `json:"net_vat_due"`
+	DeclarationBoxes      []byte             `json:"declaration_boxes"`
+	SubmittedAt           pgtype.Timestamptz `json:"submitted_at"`
+	SubmittedBy           pgtype.UUID        `json:"submitted_by"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	Version               int64              `json:"version"`
+}
+
+type TaxTaxTransactionLines struct {
+	ID                  pgtype.UUID        `json:"id"`
+	TaxTransactionID    pgtype.UUID        `json:"tax_transaction_id"`
+	LineNumber          int32              `json:"line_number"`
+	TaxCodeID           pgtype.UUID        `json:"tax_code_id"`
+	TaxCategoryCode     string             `json:"tax_category_code"`
+	TaxRatePercent      pgtype.Numeric     `json:"tax_rate_percent"`
+	TaxableAmount       pgtype.Numeric     `json:"taxable_amount"`
+	TaxAmount           pgtype.Numeric     `json:"tax_amount"`
+	GrossAmount         pgtype.Numeric     `json:"gross_amount"`
+	ExemptionReasonCode pgtype.Text        `json:"exemption_reason_code"`
+	ZeroRateReasonCode  pgtype.Text        `json:"zero_rate_reason_code"`
+	IsRecoverable       bool               `json:"is_recoverable"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type TaxTaxTransactions struct {
+	ID                 pgtype.UUID        `json:"id"`
+	LegalEntityID      pgtype.UUID        `json:"legal_entity_id"`
+	TaxPeriodID        pgtype.UUID        `json:"tax_period_id"`
+	SourceModule       string             `json:"source_module"`
+	SourceType         string             `json:"source_type"`
+	SourceID           pgtype.UUID        `json:"source_id"`
+	TransactionNumber  string             `json:"transaction_number"`
+	TransactionDate    pgtype.Date        `json:"transaction_date"`
+	TransactionType    string             `json:"transaction_type"`
+	PartnerID          pgtype.UUID        `json:"partner_id"`
+	PartnerName        pgtype.Text        `json:"partner_name"`
+	PartnerTaxNumber   pgtype.Text        `json:"partner_tax_number"`
+	TotalTaxableAmount pgtype.Numeric     `json:"total_taxable_amount"`
+	TotalTaxAmount     pgtype.Numeric     `json:"total_tax_amount"`
+	TotalGrossAmount   pgtype.Numeric     `json:"total_gross_amount"`
+	JournalEntryID     pgtype.UUID        `json:"journal_entry_id"`
+	Status             string             `json:"status"`
+	CreatedBy          pgtype.UUID        `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type TaxZeroRateReasons struct {
+	Code          string             `json:"code"`
+	CategoryCode  string             `json:"category_code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	DescriptionEn pgtype.Text        `json:"description_en"`
+	DescriptionAr pgtype.Text        `json:"description_ar"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type WorkflowApprovalDecisions struct {
 	ID         pgtype.UUID        `json:"id"`
 	RequestID  pgtype.UUID        `json:"request_id"`

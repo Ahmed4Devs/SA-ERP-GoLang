@@ -11,6 +11,7 @@ sql:
       - "database/queries/audit"
       - "database/queries/workflow"
       - "database/queries/accounting"
+      - "database/queries/tax"
     gen:
       go:
         package: "sqlc"

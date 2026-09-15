@@ -217,28 +217,30 @@ func TestPostingEngine_LockedPeriodRejection(t *testing.T) {
 	now := time.Now().UTC()
 	histYear := now.Year() - 5
 	fyID := uuid.New()
-	_, err := db.Pool.Exec(ctx, `
+	err := db.Pool.QueryRow(ctx, `
 		INSERT INTO accounting.fiscal_years (id, legal_entity_id, code, name_en, name_ar, start_date, end_date, status)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, 'CLOSED')
-		ON CONFLICT DO NOTHING
+		ON CONFLICT (legal_entity_id, code) DO UPDATE SET status = 'CLOSED'
+		RETURNING id
 	`, fyID, leID, fmt.Sprintf("FY%d", histYear), fmt.Sprintf("FY %d", histYear), fmt.Sprintf("السنة المالية %d", histYear),
 		time.Date(histYear, 1, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(histYear, 12, 31, 0, 0, 0, 0, time.UTC),
-	)
+	).Scan(&fyID)
 	if err != nil {
 		t.Fatalf("failed to insert historical fiscal year: %v", err)
 	}
 
 	periodID := uuid.New()
 	histDate := time.Date(histYear, 3, 15, 0, 0, 0, 0, time.UTC)
-	_, err = db.Pool.Exec(ctx, `
+	err = db.Pool.QueryRow(ctx, `
 		INSERT INTO accounting.fiscal_periods (id, fiscal_year_id, legal_entity_id, period_number, period_name_en, period_name_ar, quarter, start_date, end_date, status)
 		VALUES ($1, $2, $3, 3, 'Historical Locked Period', 'فترة تاريخية مغلقة', 1, $4, $5, 'LOCKED')
-		ON CONFLICT DO NOTHING
+		ON CONFLICT (fiscal_year_id, period_number) DO UPDATE SET status = 'LOCKED'
+		RETURNING id
 	`, periodID, fyID, leID,
 		time.Date(histYear, 3, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(histYear, 3, 31, 0, 0, 0, 0, time.UTC),
-	)
+	).Scan(&periodID)
 	if err != nil {
 		t.Fatalf("failed to insert locked period: %v", err)
 	}
