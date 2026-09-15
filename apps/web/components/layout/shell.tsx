@@ -27,6 +27,7 @@ import {
   Menu,
   X,
   History,
+  GitMerge,
 } from "lucide-react";
 
 import arDict from "@/messages/ar.json";
@@ -105,6 +106,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { key: "organization", href: "/organization", icon: Building2, label: t.nav.organization, active: pathname === "/organization" },
     { key: "iam", href: "/authorization", icon: ShieldCheck, label: t.nav.iam, active: pathname === "/authorization" },
     { key: "audit", href: "/audit", icon: History, label: t.nav.audit, active: pathname === "/audit" },
+    { key: "workflow", href: "/workflow", icon: GitMerge, label: t.nav.workflow, active: pathname === "/workflow" },
     { key: "accounting", href: "#", icon: BookOpen, label: t.nav.accounting },
     { key: "sales", href: "#", icon: ShoppingBag, label: t.nav.sales },
     { key: "purchasing", href: "#", icon: ShoppingCart, label: t.nav.purchasing },

@@ -347,3 +347,104 @@ type RefCurrencies struct {
 	DecimalPlaces int16       `json:"decimal_places"`
 	IsActive      bool        `json:"is_active"`
 }
+
+type WorkflowApprovalDecisions struct {
+	ID         pgtype.UUID        `json:"id"`
+	RequestID  pgtype.UUID        `json:"request_id"`
+	InstanceID pgtype.UUID        `json:"instance_id"`
+	ActorID    pgtype.UUID        `json:"actor_id"`
+	Decision   string             `json:"decision"`
+	Notes      pgtype.Text        `json:"notes"`
+	DecidedAt  pgtype.Timestamptz `json:"decided_at"`
+}
+
+type WorkflowApprovalRequests struct {
+	ID             pgtype.UUID        `json:"id"`
+	InstanceStepID pgtype.UUID        `json:"instance_step_id"`
+	AssignedUserID pgtype.UUID        `json:"assigned_user_id"`
+	Status         string             `json:"status"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type WorkflowDefinitionVersions struct {
+	ID           pgtype.UUID        `json:"id"`
+	DefinitionID pgtype.UUID        `json:"definition_id"`
+	Version      int32              `json:"version"`
+	Status       string             `json:"status"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	PublishedAt  pgtype.Timestamptz `json:"published_at"`
+}
+
+type WorkflowDefinitions struct {
+	ID        pgtype.UUID        `json:"id"`
+	Code      string             `json:"code"`
+	NameAr    string             `json:"name_ar"`
+	NameEn    string             `json:"name_en"`
+	Module    string             `json:"module"`
+	IsActive  bool               `json:"is_active"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WorkflowDelegations struct {
+	ID            pgtype.UUID        `json:"id"`
+	DelegatorID   pgtype.UUID        `json:"delegator_id"`
+	DelegateID    pgtype.UUID        `json:"delegate_id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	StartDate     pgtype.Timestamptz `json:"start_date"`
+	EndDate       pgtype.Timestamptz `json:"end_date"`
+	IsActive      bool               `json:"is_active"`
+	Reason        pgtype.Text        `json:"reason"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type WorkflowInstanceSteps struct {
+	ID          pgtype.UUID        `json:"id"`
+	InstanceID  pgtype.UUID        `json:"instance_id"`
+	StepID      pgtype.UUID        `json:"step_id"`
+	StepOrder   int32              `json:"step_order"`
+	Status      string             `json:"status"`
+	StartedAt   pgtype.Timestamptz `json:"started_at"`
+	CompletedAt pgtype.Timestamptz `json:"completed_at"`
+}
+
+type WorkflowInstances struct {
+	ID            pgtype.UUID        `json:"id"`
+	DefinitionID  pgtype.UUID        `json:"definition_id"`
+	VersionID     pgtype.UUID        `json:"version_id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	ResourceType  string             `json:"resource_type"`
+	ResourceID    string             `json:"resource_id"`
+	InitiatorID   pgtype.UUID        `json:"initiator_id"`
+	Status        string             `json:"status"`
+	ContextData   []byte             `json:"context_data"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
+}
+
+type WorkflowStepApprovers struct {
+	ID           pgtype.UUID `json:"id"`
+	StepID       pgtype.UUID `json:"step_id"`
+	ApproverType string      `json:"approver_type"`
+	RoleID       pgtype.UUID `json:"role_id"`
+	UserID       pgtype.UUID `json:"user_id"`
+}
+
+type WorkflowStepConditions struct {
+	ID         pgtype.UUID `json:"id"`
+	StepID     pgtype.UUID `json:"step_id"`
+	FieldName  string      `json:"field_name"`
+	Operator   string      `json:"operator"`
+	FieldValue string      `json:"field_value"`
+}
+
+type WorkflowSteps struct {
+	ID           pgtype.UUID `json:"id"`
+	VersionID    pgtype.UUID `json:"version_id"`
+	StepOrder    int32       `json:"step_order"`
+	Code         string      `json:"code"`
+	NameAr       string      `json:"name_ar"`
+	NameEn       string      `json:"name_en"`
+	ApprovalType string      `json:"approval_type"`
+	TimeoutHours pgtype.Int4 `json:"timeout_hours"`
+}

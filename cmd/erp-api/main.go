@@ -17,6 +17,7 @@ import (
 	platformhttp "erp/internal/platform/http"
 	"erp/internal/platform/observability"
 	"erp/internal/platform/transaction"
+	"erp/internal/workflow"
 )
 
 func main() {
@@ -114,6 +115,11 @@ func main() {
 		auditModule := audit.NewModule(cfg, db)
 		auditModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
 		logger.Info("Audit module and access trail registered")
+
+		// E. Workflow Module (Versioned Approval Workflow Engine)
+		workflowModule := workflow.NewModule(cfg, db)
+		workflowModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		logger.Info("Workflow module and approval engine registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

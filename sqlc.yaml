@@ -9,6 +9,7 @@ sql:
       - "database/queries/organization"
       - "database/queries/authorization"
       - "database/queries/audit"
+      - "database/queries/workflow"
     gen:
       go:
         package: "sqlc"

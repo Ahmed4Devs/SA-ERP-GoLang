@@ -2,7 +2,7 @@
   "app": {
     "title": "Saudi Commercial ERP Platform",
     "subtitle": "Integrated Enterprise Platform compliant with ZATCA Phase 2 and GOSI standards",
-    "phase": "Phase 6: Immutable Cryptographic Audit Trail",
+    "phase": "Phase 7: Versioned Approval Workflow Engine",
     "ready": "System Operational & Ready",
     "current_status": "Operational Status"
   },
@@ -11,6 +11,7 @@
     "organization": "Organization Setup",
     "iam": "IAM & Security",
     "audit": "Audit Trail",
+    "workflow": "Approval Workflows",
     "accounting": "General Ledger",
     "sales": "Sales & Customers",
     "purchasing": "Purchasing & Vendors",
@@ -129,5 +130,35 @@
     "filter_resource": "Filter by Resource",
     "search_placeholder": "Search by ID or action...",
     "immutable_badge": "Strictly Append-Only Record"
+  },
+  "workflow": {
+    "title": "Versioned Approval Workflow Engine",
+    "subtitle": "Multi-step approval workflows, strict Segregation of Duties (Maker/Checker), financial condition evaluation, and temporary delegation management",
+    "inbox_title": "Approval Inbox (Pending Requests)",
+    "definitions_title": "Workflow Definitions & Published Versions",
+    "delegations_title": "Temporary Approval Delegations",
+    "simulator_title": "Maker/Checker & Segregation of Duties Simulator",
+    "no_pending": "No pending approval requests",
+    "approve": "Approve",
+    "reject": "Reject",
+    "approving": "Approving...",
+    "rejecting": "Rejecting...",
+    "maker_checker_rule": "Segregation of Duties: Document initiator cannot approve their own document",
+    "violation_blocked": "Action Blocked: Maker cannot approve own document (cannot_approve_own_document)",
+    "approval_success": "Approval recorded successfully and workflow transitioned to next step",
+    "rejection_success": "Document rejected and workflow completed",
+    "initiator": "Initiator (Maker)",
+    "approver": "Approver (Checker)",
+    "document": "Document",
+    "amount": "Total Amount",
+    "legal_entity": "Legal Entity",
+    "step": "Approval Stage",
+    "status": "Workflow Status",
+    "notes_placeholder": "Enter approval notes or rejection reason...",
+    "delegate_to": "Delegate",
+    "valid_until": "Valid Until",
+    "active": "Active",
+    "version": "Published Version",
+    "condition_threshold": "Condition Threshold: Amounts exceeding"
   }
 }
