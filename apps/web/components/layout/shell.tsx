@@ -102,7 +102,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const navItems = [
     { key: "dashboard", href: "/", icon: LayoutDashboard, label: t.nav.dashboard, active: pathname === "/" },
     { key: "organization", href: "/organization", icon: Building2, label: t.nav.organization, active: pathname === "/organization" },
-    { key: "iam", href: "#", icon: ShieldCheck, label: t.nav.iam },
+    { key: "iam", href: "/authorization", icon: ShieldCheck, label: t.nav.iam, active: pathname === "/authorization" },
     { key: "accounting", href: "#", icon: BookOpen, label: t.nav.accounting },
     { key: "sales", href: "#", icon: ShoppingBag, label: t.nav.sales },
     { key: "purchasing", href: "#", icon: ShoppingCart, label: t.nav.purchasing },

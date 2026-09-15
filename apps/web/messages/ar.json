@@ -2,7 +2,7 @@
   "app": {
     "title": "منصة تخطيط الموارد للمنشآت السعودية",
     "subtitle": "نظام ERP متكامل ومتوافق مع هيئة الزكاة والضريبة والجمارك والتأمينات الاجتماعية",
-    "phase": "المرحلة 4: الهيكل التنظيمي والترقيم (Organization)",
+    "phase": "المرحلة 5: إدارة الصلاحيات ونطاق الكيان (Authorization)",
     "ready": "النظام جاهز للعمل",
     "current_status": "الحالة التشغيلية"
   },
@@ -83,5 +83,21 @@
     "test_sequence_button": "توليد رقم تسلسلي لفاتورة مبيعات",
     "generated_badge": "رقم تسلسلي مولد ذرياً بدون تكرار:",
     "generating": "جاري التوليد..."
+  },
+  "authorization": {
+    "title": "إدارة الصلاحيات والتحكم بالوصول (RBAC)",
+    "subtitle": "إدارة الأدوار المؤسسية، الصلاحيات الحبيبية، تقييد النطاق بالكيان القانوني، وكاش السياسات اللحظي",
+    "roles_title": "الأدوار القياسية (System Roles)",
+    "permissions_title": "قاموس الصلاحيات (Permission Matrix)",
+    "assignments_title": "تعيينات المستخدمين والتقييد بالكيان (Scoped Assignments)",
+    "evaluator_title": "محاكي فحص الصلاحيات وتقييم النطاق (Permission Evaluator)",
+    "test_eval_button": "فحص الصلاحية",
+    "evaluating": "جاري الفحص...",
+    "granted": "مسموح ومصرح به (Access Granted)",
+    "denied": "مرفوض ومحظور (Access Denied)",
+    "role_code": "رمز الدور",
+    "scope": "النطاق المالي",
+    "global_scope": "شامل لكافة الكيانات (Global)",
+    "scoped_entity": "مقيد بالكيان القانوني"
   }
 }

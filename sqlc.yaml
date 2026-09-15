@@ -7,6 +7,7 @@ sql:
       - "database/queries/ref"
       - "database/queries/iam"
       - "database/queries/organization"
+      - "database/queries/authorization"
     gen:
       go:
         package: "sqlc"

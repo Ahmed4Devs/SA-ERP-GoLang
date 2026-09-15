@@ -8,6 +8,40 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AuthzPermissions struct {
+	ID        pgtype.UUID        `json:"id"`
+	Code      string             `json:"code"`
+	NameAr    string             `json:"name_ar"`
+	NameEn    string             `json:"name_en"`
+	Module    string             `json:"module"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type AuthzRolePermissions struct {
+	RoleID       pgtype.UUID `json:"role_id"`
+	PermissionID pgtype.UUID `json:"permission_id"`
+}
+
+type AuthzRoles struct {
+	ID          pgtype.UUID        `json:"id"`
+	Code        string             `json:"code"`
+	NameAr      string             `json:"name_ar"`
+	NameEn      string             `json:"name_en"`
+	Description pgtype.Text        `json:"description"`
+	IsSystem    bool               `json:"is_system"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AuthzUserRoleAssignments struct {
+	ID            pgtype.UUID        `json:"id"`
+	UserID        pgtype.UUID        `json:"user_id"`
+	RoleID        pgtype.UUID        `json:"role_id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	BranchID      pgtype.UUID        `json:"branch_id"`
+	AssignedAt    pgtype.Timestamptz `json:"assigned_at"`
+}
+
 type IamApiKeys struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`

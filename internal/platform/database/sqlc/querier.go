@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	AssignPermissionToRole(ctx context.Context, arg AssignPermissionToRoleParams) error
+	AssignUserRole(ctx context.Context, arg AssignUserRoleParams) (AuthzUserRoleAssignments, error)
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
 	CountRecentFailedAttempts(ctx context.Context, arg CountRecentFailedAttemptsParams) (int64, error)
 	CreateAddress(ctx context.Context, arg CreateAddressParams) (OrganizationAddresses, error)
@@ -20,6 +22,7 @@ type Querier interface {
 	CreateLegalEntity(ctx context.Context, arg CreateLegalEntityParams) (OrganizationLegalEntities, error)
 	CreateNumberSequence(ctx context.Context, arg CreateNumberSequenceParams) (OrganizationNumberSequences, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (OrganizationOrganizations, error)
+	CreateRole(ctx context.Context, arg CreateRoleParams) (AuthzRoles, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (IamSessions, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (IamUsers, error)
 	DeleteAllSessionsForUser(ctx context.Context, userID pgtype.UUID) error
@@ -42,9 +45,12 @@ type Querier interface {
 	GetOrganizationByCode(ctx context.Context, code string) (OrganizationOrganizations, error)
 	GetOrganizationByID(ctx context.Context, id pgtype.UUID) (OrganizationOrganizations, error)
 	GetPasswordByUserID(ctx context.Context, userID pgtype.UUID) (IamPasswordCredentials, error)
+	GetRoleByCode(ctx context.Context, code string) (AuthzRoles, error)
+	GetRoleByID(ctx context.Context, id pgtype.UUID) (AuthzRoles, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash string) (GetSessionByTokenHashRow, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (IamUsers, error)
 	GetUserByUsernameOrEmail(ctx context.Context, lower string) (IamUsers, error)
+	GetUserPermissionsInScope(ctx context.Context, arg GetUserPermissionsInScopeParams) ([]string, error)
 	IncrementNumberSequence(ctx context.Context, arg IncrementNumberSequenceParams) (OrganizationNumberSequences, error)
 	InsertIdempotencyKey(ctx context.Context, arg InsertIdempotencyKeyParams) (PlatformIdempotencyKeys, error)
 	InsertOutboxEvent(ctx context.Context, arg InsertOutboxEventParams) (PlatformOutboxEvents, error)
@@ -59,10 +65,15 @@ type Querier interface {
 	ListLegalEntitiesByOrg(ctx context.Context, organizationID pgtype.UUID) ([]OrganizationLegalEntities, error)
 	ListNumberSequencesByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationNumberSequences, error)
 	ListOrganizations(ctx context.Context) ([]OrganizationOrganizations, error)
+	ListPermissions(ctx context.Context) ([]AuthzPermissions, error)
+	ListPermissionsForRole(ctx context.Context, roleID pgtype.UUID) ([]AuthzPermissions, error)
+	ListRoles(ctx context.Context) ([]AuthzRoles, error)
+	ListUserAssignments(ctx context.Context, userID pgtype.UUID) ([]ListUserAssignmentsRow, error)
 	MarkOutboxEventPublished(ctx context.Context, id pgtype.UUID) error
 	RecordLoginAttempt(ctx context.Context, arg RecordLoginAttemptParams) error
 	RecordOutboxEventAttempt(ctx context.Context, arg RecordOutboxEventAttemptParams) error
 	ResetAndIncrementNumberSequence(ctx context.Context, arg ResetAndIncrementNumberSequenceParams) (OrganizationNumberSequences, error)
+	RevokeUserRole(ctx context.Context, arg RevokeUserRoleParams) error
 	SetPassword(ctx context.Context, arg SetPasswordParams) error
 	UpdateBranch(ctx context.Context, arg UpdateBranchParams) (OrganizationBranches, error)
 	UpdateCostCenter(ctx context.Context, arg UpdateCostCenterParams) (OrganizationCostCenters, error)

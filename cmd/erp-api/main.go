@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"erp/internal/authorization"
 	"erp/internal/iam"
 	"erp/internal/organization"
 	"erp/internal/platform/config"
@@ -92,6 +93,20 @@ func main() {
 				"legal_entity_code", seededLE.Code,
 				"cr_number", seededLE.CRNumber,
 			)
+		}
+
+		// C. Authorization Module
+		authzModule := authorization.NewModule(cfg, db)
+		authzModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+
+		// Seed initial SUPER_ADMIN assignment for admin user
+		adminUser, _ := iamModule.AuthService.GetUserByIdentifier(ctx, "admin")
+		if adminUser != nil {
+			if err := authzModule.SeedAdminRole(ctx, adminUser.ID); err != nil {
+				logger.Debug("Admin role already assigned or skipped", "reason", err.Error())
+			} else {
+				logger.Info("SUPER_ADMIN role assigned to default administrator", "user_id", adminUser.ID.String())
+			}
 		}
 	}
 

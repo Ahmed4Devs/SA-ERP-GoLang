@@ -189,3 +189,7 @@ func (s *AuthService) SeedAdmin(ctx context.Context, username, email, displayNam
 
 	return createdUser, nil
 }
+
+func (s *AuthService) GetUserByIdentifier(ctx context.Context, identifier string) (*domain.User, error) {
+	return s.userRepo.GetByIdentifier(ctx, identifier)
+}

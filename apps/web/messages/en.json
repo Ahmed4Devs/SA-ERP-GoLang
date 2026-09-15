@@ -2,7 +2,7 @@
   "app": {
     "title": "Saudi Commercial ERP Platform",
     "subtitle": "Integrated Enterprise Platform compliant with ZATCA Phase 2 and GOSI standards",
-    "phase": "Phase 4: Organization & Numbering Hierarchy",
+    "phase": "Phase 5: RBAC & Legal Entity Authorization",
     "ready": "System Operational & Ready",
     "current_status": "Operational Status"
   },
@@ -83,5 +83,21 @@
     "test_sequence_button": "Generate Next Sales Invoice Sequence",
     "generated_badge": "Atomically Generated Number:",
     "generating": "Generating..."
+  },
+  "authorization": {
+    "title": "Role-Based Access Control (RBAC)",
+    "subtitle": "Manage System Roles, Granular Permissions, Legal Entity Scoped Assignments, and Real-Time Policy Cache",
+    "roles_title": "System Defined Roles",
+    "permissions_title": "Granular Permission Matrix",
+    "assignments_title": "Scoped User Role Assignments",
+    "evaluator_title": "Real-Time Permission Evaluator & Policy Cache",
+    "test_eval_button": "Evaluate Permission",
+    "evaluating": "Evaluating...",
+    "granted": "Access Granted",
+    "denied": "Access Denied",
+    "role_code": "Role Code",
+    "scope": "Financial Scope",
+    "global_scope": "Global (All Entities)",
+    "scoped_entity": "Scoped Legal Entity"
   }
 }
