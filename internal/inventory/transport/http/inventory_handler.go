@@ -67,6 +67,12 @@ func (h *InventoryHandler) Routes(authMiddleware func(http.Handler) http.Handler
 		r.Get("/counts", h.ListStockCounts)
 		r.Post("/counts", h.CreateStockCount)
 		r.Post("/counts/{id}/reconcile", h.ReconcileStockCount)
+
+		// Costing & Valuation
+		r.Get("/costing/valuation", h.GetValuationReport)
+		r.Get("/costing/layers", h.ListCostLayers)
+		r.Post("/costing/revaluations", h.ExecuteRevaluation)
+		r.Get("/costing/revaluations", h.ListRevaluations)
 	})
 
 	return r
@@ -750,6 +756,162 @@ func (h *InventoryHandler) ReconcileStockCount(w http.ResponseWriter, r *http.Re
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": count})
+}
+
+// Costing & Valuation Endpoints
+
+func (h *InventoryHandler) GetValuationReport(w http.ResponseWriter, r *http.Request) {
+	leID, err := h.resolveLegalEntityID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_ENTITY", err.Error())
+		return
+	}
+
+	var whIDPtr, itemIDPtr *uuid.UUID
+	if whIDStr := r.URL.Query().Get("warehouse_id"); whIDStr != "" {
+		if id, err := uuid.Parse(whIDStr); err == nil {
+			whIDPtr = &id
+		}
+	}
+	if itemIDStr := r.URL.Query().Get("item_id"); itemIDStr != "" {
+		if id, err := uuid.Parse(itemIDStr); err == nil {
+			itemIDPtr = &id
+		}
+	}
+
+	report, err := h.inventoryService.GetValuationReport(r.Context(), leID, whIDPtr, itemIDPtr)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "VALUATION_FAILED", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"data": report})
+}
+
+func (h *InventoryHandler) ListCostLayers(w http.ResponseWriter, r *http.Request) {
+	leID, err := h.resolveLegalEntityID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_ENTITY", err.Error())
+		return
+	}
+
+	var whIDPtr, itemIDPtr *uuid.UUID
+	var onlyActivePtr *bool
+	if whIDStr := r.URL.Query().Get("warehouse_id"); whIDStr != "" {
+		if id, err := uuid.Parse(whIDStr); err == nil {
+			whIDPtr = &id
+		}
+	}
+	if itemIDStr := r.URL.Query().Get("item_id"); itemIDStr != "" {
+		if id, err := uuid.Parse(itemIDStr); err == nil {
+			itemIDPtr = &id
+		}
+	}
+	if activeStr := r.URL.Query().Get("only_active"); activeStr != "" {
+		b := activeStr == "true" || activeStr == "1"
+		onlyActivePtr = &b
+	}
+
+	limit := int32(50)
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if val, err := strconv.Atoi(l); err == nil && val > 0 {
+			limit = int32(val)
+		}
+	}
+	offset := int32(0)
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if val, err := strconv.Atoi(o); err == nil && val >= 0 {
+			offset = int32(val)
+		}
+	}
+
+	layers, err := h.inventoryService.ListCostLayers(r.Context(), leID, itemIDPtr, whIDPtr, onlyActivePtr, limit, offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "FETCH_LAYERS_FAILED", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"data": layers})
+}
+
+func (h *InventoryHandler) ExecuteRevaluation(w http.ResponseWriter, r *http.Request) {
+	leID, err := h.resolveLegalEntityID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_ENTITY", err.Error())
+		return
+	}
+	user := iamhttp.UserFromContext(r.Context())
+	userID := uuid.Nil
+	if user != nil {
+		userID = user.ID
+	}
+
+	var req ExecuteRevaluationRequestDTO
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+
+	rev, err := h.inventoryService.ExecuteRevaluation(r.Context(), ports.ExecuteRevaluationRequest{
+		LegalEntityID:  leID,
+		WarehouseID:    req.WarehouseID,
+		ItemID:         req.ItemID,
+		NewUnitCost:    req.NewUnitCost,
+		Reason:         req.Reason,
+		JournalEntryID: req.JournalEntryID,
+		CreatedBy:      userID,
+	})
+	if err != nil {
+		if errors.Is(err, domain.ErrZeroQuantityRevaluation) {
+			writeError(w, http.StatusConflict, "ZERO_QUANTITY", err.Error())
+			return
+		}
+		writeError(w, http.StatusBadRequest, "REVALUATION_FAILED", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{"data": rev})
+}
+
+func (h *InventoryHandler) ListRevaluations(w http.ResponseWriter, r *http.Request) {
+	leID, err := h.resolveLegalEntityID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_ENTITY", err.Error())
+		return
+	}
+
+	var whIDPtr, itemIDPtr *uuid.UUID
+	if whIDStr := r.URL.Query().Get("warehouse_id"); whIDStr != "" {
+		if id, err := uuid.Parse(whIDStr); err == nil {
+			whIDPtr = &id
+		}
+	}
+	if itemIDStr := r.URL.Query().Get("item_id"); itemIDStr != "" {
+		if id, err := uuid.Parse(itemIDStr); err == nil {
+			itemIDPtr = &id
+		}
+	}
+
+	limit := int32(50)
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if val, err := strconv.Atoi(l); err == nil && val > 0 {
+			limit = int32(val)
+		}
+	}
+	offset := int32(0)
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if val, err := strconv.Atoi(o); err == nil && val >= 0 {
+			offset = int32(val)
+		}
+	}
+
+	revs, err := h.inventoryService.ListRevaluations(r.Context(), leID, whIDPtr, itemIDPtr, limit, offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "FETCH_REVALUATIONS_FAILED", err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"data": revs})
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

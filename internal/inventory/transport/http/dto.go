@@ -95,3 +95,11 @@ type CreateCountRequestDTO struct {
 	CountType   string         `json:"count_type"`
 	Lines       []CountLineDTO `json:"lines"`
 }
+
+type ExecuteRevaluationRequestDTO struct {
+	WarehouseID    uuid.UUID       `json:"warehouse_id"`
+	ItemID         uuid.UUID       `json:"item_id"`
+	NewUnitCost    decimal.Decimal `json:"new_unit_cost"`
+	Reason         string          `json:"reason"`
+	JournalEntryID *uuid.UUID      `json:"journal_entry_id,omitempty"`
+}

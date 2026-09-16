@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"erp/internal/inventory/application/costing"
 	"erp/internal/inventory/domain"
 	"erp/internal/inventory/ports"
 
@@ -14,11 +15,15 @@ import (
 )
 
 type InventoryService struct {
-	repo ports.StockRepository
+	repo    ports.StockRepository
+	costing *costing.CostingService
 }
 
 func NewInventoryService(repo ports.StockRepository) ports.InventoryService {
-	return &InventoryService{repo: repo}
+	return &InventoryService{
+		repo:    repo,
+		costing: costing.NewCostingService(repo),
+	}
 }
 
 // 1. Warehouses & Bins
@@ -126,6 +131,8 @@ func (s *InventoryService) PostStockMovement(ctx context.Context, req ports.Post
 		BinID:         binID,
 	}
 
+	var consumptions []domain.CostLayerConsumption
+
 	// Lock balance and check availability for outgoing movements
 	if !isIncoming {
 		bal, err := s.repo.LockBalance(ctx, stockKey.LegalEntityID, stockKey.ItemID, stockKey.WarehouseID, stockKey.BinID)
@@ -135,12 +142,19 @@ func (s *InventoryService) PostStockMovement(ctx context.Context, req ports.Post
 		if bal == nil || bal.QuantityAvailable.LessThan(req.Quantity.Abs()) {
 			return nil, domain.ErrInsufficientStock
 		}
-		// Calculate outgoing cost delta based on current moving average cost
+		// Calculate outgoing cost delta based on costing engine (Weighted Avg / FIFO / Standard)
+		costResult, err := s.costing.CalculateIssueCost(ctx, req.LegalEntityID, req.ItemID, req.WarehouseID, req.Quantity.Abs())
 		unitCost := bal.AverageCost
-		if req.UnitCost.IsPositive() {
-			unitCost = req.UnitCost
+		if err == nil && costResult.TotalCost.IsPositive() {
+			unitCost = costResult.UnitCost
+			costDelta = costResult.TotalCost.Neg()
+			consumptions = costResult.Consumptions
+		} else {
+			if req.UnitCost.IsPositive() {
+				unitCost = req.UnitCost
+			}
+			costDelta = quantityDelta.Mul(unitCost) // Negative delta
 		}
-		costDelta = quantityDelta.Mul(unitCost) // Negative delta
 		req.UnitCost = unitCost
 	}
 
@@ -187,6 +201,17 @@ func (s *InventoryService) PostStockMovement(ctx context.Context, req ports.Post
 	_, err = s.repo.ApplyBalanceDelta(ctx, stockKey, quantityDelta, costDelta)
 	if err != nil {
 		return nil, err
+	}
+
+	// Inbound receipt: record cost layer
+	if isIncoming && req.UnitCost.IsPositive() {
+		_ = s.costing.RecordReceiptCost(ctx, req.LegalEntityID, req.ItemID, req.WarehouseID, quantityDelta, req.UnitCost, createdMov.ID)
+	}
+
+	// Outbound issue: persist FIFO layer consumptions if any
+	for _, cons := range consumptions {
+		cons.IssueMovementID = createdMov.ID
+		_, _ = s.repo.InsertCostLayerConsumption(ctx, &cons)
 	}
 
 	return createdMov, nil
@@ -500,4 +525,29 @@ func (s *InventoryService) ReconcileStockCount(ctx context.Context, countID uuid
 
 func (s *InventoryService) ListStockCounts(ctx context.Context, legalEntityID uuid.UUID, warehouseID *uuid.UUID, status *string, limit, offset int32) ([]domain.StockCount, error) {
 	return s.repo.ListStockCounts(ctx, legalEntityID, warehouseID, status, limit, offset)
+}
+
+// 8. Costing & Valuation
+func (s *InventoryService) GetValuationReport(ctx context.Context, entityID uuid.UUID, warehouseID, itemID *uuid.UUID) ([]domain.ValuationSummaryItem, error) {
+	return s.costing.GetValuationReport(ctx, entityID, warehouseID, itemID)
+}
+
+func (s *InventoryService) ListCostLayers(ctx context.Context, entityID uuid.UUID, itemID, warehouseID *uuid.UUID, onlyActive *bool, limit, offset int32) ([]domain.CostLayer, error) {
+	return s.costing.ListCostLayers(ctx, entityID, itemID, warehouseID, onlyActive, limit, offset)
+}
+
+func (s *InventoryService) ExecuteRevaluation(ctx context.Context, req ports.ExecuteRevaluationRequest) (*domain.InventoryRevaluation, error) {
+	return s.costing.ExecuteRevaluation(ctx, costing.ExecuteRevaluationRequest{
+		LegalEntityID:  req.LegalEntityID,
+		WarehouseID:    req.WarehouseID,
+		ItemID:         req.ItemID,
+		NewUnitCost:    req.NewUnitCost,
+		Reason:         req.Reason,
+		JournalEntryID: req.JournalEntryID,
+		CreatedBy:      req.CreatedBy,
+	})
+}
+
+func (s *InventoryService) ListRevaluations(ctx context.Context, entityID uuid.UUID, warehouseID, itemID *uuid.UUID, limit, offset int32) ([]domain.InventoryRevaluation, error) {
+	return s.costing.ListRevaluations(ctx, entityID, warehouseID, itemID, limit, offset)
 }

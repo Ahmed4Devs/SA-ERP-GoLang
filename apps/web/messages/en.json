@@ -357,6 +357,22 @@
     "submit": "Post Movement & Update Balances",
     "cancel": "Cancel",
     "success_movement": "Movement posted and real-time balances updated successfully",
-    "ledger_guarantee": "Ledger strictly protected against UPDATE/DELETE by PostgreSQL triggers"
+    "ledger_guarantee": "Ledger strictly protected against UPDATE/DELETE by PostgreSQL triggers",
+    "tab_costing": "Costing & Valuation",
+    "costing_method": "Costing Methodology",
+    "method_avg": "Weighted Moving Average",
+    "method_fifo": "First In, First Out (FIFO)",
+    "method_std": "Standard Costing",
+    "cost_layers_title": "FIFO Cost Layers Breakdown",
+    "revaluation_title": "Inventory Revaluation & Cost Adjustment",
+    "new_revaluation": "New Revaluation",
+    "original_qty": "Original Qty",
+    "remaining_qty": "Remaining Qty",
+    "new_unit_cost": "New Unit Cost",
+    "old_unit_cost": "Current Unit Cost",
+    "variance": "Revaluation Variance",
+    "revaluation_reason": "Accounting Reason",
+    "submit_revaluation": "Post Revaluation & Update Balance",
+    "success_revaluation": "Inventory revaluation completed and balances updated successfully"
   }
 }

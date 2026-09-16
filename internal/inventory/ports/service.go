@@ -125,4 +125,20 @@ type InventoryService interface {
 	CreateStockCount(ctx context.Context, req CreateCountRequest) (*domain.StockCount, error)
 	ReconcileStockCount(ctx context.Context, countID uuid.UUID, userID uuid.UUID) (*domain.StockCount, error)
 	ListStockCounts(ctx context.Context, legalEntityID uuid.UUID, warehouseID *uuid.UUID, status *string, limit, offset int32) ([]domain.StockCount, error)
+
+	// Costing & Valuation
+	GetValuationReport(ctx context.Context, entityID uuid.UUID, warehouseID, itemID *uuid.UUID) ([]domain.ValuationSummaryItem, error)
+	ListCostLayers(ctx context.Context, entityID uuid.UUID, itemID, warehouseID *uuid.UUID, onlyActive *bool, limit, offset int32) ([]domain.CostLayer, error)
+	ExecuteRevaluation(ctx context.Context, req ExecuteRevaluationRequest) (*domain.InventoryRevaluation, error)
+	ListRevaluations(ctx context.Context, entityID uuid.UUID, warehouseID, itemID *uuid.UUID, limit, offset int32) ([]domain.InventoryRevaluation, error)
+}
+
+type ExecuteRevaluationRequest struct {
+	LegalEntityID  uuid.UUID       `json:"legal_entity_id"`
+	WarehouseID    uuid.UUID       `json:"warehouse_id"`
+	ItemID         uuid.UUID       `json:"item_id"`
+	NewUnitCost    decimal.Decimal `json:"new_unit_cost"`
+	Reason         string          `json:"reason"`
+	JournalEntryID *uuid.UUID      `json:"journal_entry_id,omitempty"`
+	CreatedBy      uuid.UUID       `json:"created_by"`
 }

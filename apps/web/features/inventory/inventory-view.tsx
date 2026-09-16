@@ -27,6 +27,11 @@ import {
   QrCode,
   Tag,
   AlertTriangle,
+  Calculator,
+  Coins,
+  TrendingUp,
+  TrendingDown,
+  RefreshCw,
 } from "lucide-react";
 
 interface StockBalanceItem {
@@ -97,6 +102,35 @@ interface AdjustmentEntity {
   status: "DRAFT" | "APPROVED" | "POSTED";
   totalVarianceValue: number;
   createdAt: string;
+}
+
+interface CostLayerItem {
+  id: string;
+  itemCode: string;
+  itemNameAr: string;
+  itemNameEn: string;
+  warehouseCode: string;
+  layerDate: string;
+  originalQuantity: number;
+  remainingQuantity: number;
+  unitCost: number;
+  totalRemainingValue: number;
+  sourceDoc: string;
+  status: "ACTIVE" | "EXHAUSTED";
+}
+
+interface RevaluationItem {
+  id: string;
+  revaluationNumber: string;
+  itemCode: string;
+  itemNameAr: string;
+  warehouseCode: string;
+  quantity: number;
+  oldUnitCost: number;
+  newUnitCost: number;
+  varianceAmount: number;
+  reason: string;
+  performedAt: string;
 }
 
 const INITIAL_BALANCES: StockBalanceItem[] = [
@@ -375,12 +409,114 @@ const INITIAL_ADJUSTMENTS: AdjustmentEntity[] = [
   },
 ];
 
+const INITIAL_COST_LAYERS: CostLayerItem[] = [
+  {
+    id: "layer-1",
+    itemCode: "IT-LAPTOP-01",
+    itemNameAr: "جهاز حاسب محمول للأعمال 16 بوصة",
+    itemNameEn: "Enterprise Business Laptop 16-inch",
+    warehouseCode: "WH-MAIN",
+    layerDate: "2026-09-01 09:30",
+    originalQuantity: 30,
+    remainingQuantity: 15,
+    unitCost: 3750,
+    totalRemainingValue: 56250,
+    sourceDoc: "PO-2026-0012",
+    status: "ACTIVE",
+  },
+  {
+    id: "layer-2",
+    itemCode: "IT-LAPTOP-01",
+    itemNameAr: "جهاز حاسب محمول للأعمال 16 بوصة",
+    itemNameEn: "Enterprise Business Laptop 16-inch",
+    warehouseCode: "WH-MAIN",
+    layerDate: "2026-09-10 14:15",
+    originalQuantity: 30,
+    remainingQuantity: 30,
+    unitCost: 3850,
+    totalRemainingValue: 115500,
+    sourceDoc: "PO-2026-0045",
+    status: "ACTIVE",
+  },
+  {
+    id: "layer-3",
+    itemCode: "IND-PUMP-HD",
+    itemNameAr: "مضخة هيدروليكية ضغط عالي",
+    itemNameEn: "Heavy Duty Hydraulic Pump",
+    warehouseCode: "WH-MAIN",
+    layerDate: "2026-08-20 11:00",
+    originalQuantity: 20,
+    remainingQuantity: 18,
+    unitCost: 4500,
+    totalRemainingValue: 81000,
+    sourceDoc: "PO-2026-0005",
+    status: "ACTIVE",
+  },
+  {
+    id: "layer-4",
+    itemCode: "IND-VALVE-50",
+    itemNameAr: "صمام أمان صناعي 50 ملم",
+    itemNameEn: "Industrial Safety Valve 50mm",
+    warehouseCode: "WH-DAMMAM",
+    layerDate: "2026-08-15 08:45",
+    originalQuantity: 50,
+    remainingQuantity: 0,
+    unitCost: 260,
+    totalRemainingValue: 0,
+    sourceDoc: "PO-2026-0002",
+    status: "EXHAUSTED",
+  },
+  {
+    id: "layer-5",
+    itemCode: "IND-VALVE-50",
+    itemNameAr: "صمام أمان صناعي 50 ملم",
+    itemNameEn: "Industrial Safety Valve 50mm",
+    warehouseCode: "WH-DAMMAM",
+    layerDate: "2026-09-05 13:20",
+    originalQuantity: 150,
+    remainingQuantity: 120,
+    unitCost: 280,
+    totalRemainingValue: 33600,
+    sourceDoc: "PO-2026-0033",
+    status: "ACTIVE",
+  },
+];
+
+const INITIAL_REVALUATIONS: RevaluationItem[] = [
+  {
+    id: "rev-1",
+    revaluationNumber: "REV-2026-0001",
+    itemCode: "IT-LAPTOP-01",
+    itemNameAr: "جهاز حاسب محمول للأعمال 16 بوصة",
+    warehouseCode: "WH-MAIN",
+    quantity: 45,
+    oldUnitCost: 3700,
+    newUnitCost: 3800,
+    varianceAmount: 4500,
+    reason: "تحديث تكلفة الاستيراد السنوية والرسوم الجمركية",
+    performedAt: "2026-09-12 11:30",
+  },
+  {
+    id: "rev-2",
+    revaluationNumber: "REV-2026-0002",
+    itemCode: "CHEM-SOLVENT-01",
+    itemNameAr: "مذيب كيميائي صناعي (درجة أولى)",
+    warehouseCode: "WH-COLD",
+    quantity: 60,
+    oldUnitCost: 165,
+    newUnitCost: 150,
+    varianceAmount: -900,
+    reason: "انخفاض أسعار السوق العالمية وتصحيح تكلفة التخزين",
+    performedAt: "2026-09-14 16:00",
+  },
+];
+
 export function InventoryView() {
   const { locale, t } = useLocale();
   const isAr = locale === "ar";
   const inv = (t as any).inventory || {};
 
-  const [activeTab, setActiveTab] = useState<"balances" | "movements" | "warehouses" | "transfers" | "adjustments">("balances");
+  const [activeTab, setActiveTab] = useState<"balances" | "movements" | "warehouses" | "transfers" | "adjustments" | "costing">("balances");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedWarehouseFilter, setSelectedWarehouseFilter] = useState("ALL");
 
@@ -388,10 +524,13 @@ export function InventoryView() {
   const [balances, setBalances] = useState<StockBalanceItem[]>(INITIAL_BALANCES);
   const [movements, setMovements] = useState<StockMovementItem[]>(INITIAL_MOVEMENTS);
   const [transfers, setTransfers] = useState<TransferOrderEntity[]>(INITIAL_TRANSFERS);
+  const [costLayers, setCostLayers] = useState<CostLayerItem[]>(INITIAL_COST_LAYERS);
+  const [revaluations, setRevaluations] = useState<RevaluationItem[]>(INITIAL_REVALUATIONS);
 
   // Modals
   const [showMovementModal, setShowMovementModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showRevalModal, setShowRevalModal] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
 
   // New Movement Form
@@ -401,6 +540,12 @@ export function InventoryView() {
   const [movQty, setMovQty] = useState(10);
   const [movUnitCost, setMovUnitCost] = useState(3800);
   const [movDoc, setMovDoc] = useState("MANUAL-ENTRY-01");
+
+  // Revaluation Form
+  const [revalItemCode, setRevalItemCode] = useState("IT-LAPTOP-01");
+  const [revalWarehouse, setRevalWarehouse] = useState("WH-MAIN");
+  const [revalNewCost, setRevalNewCost] = useState(3850);
+  const [revalReason, setRevalReason] = useState("");
 
   // Filtered Balances
   const filteredBalances = balances.filter((b) => {
@@ -422,6 +567,76 @@ export function InventoryView() {
     const matchesWH = selectedWarehouseFilter === "ALL" || m.warehouseCode === selectedWarehouseFilter;
     return matchesSearch && matchesWH;
   });
+
+  // Filtered Cost Layers
+  const filteredCostLayers = costLayers.filter((layer) => {
+    const matchesSearch =
+      layer.itemCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      layer.itemNameAr.includes(searchTerm) ||
+      layer.sourceDoc.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesWH = selectedWarehouseFilter === "ALL" || layer.warehouseCode === selectedWarehouseFilter;
+    return matchesSearch && matchesWH;
+  });
+
+  // Filtered Revaluations
+  const filteredRevaluations = revaluations.filter((rev) => {
+    const matchesSearch =
+      rev.revaluationNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      rev.itemCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      rev.itemNameAr.includes(searchTerm) ||
+      rev.reason.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesWH = selectedWarehouseFilter === "ALL" || rev.warehouseCode === selectedWarehouseFilter;
+    return matchesSearch && matchesWH;
+  });
+
+  // Revaluation active selection calculations
+  const selectedRevalBalance = balances.find(
+    (b) => b.itemCode === revalItemCode && b.warehouseCode === revalWarehouse
+  ) || balances.find((b) => b.itemCode === revalItemCode);
+  const revalCurrentQty = selectedRevalBalance?.onHand || 0;
+  const revalCurrentCost = selectedRevalBalance?.averageCost || 0;
+  const revalUnitVariance = revalNewCost - revalCurrentCost;
+  const revalTotalVariance = revalUnitVariance * revalCurrentQty;
+
+  const handlePostRevaluation = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRevalBalance || revalCurrentQty <= 0) {
+      alert(isAr ? "لا يمكن إعادة تقييم صنف بدون رصيد فعلي" : "Cannot revalue item with zero on-hand quantity");
+      return;
+    }
+    const newRev: RevaluationItem = {
+      id: `rev-${Date.now()}`,
+      revaluationNumber: `REV-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      itemCode: selectedRevalBalance.itemCode,
+      itemNameAr: selectedRevalBalance.nameAr,
+      warehouseCode: selectedRevalBalance.warehouseCode,
+      quantity: revalCurrentQty,
+      oldUnitCost: revalCurrentCost,
+      newUnitCost: revalNewCost,
+      varianceAmount: revalTotalVariance,
+      reason: revalReason || (isAr ? "تسوية تقييم مخزني دورية" : "Periodic inventory revaluation"),
+      performedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+    };
+
+    setRevaluations([newRev, ...revaluations]);
+    setBalances((prev) =>
+      prev.map((b) => {
+        if (b.itemCode === selectedRevalBalance.itemCode && b.warehouseCode === selectedRevalBalance.warehouseCode) {
+          return {
+            ...b,
+            averageCost: revalNewCost,
+            totalValue: b.onHand * revalNewCost,
+          };
+        }
+        return b;
+      })
+    );
+
+    setShowRevalModal(false);
+    setRevalReason("");
+    setNotification(inv.success_revaluation || "تمت إعادة تقييم المخزون وتحديث الأرصدة بنجاح");
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   // Total valuation calculation
   const totalValuation = balances.reduce((sum, b) => sum + b.totalValue, 0);
@@ -528,6 +743,13 @@ export function InventoryView() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setShowRevalModal(true)}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold border bg-card hover:bg-muted text-foreground transition shadow-sm"
+          >
+            <Coins className="h-4 w-4 text-primary" />
+            {inv.new_revaluation || "إعادة تقييم المخزون"}
+          </button>
           <button
             onClick={() => setShowMovementModal(true)}
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition shadow-sm"
@@ -698,6 +920,21 @@ export function InventoryView() {
           >
             <SlidersHorizontal className="h-4 w-4" />
             {inv.tab_adjustments || "تسويات وجرد المخزون"}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("costing")}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 ${
+              activeTab === "costing"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            }`}
+          >
+            <Calculator className="h-4 w-4" />
+            {inv.tab_costing || "محاسبة التكاليف والتقييم (Costing)"}
+            <span className="ms-1 px-1.5 py-0.2 rounded-full text-[10px] bg-background/20 font-mono">
+              FIFO / AVG
+            </span>
           </button>
         </div>
 
@@ -1030,6 +1267,409 @@ export function InventoryView() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 6: Costing & Valuation Engine */}
+      {activeTab === "costing" && (
+        <div className="space-y-6">
+          {/* Methodology Comparison Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Card 1: Moving Weighted Average */}
+            <div className="p-4 rounded-xl border bg-card text-card-foreground shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+                    <Calculator className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">
+                      {inv.method_avg || "متوسط التكلفة المرجح (WEIGHTED_AVG)"}
+                    </h4>
+                    <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
+                      محرك التكلفة النشط الافتراضي
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <p className="mt-3 text-[11px] text-muted-foreground leading-relaxed">
+                يتم احتساب التكلفة ديناميكياً مع كل حركة استلام توريد بقسمة إجمالي القيمة التراكمية على الرصيد المتوفر، وصرف المبيعات بأحدث متوسط تكلفة مرجح لحظي.
+              </p>
+              <div className="mt-3 pt-3 border-t flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">صيغة التحديث:</span>
+                <span className="font-mono font-semibold text-foreground dir-ltr">
+                  (Val_old + In_val) / (Qty_old + In_qty)
+                </span>
+              </div>
+            </div>
+
+            {/* Card 2: FIFO Discrete Layers */}
+            <div className="p-4 rounded-xl border bg-card text-card-foreground shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600">
+                    <Layers className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">
+                      {inv.method_fifo || "الوارد أولاً يصرف أولاً (FIFO)"}
+                    </h4>
+                    <span className="text-[10px] text-blue-600 font-semibold bg-blue-500/10 px-1.5 py-0.2 rounded border border-blue-500/20">
+                      تتبع الطبقات المنفصلة (Layers)
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <p className="mt-3 text-[11px] text-muted-foreground leading-relaxed">
+                يتم تسجيل كل دفعة استلام مشتريات كطبقة تكلفة مستقلة. عند صرف البضاعة، يتم استنفاد أقدم طبقة أولاً بدقة وإقفالها عند استهلاك كامل كميتها.
+              </p>
+              <div className="mt-3 pt-3 border-t flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">طبقات التكلفة النشطة:</span>
+                <span className="font-mono font-bold text-blue-600">
+                  {costLayers.filter((l) => l.status === "ACTIVE").length} طبقة نشطة
+                </span>
+              </div>
+            </div>
+
+            {/* Card 3: Standard Costing */}
+            <div className="p-4 rounded-xl border bg-card text-card-foreground shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-purple-500/10 text-purple-600">
+                    <Coins className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground">
+                      {inv.method_std || "التكلفة المعيارية (STANDARD)"}
+                    </h4>
+                    <span className="text-[10px] text-purple-600 font-semibold bg-purple-500/10 px-1.5 py-0.2 rounded border border-purple-500/20">
+                      معايير التكلفة وفروقات الأسعار
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <p className="mt-3 text-[11px] text-muted-foreground leading-relaxed">
+                تحديد تكلفة ثابتة مسبقة للأصناف المصنعة أو المستوردة، وترحيل أي انحرافات في أسعار التوريد الفعلية تلقائياً إلى حساب فروقات الشراء (PPV).
+              </p>
+              <div className="mt-3 pt-3 border-t flex items-center justify-between text-[11px]">
+                <span className="text-muted-foreground">تسجيل الفروقات:</span>
+                <span className="font-mono font-bold text-purple-600">PPV Auto-Reconciled</span>
+              </div>
+            </div>
+          </div>
+
+          {/* FIFO Layers Section */}
+          <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+            <div className="p-3.5 bg-muted/30 border-b flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-primary" />
+                <span className="text-xs font-bold text-foreground">
+                  {inv.cost_layers_title || "طبقات تكلفة الوارد أولاً يصرف أولاً (FIFO Layers)"}
+                </span>
+              </div>
+              <span className="text-[11px] text-muted-foreground font-mono">
+                {filteredCostLayers.length} {isAr ? "طبقة مسجلة" : "layers tracked"}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-start">
+                <thead className="bg-muted/60 text-muted-foreground font-semibold border-b">
+                  <tr>
+                    <th className="px-4 py-3 text-start">{inv.item || "الصنف"}</th>
+                    <th className="px-4 py-3 text-start">{inv.warehouse || "المستودع"}</th>
+                    <th className="px-4 py-3 text-start">تاريخ الاستلام</th>
+                    <th className="px-4 py-3 text-end">{inv.original_qty || "الكمية الأصلية"}</th>
+                    <th className="px-4 py-3 text-center">{inv.remaining_qty || "المتبقي ونسبة الاستهلاك"}</th>
+                    <th className="px-4 py-3 text-end">{inv.unit_cost || "تكلفة الوحدة"}</th>
+                    <th className="px-4 py-3 text-end">قيمة الرصيد المتبقي</th>
+                    <th className="px-4 py-3 text-start">{inv.source_doc || "المستند المصدري"}</th>
+                    <th className="px-4 py-3 text-center">{inv.status || "الحالة"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredCostLayers.map((layer) => {
+                    const pctRemaining = layer.originalQuantity > 0 
+                      ? Math.round((layer.remainingQuantity / layer.originalQuantity) * 100) 
+                      : 0;
+                    return (
+                      <tr key={layer.id} className="hover:bg-muted/30 transition">
+                        <td className="px-4 py-3">
+                          <div className="font-mono font-semibold text-primary">{layer.itemCode}</div>
+                          <div className="text-foreground font-medium">{isAr ? layer.itemNameAr : layer.itemNameEn}</div>
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-foreground">{layer.warehouseCode}</td>
+                        <td className="px-4 py-3 font-mono text-muted-foreground text-[11px]">{layer.layerDate}</td>
+                        <td className="px-4 py-3 text-end font-mono font-semibold">{layer.originalQuantity}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-24 bg-muted h-2 rounded-full overflow-hidden border border-border">
+                              <div
+                                className={`h-full rounded-full ${
+                                  pctRemaining > 50
+                                    ? "bg-emerald-500"
+                                    : pctRemaining > 15
+                                    ? "bg-amber-500"
+                                    : "bg-rose-500"
+                                }`}
+                                style={{ width: `${pctRemaining}%` }}
+                              />
+                            </div>
+                            <span className="font-mono text-[10px] font-bold text-foreground w-12 text-end">
+                              {layer.remainingQuantity} ({pctRemaining}%)
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-end font-mono font-bold">
+                          {layer.unitCost.toLocaleString(isAr ? "ar-SA" : "en-US", { minimumFractionDigits: 2 })} {inv.currency || "ر.س"}
+                        </td>
+                        <td className="px-4 py-3 text-end font-mono font-bold text-foreground">
+                          {layer.totalRemainingValue.toLocaleString(isAr ? "ar-SA" : "en-US", { minimumFractionDigits: 2 })} {inv.currency || "ر.س"}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-primary text-[11px]">{layer.sourceDoc}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span
+                            className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                              layer.status === "ACTIVE"
+                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                : "bg-muted text-muted-foreground border-border"
+                            }`}
+                          >
+                            {layer.status === "ACTIVE" ? (isAr ? "نشطة" : "ACTIVE") : (isAr ? "مستنفدة" : "EXHAUSTED")}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Inventory Revaluations Section */}
+          <div className="rounded-xl border bg-card overflow-hidden shadow-sm">
+            <div className="p-3.5 bg-muted/30 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Coins className="h-4 w-4 text-primary" />
+                <span className="text-xs font-bold text-foreground">
+                  {inv.revaluation_title || "إعادة تقييم المخزون وتعديل التكلفة"}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  (سجل التدقيق المحاسبي لفروقات التقييم)
+                </span>
+              </div>
+              <button
+                onClick={() => setShowRevalModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition shadow-sm w-fit"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {inv.new_revaluation || "إعادة تقييم صنف"}
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-start">
+                <thead className="bg-muted/60 text-muted-foreground font-semibold border-b">
+                  <tr>
+                    <th className="px-4 py-3 text-start">رقم المستند</th>
+                    <th className="px-4 py-3 text-start">{inv.item || "الصنف"}</th>
+                    <th className="px-4 py-3 text-start">{inv.warehouse || "المستودع"}</th>
+                    <th className="px-4 py-3 text-end">الكمية الخاضعة للتقييم</th>
+                    <th className="px-4 py-3 text-end">{inv.old_unit_cost || "التكلفة السابقة"}</th>
+                    <th className="px-4 py-3 text-end">{inv.new_unit_cost || "التكلفة الجديدة"}</th>
+                    <th className="px-4 py-3 text-end">{inv.variance || "فارق التقييم الإجمالي"}</th>
+                    <th className="px-4 py-3 text-start">{inv.revaluation_reason || "السبب المحاسبي"}</th>
+                    <th className="px-4 py-3 text-start">تاريخ التنفيذ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredRevaluations.map((rev) => {
+                    const isPositive = rev.varianceAmount >= 0;
+                    return (
+                      <tr key={rev.id} className="hover:bg-muted/30 transition">
+                        <td className="px-4 py-3 font-mono font-bold text-primary">{rev.revaluationNumber}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-mono font-semibold text-foreground">{rev.itemCode}</div>
+                          <div className="text-[11px] text-muted-foreground">{rev.itemNameAr}</div>
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-foreground">{rev.warehouseCode}</td>
+                        <td className="px-4 py-3 text-end font-mono font-semibold">{rev.quantity}</td>
+                        <td className="px-4 py-3 text-end font-mono text-muted-foreground">
+                          {rev.oldUnitCost.toLocaleString(isAr ? "ar-SA" : "en-US", { minimumFractionDigits: 2 })} {inv.currency || "ر.س"}
+                        </td>
+                        <td className="px-4 py-3 text-end font-mono font-bold text-foreground">
+                          {rev.newUnitCost.toLocaleString(isAr ? "ar-SA" : "en-US", { minimumFractionDigits: 2 })} {inv.currency || "ر.س"}
+                        </td>
+                        <td className="px-4 py-3 text-end font-mono font-bold">
+                          <span
+                            className={`inline-flex items-center gap-1 ${
+                              isPositive ? "text-emerald-600" : "text-rose-600"
+                            }`}
+                          >
+                            {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                            {isPositive ? `+${rev.varianceAmount.toLocaleString(isAr ? "ar-SA" : "en-US", { minimumFractionDigits: 2 })}` : rev.varianceAmount.toLocaleString(isAr ? "ar-SA" : "en-US", { minimumFractionDigits: 2 })} {inv.currency || "ر.س"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{rev.reason}</td>
+                        <td className="px-4 py-3 font-mono text-muted-foreground text-[11px]">{rev.performedAt}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inventory Revaluation Modal */}
+      {showRevalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-xl border bg-card p-6 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <Coins className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-foreground">
+                    {inv.new_revaluation || "إعادة تقييم المخزون وتعديل التكلفة"}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    تعديل تكلفة الوحدة دفترياً وترحيل فارق التقييم مع حفظ سجل التدقيق
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRevalModal(false)}
+                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handlePostRevaluation} className="space-y-4 mt-4 text-xs">
+              {/* Item Selection */}
+              <div>
+                <label className="font-medium text-foreground block mb-1">{inv.item || "الصنف المراد تقييمه"}</label>
+                <select
+                  value={revalItemCode}
+                  onChange={(e) => setRevalItemCode(e.target.value)}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {balances.map((b) => (
+                    <option key={b.id} value={b.itemCode}>
+                      {b.itemCode} - {isAr ? b.nameAr : b.nameEn}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Warehouse Selection */}
+              <div>
+                <label className="font-medium text-foreground block mb-1">{inv.warehouse || "المستودع"}</label>
+                <select
+                  value={revalWarehouse}
+                  onChange={(e) => setRevalWarehouse(e.target.value)}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="WH-MAIN">WH-MAIN (الرياض المركزي)</option>
+                  <option value="WH-DAMMAM">WH-DAMMAM (فرع الدمام)</option>
+                  <option value="WH-COLD">WH-COLD (مستودع التبريد)</option>
+                </select>
+              </div>
+
+              {/* Current Status Box (Readonly) */}
+              <div className="grid grid-cols-3 gap-2.5 p-3 rounded-lg bg-muted/40 border text-center">
+                <div>
+                  <span className="text-[10px] text-muted-foreground block">الرصيد الفعلي الحالي</span>
+                  <span className="font-mono font-bold text-foreground text-sm">{revalCurrentQty}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-muted-foreground block">{inv.old_unit_cost || "التكلفة السابقة"}</span>
+                  <span className="font-mono font-bold text-foreground text-sm">
+                    {revalCurrentCost.toFixed(2)} {inv.currency || "ر.س"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-muted-foreground block">القيمة الإجمالية السابقة</span>
+                  <span className="font-mono font-bold text-foreground text-sm">
+                    {(revalCurrentQty * revalCurrentCost).toLocaleString(isAr ? "ar-SA" : "en-US", { minimumFractionDigits: 2 })} {inv.currency || "ر.س"}
+                  </span>
+                </div>
+              </div>
+
+              {/* New Unit Cost Input */}
+              <div>
+                <label className="font-medium text-foreground block mb-1">
+                  {inv.new_unit_cost || "التكلفة الجديدة للوحدة"} ({inv.currency || "ر.س"})
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={revalNewCost}
+                  onChange={(e) => setRevalNewCost(parseFloat(e.target.value) || 0)}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-foreground font-mono font-bold focus:outline-none focus:ring-1 focus:ring-primary"
+                  required
+                />
+              </div>
+
+              {/* Live Variance Calculation Display */}
+              <div className="p-3 rounded-lg border bg-card flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] text-muted-foreground block">{inv.variance || "فارق التقييم الإجمالي"}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    ({revalCurrentQty} وحدة × {revalUnitVariance >= 0 ? `+${revalUnitVariance.toFixed(2)}` : revalUnitVariance.toFixed(2)} ر.س)
+                  </span>
+                </div>
+                <div className="text-end">
+                  <span
+                    className={`font-mono text-base font-bold flex items-center justify-end gap-1 ${
+                      revalTotalVariance >= 0 ? "text-emerald-600" : "text-rose-600"
+                    }`}
+                  >
+                    {revalTotalVariance >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                    {revalTotalVariance >= 0 ? `+${revalTotalVariance.toLocaleString(isAr ? "ar-SA" : "en-US", { minimumFractionDigits: 2 })}` : revalTotalVariance.toLocaleString(isAr ? "ar-SA" : "en-US", { minimumFractionDigits: 2 })} {inv.currency || "ر.س"}
+                  </span>
+                  <span className="text-[10px] font-medium text-muted-foreground block">
+                    {revalTotalVariance >= 0 ? "أرباح تقييم دفتري" : "خسائر هبوط قيمة المخزون"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Reason Input */}
+              <div>
+                <label className="font-medium text-foreground block mb-1">
+                  {inv.revaluation_reason || "سبب التعديل المحاسبي"}
+                </label>
+                <input
+                  type="text"
+                  placeholder="مثال: تحديث تكلفة التوريد والرسوم، تصحيح أسعار المورد..."
+                  value={revalReason}
+                  onChange={(e) => setRevalReason(e.target.value)}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  required
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowRevalModal(false)}
+                  className="px-4 py-2 rounded-lg border hover:bg-muted text-foreground transition"
+                >
+                  {inv.cancel || "إلغاء"}
+                </button>
+                <button
+                  type="submit"
+                  disabled={revalCurrentQty <= 0}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition shadow-sm disabled:opacity-50"
+                >
+                  {inv.submit_revaluation || "اعتماد إعادة التقييم وتحديث الرصيد"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

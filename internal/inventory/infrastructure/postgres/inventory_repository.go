@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 )
@@ -34,6 +35,12 @@ func (r *inventoryRepository) LockBalance(
 	warehouseID uuid.UUID,
 	binID uuid.UUID,
 ) (*domain.StockBalance, error) {
+	if binID == uuid.Nil {
+		defBin, err := r.GetDefaultBin(ctx, warehouseID)
+		if err == nil && defBin != nil {
+			binID = defBin.ID
+		}
+	}
 	row, err := r.queries.LockBalance(ctx, sqlc.LockBalanceParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		ItemID:        toPgUUID(itemID),
@@ -274,11 +281,18 @@ func (r *inventoryRepository) ReleaseReservation(
 
 // 2. Balances & Movements Queries
 func (r *inventoryRepository) GetBalance(ctx context.Context, key domain.StockKey) (*domain.StockBalance, error) {
+	binID := key.BinID
+	if binID == uuid.Nil {
+		defBin, err := r.GetDefaultBin(ctx, key.WarehouseID)
+		if err == nil && defBin != nil {
+			binID = defBin.ID
+		}
+	}
 	row, err := r.queries.GetBalance(ctx, sqlc.GetBalanceParams{
 		LegalEntityID: toPgUUID(key.LegalEntityID),
 		ItemID:        toPgUUID(key.ItemID),
 		WarehouseID:   toPgUUID(key.WarehouseID),
-		BinID:         toPgUUID(key.BinID),
+		BinID:         toPgUUID(binID),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1110,4 +1124,275 @@ func (r *inventoryRepository) UpdateStockCountStatus(ctx context.Context, id uui
 		return nil, err
 	}
 	return r.GetStockCount(ctx, toUUID(row.ID))
+}
+
+// 7. Costing & Valuation
+
+func (r *inventoryRepository) InsertCostLayer(ctx context.Context, layer *domain.CostLayer) (*domain.CostLayer, error) {
+	row, err := r.queries.InsertCostLayer(ctx, sqlc.InsertCostLayerParams{
+		LegalEntityID:     toPgUUID(layer.LegalEntityID),
+		ItemID:            toPgUUID(layer.ItemID),
+		WarehouseID:       toPgUUID(layer.WarehouseID),
+		SourceMovementID:  toPgUUID(layer.SourceMovementID),
+		OriginalQuantity:  toPgNumeric(layer.OriginalQuantity),
+		RemainingQuantity: toPgNumeric(layer.RemainingQuantity),
+		UnitCost:          toPgNumeric(layer.UnitCost),
+		TotalCost:         toPgNumeric(layer.TotalCost),
+	})
+	if err != nil {
+		return nil, err
+	}
+	layer.ID = toUUID(row.ID)
+	layer.CreatedAt = row.CreatedAt.Time
+	layer.UpdatedAt = row.UpdatedAt.Time
+	return layer, nil
+}
+
+func (r *inventoryRepository) GetActiveCostLayersForUpdate(ctx context.Context, entityID, itemID, warehouseID uuid.UUID) ([]domain.CostLayer, error) {
+	rows, err := r.queries.GetActiveCostLayersForUpdate(ctx, sqlc.GetActiveCostLayersForUpdateParams{
+		LegalEntityID: toPgUUID(entityID),
+		ItemID:        toPgUUID(itemID),
+		WarehouseID:   toPgUUID(warehouseID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	layers := make([]domain.CostLayer, 0, len(rows))
+	for _, row := range rows {
+		layers = append(layers, domain.CostLayer{
+			ID:                toUUID(row.ID),
+			LegalEntityID:     toUUID(row.LegalEntityID),
+			ItemID:            toUUID(row.ItemID),
+			WarehouseID:       toUUID(row.WarehouseID),
+			SourceMovementID:  toUUID(row.SourceMovementID),
+			OriginalQuantity:  fromPgNumeric(row.OriginalQuantity),
+			RemainingQuantity: fromPgNumeric(row.RemainingQuantity),
+			UnitCost:          fromPgNumeric(row.UnitCost),
+			TotalCost:         fromPgNumeric(row.TotalCost),
+			CreatedAt:         row.CreatedAt.Time,
+			UpdatedAt:         row.UpdatedAt.Time,
+		})
+	}
+	return layers, nil
+}
+
+func (r *inventoryRepository) UpdateCostLayerRemaining(ctx context.Context, layerID uuid.UUID, remainingQty decimal.Decimal) (*domain.CostLayer, error) {
+	row, err := r.queries.UpdateCostLayerRemaining(ctx, sqlc.UpdateCostLayerRemainingParams{
+		ID:                toPgUUID(layerID),
+		RemainingQuantity: toPgNumeric(remainingQty),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &domain.CostLayer{
+		ID:                toUUID(row.ID),
+		LegalEntityID:     toUUID(row.LegalEntityID),
+		ItemID:            toUUID(row.ItemID),
+		WarehouseID:       toUUID(row.WarehouseID),
+		SourceMovementID:  toUUID(row.SourceMovementID),
+		OriginalQuantity:  fromPgNumeric(row.OriginalQuantity),
+		RemainingQuantity: fromPgNumeric(row.RemainingQuantity),
+		UnitCost:          fromPgNumeric(row.UnitCost),
+		TotalCost:         fromPgNumeric(row.TotalCost),
+		CreatedAt:         row.CreatedAt.Time,
+		UpdatedAt:         row.UpdatedAt.Time,
+	}, nil
+}
+
+func (r *inventoryRepository) InsertCostLayerConsumption(ctx context.Context, c *domain.CostLayerConsumption) (*domain.CostLayerConsumption, error) {
+	row, err := r.queries.InsertCostLayerConsumption(ctx, sqlc.InsertCostLayerConsumptionParams{
+		LegalEntityID:    toPgUUID(c.LegalEntityID),
+		CostLayerID:      toPgUUID(c.CostLayerID),
+		IssueMovementID:  toPgUUID(c.IssueMovementID),
+		QuantityConsumed: toPgNumeric(c.QuantityConsumed),
+		UnitCost:         toPgNumeric(c.UnitCost),
+		TotalCost:        toPgNumeric(c.TotalCost),
+	})
+	if err != nil {
+		return nil, err
+	}
+	c.ID = toUUID(row.ID)
+	c.ConsumedAt = row.ConsumedAt.Time
+	return c, nil
+}
+
+func (r *inventoryRepository) ListCostLayers(ctx context.Context, entityID uuid.UUID, itemID, warehouseID *uuid.UUID, onlyActive *bool, limit, offset int32) ([]domain.CostLayer, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var activeParam pgtype.Bool
+	if onlyActive != nil {
+		activeParam = pgtype.Bool{Bool: *onlyActive, Valid: true}
+	}
+	rows, err := r.queries.ListCostLayers(ctx, sqlc.ListCostLayersParams{
+		LegalEntityID: toPgUUID(entityID),
+		ItemID:        toPgUUIDPtr(itemID),
+		WarehouseID:   toPgUUIDPtr(warehouseID),
+		OnlyActive:    activeParam,
+		Limit:         limit,
+		Offset:        offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+	layers := make([]domain.CostLayer, 0, len(rows))
+	for _, row := range rows {
+		layers = append(layers, domain.CostLayer{
+			ID:                toUUID(row.ID),
+			LegalEntityID:     toUUID(row.LegalEntityID),
+			ItemID:            toUUID(row.ItemID),
+			WarehouseID:       toUUID(row.WarehouseID),
+			SourceMovementID:  toUUID(row.SourceMovementID),
+			OriginalQuantity:  fromPgNumeric(row.OriginalQuantity),
+			RemainingQuantity: fromPgNumeric(row.RemainingQuantity),
+			UnitCost:          fromPgNumeric(row.UnitCost),
+			TotalCost:         fromPgNumeric(row.TotalCost),
+			CreatedAt:         row.CreatedAt.Time,
+			UpdatedAt:         row.UpdatedAt.Time,
+			ItemCode:          row.ItemCode,
+			ItemNameEn:        row.ItemNameEn,
+			ItemNameAr:        row.ItemNameAr,
+			WarehouseCode:     row.WarehouseCode,
+			WarehouseNameAr:   row.WarehouseNameAr,
+		})
+	}
+	return layers, nil
+}
+
+func (r *inventoryRepository) CreateInventoryRevaluation(ctx context.Context, rev *domain.InventoryRevaluation) (*domain.InventoryRevaluation, error) {
+	row, err := r.queries.CreateInventoryRevaluation(ctx, sqlc.CreateInventoryRevaluationParams{
+		LegalEntityID:     toPgUUID(rev.LegalEntityID),
+		RevaluationNumber: rev.RevaluationNumber,
+		WarehouseID:       toPgUUID(rev.WarehouseID),
+		ItemID:            toPgUUID(rev.ItemID),
+		QuantityOnHand:    toPgNumeric(rev.QuantityOnHand),
+		OldUnitCost:       toPgNumeric(rev.OldUnitCost),
+		NewUnitCost:       toPgNumeric(rev.NewUnitCost),
+		OldTotalValue:     toPgNumeric(rev.OldTotalValue),
+		NewTotalValue:     toPgNumeric(rev.NewTotalValue),
+		VarianceAmount:    toPgNumeric(rev.VarianceAmount),
+		Reason:            rev.Reason,
+		JournalEntryID:    toPgUUIDPtr(rev.JournalEntryID),
+		CreatedBy:         toPgUUID(rev.CreatedBy),
+	})
+	if err != nil {
+		return nil, err
+	}
+	rev.ID = toUUID(row.ID)
+	rev.CreatedAt = row.CreatedAt.Time
+	return rev, nil
+}
+
+func (r *inventoryRepository) ListInventoryRevaluations(ctx context.Context, entityID uuid.UUID, warehouseID, itemID *uuid.UUID, limit, offset int32) ([]domain.InventoryRevaluation, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := r.queries.ListInventoryRevaluations(ctx, sqlc.ListInventoryRevaluationsParams{
+		LegalEntityID: toPgUUID(entityID),
+		WarehouseID:   toPgUUIDPtr(warehouseID),
+		ItemID:        toPgUUIDPtr(itemID),
+		Limit:         limit,
+		Offset:        offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+	revs := make([]domain.InventoryRevaluation, 0, len(rows))
+	for _, row := range rows {
+		revs = append(revs, domain.InventoryRevaluation{
+			ID:                toUUID(row.ID),
+			LegalEntityID:     toUUID(row.LegalEntityID),
+			RevaluationNumber: row.RevaluationNumber,
+			WarehouseID:       toUUID(row.WarehouseID),
+			ItemID:            toUUID(row.ItemID),
+			QuantityOnHand:    fromPgNumeric(row.QuantityOnHand),
+			OldUnitCost:       fromPgNumeric(row.OldUnitCost),
+			NewUnitCost:       fromPgNumeric(row.NewUnitCost),
+			OldTotalValue:     fromPgNumeric(row.OldTotalValue),
+			NewTotalValue:     fromPgNumeric(row.NewTotalValue),
+			VarianceAmount:    fromPgNumeric(row.VarianceAmount),
+			Reason:            row.Reason,
+			JournalEntryID:    toUUIDPtr(row.JournalEntryID),
+			CreatedBy:         toUUID(row.CreatedBy),
+			CreatedAt:         row.CreatedAt.Time,
+			ItemCode:          row.ItemCode,
+			ItemNameEn:        row.ItemNameEn,
+			ItemNameAr:        row.ItemNameAr,
+			WarehouseCode:     row.WarehouseCode,
+			WarehouseNameAr:   row.WarehouseNameAr,
+		})
+	}
+	return revs, nil
+}
+
+func (r *inventoryRepository) GetValuationSummary(ctx context.Context, entityID uuid.UUID, warehouseID, itemID *uuid.UUID) ([]domain.ValuationSummaryItem, error) {
+	rows, err := r.queries.GetValuationSummary(ctx, sqlc.GetValuationSummaryParams{
+		LegalEntityID: toPgUUID(entityID),
+		WarehouseID:   toPgUUIDPtr(warehouseID),
+		ItemID:        toPgUUIDPtr(itemID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	items := make([]domain.ValuationSummaryItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, domain.ValuationSummaryItem{
+			LegalEntityID:     toUUID(row.LegalEntityID),
+			ItemID:            toUUID(row.ItemID),
+			WarehouseID:       toUUID(row.WarehouseID),
+			QuantityOnHand:    fromPgNumeric(row.QuantityOnHand),
+			QuantityReserved:  fromPgNumeric(row.QuantityReserved),
+			QuantityAvailable: fromPgNumeric(row.QuantityAvailable),
+			AverageCost:       fromPgNumeric(row.AverageCost),
+			TotalValue:        fromPgNumeric(row.TotalValue),
+			ItemCode:          row.ItemCode,
+			ItemNameEn:        row.ItemNameEn,
+			ItemNameAr:        row.ItemNameAr,
+			CostingMethod:     domain.CostingMethod(row.CostingMethod),
+			StandardCost:      fromPgNumeric(row.StandardCost),
+			WarehouseCode:     row.WarehouseCode,
+			WarehouseNameAr:   row.WarehouseNameAr,
+		})
+	}
+	return items, nil
+}
+
+func (r *inventoryRepository) UpdateStockBalanceCostAndValue(ctx context.Context, entityID, itemID, warehouseID uuid.UUID, avgCost, totalValue decimal.Decimal) (*domain.StockBalance, error) {
+	row, err := r.queries.UpdateStockBalanceCostAndValue(ctx, sqlc.UpdateStockBalanceCostAndValueParams{
+		LegalEntityID: toPgUUID(entityID),
+		ItemID:        toPgUUID(itemID),
+		WarehouseID:   toPgUUID(warehouseID),
+		AverageCost:   toPgNumeric(avgCost),
+		TotalValue:    toPgNumeric(totalValue),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &domain.StockBalance{
+		ID:                toUUID(row.ID),
+		LegalEntityID:     toUUID(row.LegalEntityID),
+		ItemID:            toUUID(row.ItemID),
+		WarehouseID:       toUUID(row.WarehouseID),
+		BinID:             toUUID(row.BinID),
+		QuantityOnHand:    fromPgNumeric(row.QuantityOnHand),
+		QuantityReserved:  fromPgNumeric(row.QuantityReserved),
+		QuantityAvailable: fromPgNumeric(row.QuantityAvailable),
+		AverageCost:       fromPgNumeric(row.AverageCost),
+		TotalValue:        fromPgNumeric(row.TotalValue),
+		UpdatedAt:         row.UpdatedAt.Time,
+		Version:           row.Version,
+	}, nil
+}
+
+func (r *inventoryRepository) GetItemCostingDetails(ctx context.Context, itemID uuid.UUID) (*domain.ItemCostingInfo, error) {
+	row, err := r.queries.GetItemCostingDetails(ctx, toPgUUID(itemID))
+	if err != nil {
+		return nil, err
+	}
+	return &domain.ItemCostingInfo{
+		ID:            toUUID(row.ID),
+		CostingMethod: domain.CostingMethod(row.CostingMethod),
+		CostPrice:     fromPgNumeric(row.CostPrice),
+		StandardCost:  fromPgNumeric(row.StandardCost),
+	}, nil
 }

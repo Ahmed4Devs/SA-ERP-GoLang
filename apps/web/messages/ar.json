@@ -357,6 +357,22 @@
     "submit": "تنفيذ وترحيل الحركة",
     "cancel": "إلغاء",
     "success_movement": "تم تسجيل الحركة وترحيل الأرصدة بنجاح",
-    "ledger_guarantee": "حركات المخزون محمية بآلية قيود التعديل بقاعدة البيانات (Immutability Trigger)"
+    "ledger_guarantee": "حركات المخزون محمية بآلية قيود التعديل بقاعدة البيانات (Immutability Trigger)",
+    "tab_costing": "محاسبة التكاليف والتقييم (Costing)",
+    "costing_method": "طريقة احتساب التكلفة",
+    "method_avg": "متوسط التكلفة المرجح (WEIGHTED_AVG)",
+    "method_fifo": "الوارد أولاً يصرف أولاً (FIFO)",
+    "method_std": "التكلفة المعيارية (STANDARD)",
+    "cost_layers_title": "طبقات تكلفة الوارد أولاً يصرف أولاً (FIFO Layers)",
+    "revaluation_title": "إعادة تقييم المخزون وتعديل التكلفة",
+    "new_revaluation": "إعادة تقييم صنف",
+    "original_qty": "الكمية الأصلية",
+    "remaining_qty": "الكمية المتبقية",
+    "new_unit_cost": "التكلفة الجديدة للوحدة",
+    "old_unit_cost": "التكلفة السابقة",
+    "variance": "فارق التقييم",
+    "revaluation_reason": "سبب التعديل المحاسبي",
+    "submit_revaluation": "اعتماد إعادة التقييم وتحديث الرصيد",
+    "success_revaluation": "تم إعادة تقييم المخزون وتحديث الأرصدة بنجاح"
   }
 }

@@ -80,4 +80,16 @@ type StockRepository interface {
 	GetStockCount(ctx context.Context, id uuid.UUID) (*domain.StockCount, error)
 	ListStockCounts(ctx context.Context, legalEntityID uuid.UUID, warehouseID *uuid.UUID, status *string, limit, offset int32) ([]domain.StockCount, error)
 	UpdateStockCountStatus(ctx context.Context, id uuid.UUID, status domain.CountStatus, reconciledBy *uuid.UUID) (*domain.StockCount, error)
+
+	// 7. Costing & Valuation
+	InsertCostLayer(ctx context.Context, layer *domain.CostLayer) (*domain.CostLayer, error)
+	GetActiveCostLayersForUpdate(ctx context.Context, entityID, itemID, warehouseID uuid.UUID) ([]domain.CostLayer, error)
+	UpdateCostLayerRemaining(ctx context.Context, layerID uuid.UUID, remainingQty decimal.Decimal) (*domain.CostLayer, error)
+	InsertCostLayerConsumption(ctx context.Context, consumption *domain.CostLayerConsumption) (*domain.CostLayerConsumption, error)
+	ListCostLayers(ctx context.Context, entityID uuid.UUID, itemID, warehouseID *uuid.UUID, onlyActive *bool, limit, offset int32) ([]domain.CostLayer, error)
+	CreateInventoryRevaluation(ctx context.Context, rev *domain.InventoryRevaluation) (*domain.InventoryRevaluation, error)
+	ListInventoryRevaluations(ctx context.Context, entityID uuid.UUID, warehouseID, itemID *uuid.UUID, limit, offset int32) ([]domain.InventoryRevaluation, error)
+	GetValuationSummary(ctx context.Context, entityID uuid.UUID, warehouseID, itemID *uuid.UUID) ([]domain.ValuationSummaryItem, error)
+	UpdateStockBalanceCostAndValue(ctx context.Context, entityID, itemID, warehouseID uuid.UUID, avgCost, totalValue decimal.Decimal) (*domain.StockBalance, error)
+	GetItemCostingDetails(ctx context.Context, itemID uuid.UUID) (*domain.ItemCostingInfo, error)
 }

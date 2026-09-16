@@ -34,7 +34,7 @@ INSERT INTO products.items (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
 )
-RETURNING id, legal_entity_id, category_id, code, name_en, name_ar, description_en, description_ar, item_type, tracking_type, base_uom_id, purchase_uom_id, sales_uom_id, default_tax_code_id, cost_price, list_price, is_sales_enabled, is_purchase_enabled, is_active, created_at, updated_at, version
+RETURNING id, legal_entity_id, category_id, code, name_en, name_ar, description_en, description_ar, item_type, tracking_type, base_uom_id, purchase_uom_id, sales_uom_id, default_tax_code_id, cost_price, list_price, is_sales_enabled, is_purchase_enabled, is_active, created_at, updated_at, version, costing_method, standard_cost
 `
 
 type CreateItemParams struct {
@@ -103,6 +103,8 @@ func (q *Queries) CreateItem(ctx context.Context, arg CreateItemParams) (Product
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.CostingMethod,
+		&i.StandardCost,
 	)
 	return i, err
 }
@@ -548,7 +550,7 @@ SET
     updated_at = now(),
     version = version + 1
 WHERE id = $1
-RETURNING id, legal_entity_id, category_id, code, name_en, name_ar, description_en, description_ar, item_type, tracking_type, base_uom_id, purchase_uom_id, sales_uom_id, default_tax_code_id, cost_price, list_price, is_sales_enabled, is_purchase_enabled, is_active, created_at, updated_at, version
+RETURNING id, legal_entity_id, category_id, code, name_en, name_ar, description_en, description_ar, item_type, tracking_type, base_uom_id, purchase_uom_id, sales_uom_id, default_tax_code_id, cost_price, list_price, is_sales_enabled, is_purchase_enabled, is_active, created_at, updated_at, version, costing_method, standard_cost
 `
 
 type UpdateItemParams struct {
@@ -613,6 +615,8 @@ func (q *Queries) UpdateItem(ctx context.Context, arg UpdateItemParams) (Product
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.CostingMethod,
+		&i.StandardCost,
 	)
 	return i, err
 }

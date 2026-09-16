@@ -317,6 +317,49 @@ type IamUsers struct {
 	Version           int64              `json:"version"`
 }
 
+type InventoryCostLayerConsumptions struct {
+	ID               pgtype.UUID        `json:"id"`
+	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
+	CostLayerID      pgtype.UUID        `json:"cost_layer_id"`
+	IssueMovementID  pgtype.UUID        `json:"issue_movement_id"`
+	QuantityConsumed pgtype.Numeric     `json:"quantity_consumed"`
+	UnitCost         pgtype.Numeric     `json:"unit_cost"`
+	TotalCost        pgtype.Numeric     `json:"total_cost"`
+	ConsumedAt       pgtype.Timestamptz `json:"consumed_at"`
+}
+
+type InventoryCostLayers struct {
+	ID                pgtype.UUID        `json:"id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	ItemID            pgtype.UUID        `json:"item_id"`
+	WarehouseID       pgtype.UUID        `json:"warehouse_id"`
+	SourceMovementID  pgtype.UUID        `json:"source_movement_id"`
+	OriginalQuantity  pgtype.Numeric     `json:"original_quantity"`
+	RemainingQuantity pgtype.Numeric     `json:"remaining_quantity"`
+	UnitCost          pgtype.Numeric     `json:"unit_cost"`
+	TotalCost         pgtype.Numeric     `json:"total_cost"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type InventoryInventoryRevaluations struct {
+	ID                pgtype.UUID        `json:"id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	RevaluationNumber string             `json:"revaluation_number"`
+	WarehouseID       pgtype.UUID        `json:"warehouse_id"`
+	ItemID            pgtype.UUID        `json:"item_id"`
+	QuantityOnHand    pgtype.Numeric     `json:"quantity_on_hand"`
+	OldUnitCost       pgtype.Numeric     `json:"old_unit_cost"`
+	NewUnitCost       pgtype.Numeric     `json:"new_unit_cost"`
+	OldTotalValue     pgtype.Numeric     `json:"old_total_value"`
+	NewTotalValue     pgtype.Numeric     `json:"new_total_value"`
+	VarianceAmount    pgtype.Numeric     `json:"variance_amount"`
+	Reason            string             `json:"reason"`
+	JournalEntryID    pgtype.UUID        `json:"journal_entry_id"`
+	CreatedBy         pgtype.UUID        `json:"created_by"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type InventoryLots struct {
 	ID              pgtype.UUID        `json:"id"`
 	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
@@ -704,6 +747,8 @@ type ProductsItems struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	Version           int64              `json:"version"`
+	CostingMethod     string             `json:"costing_method"`
+	StandardCost      pgtype.Numeric     `json:"standard_cost"`
 }
 
 type ProductsSkus struct {
