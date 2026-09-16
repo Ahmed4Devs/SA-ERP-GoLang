@@ -18,6 +18,8 @@ sql:
       - "database/queries/sales"
       - "database/queries/payables"
       - "database/queries/purchasing"
+      - "database/queries/treasury"
+      - "database/queries/banking"
     gen:
       go:
         package: "sqlc"

@@ -222,6 +222,89 @@ func (q *Queries) CreateReceiptAllocation(ctx context.Context, arg CreateReceipt
 	return i, err
 }
 
+const createTreasuryReceipt = `-- name: CreateTreasuryReceipt :one
+INSERT INTO treasury.receipts (
+    id, legal_entity_id, receipt_number, cash_account_id, receipt_date,
+    receipt_type, received_from, amount, currency_code, payment_method,
+    cheque_number, cheque_date, reference_number, description, status,
+    gl_offset_account_id, journal_entry_id, created_by_user_id, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10,
+    $11, $12, $13, $14, $15,
+    $16, $17, $18, now(), now()
+)
+RETURNING id, legal_entity_id, receipt_number, cash_account_id, receipt_date, receipt_type, received_from, amount, currency_code, payment_method, cheque_number, cheque_date, reference_number, description, status, gl_offset_account_id, journal_entry_id, created_by_user_id, created_at, updated_at
+`
+
+type CreateTreasuryReceiptParams struct {
+	ID                pgtype.UUID    `json:"id"`
+	LegalEntityID     pgtype.UUID    `json:"legal_entity_id"`
+	ReceiptNumber     string         `json:"receipt_number"`
+	CashAccountID     pgtype.UUID    `json:"cash_account_id"`
+	ReceiptDate       pgtype.Date    `json:"receipt_date"`
+	ReceiptType       string         `json:"receipt_type"`
+	ReceivedFrom      string         `json:"received_from"`
+	Amount            pgtype.Numeric `json:"amount"`
+	CurrencyCode      string         `json:"currency_code"`
+	PaymentMethod     string         `json:"payment_method"`
+	ChequeNumber      pgtype.Text    `json:"cheque_number"`
+	ChequeDate        pgtype.Date    `json:"cheque_date"`
+	ReferenceNumber   pgtype.Text    `json:"reference_number"`
+	Description       pgtype.Text    `json:"description"`
+	Status            string         `json:"status"`
+	GlOffsetAccountID pgtype.UUID    `json:"gl_offset_account_id"`
+	JournalEntryID    pgtype.UUID    `json:"journal_entry_id"`
+	CreatedByUserID   pgtype.UUID    `json:"created_by_user_id"`
+}
+
+func (q *Queries) CreateTreasuryReceipt(ctx context.Context, arg CreateTreasuryReceiptParams) (TreasuryReceipts, error) {
+	row := q.db.QueryRow(ctx, createTreasuryReceipt,
+		arg.ID,
+		arg.LegalEntityID,
+		arg.ReceiptNumber,
+		arg.CashAccountID,
+		arg.ReceiptDate,
+		arg.ReceiptType,
+		arg.ReceivedFrom,
+		arg.Amount,
+		arg.CurrencyCode,
+		arg.PaymentMethod,
+		arg.ChequeNumber,
+		arg.ChequeDate,
+		arg.ReferenceNumber,
+		arg.Description,
+		arg.Status,
+		arg.GlOffsetAccountID,
+		arg.JournalEntryID,
+		arg.CreatedByUserID,
+	)
+	var i TreasuryReceipts
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.ReceiptNumber,
+		&i.CashAccountID,
+		&i.ReceiptDate,
+		&i.ReceiptType,
+		&i.ReceivedFrom,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.PaymentMethod,
+		&i.ChequeNumber,
+		&i.ChequeDate,
+		&i.ReferenceNumber,
+		&i.Description,
+		&i.Status,
+		&i.GlOffsetAccountID,
+		&i.JournalEntryID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getCustomerAgingSummary = `-- name: GetCustomerAgingSummary :one
 SELECT 
     COALESCE(SUM(remaining_amount), 0.0000)::numeric AS total_outstanding,
@@ -389,6 +472,82 @@ func (q *Queries) GetReceiptByNumber(ctx context.Context, arg GetReceiptByNumber
 		&i.JournalEntryID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTreasuryReceiptByID = `-- name: GetTreasuryReceiptByID :one
+SELECT id, legal_entity_id, receipt_number, cash_account_id, receipt_date, receipt_type, received_from, amount, currency_code, payment_method, cheque_number, cheque_date, reference_number, description, status, gl_offset_account_id, journal_entry_id, created_by_user_id, created_at, updated_at FROM treasury.receipts
+WHERE id = $1 AND legal_entity_id = $2
+`
+
+type GetTreasuryReceiptByIDParams struct {
+	ID            pgtype.UUID `json:"id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+}
+
+func (q *Queries) GetTreasuryReceiptByID(ctx context.Context, arg GetTreasuryReceiptByIDParams) (TreasuryReceipts, error) {
+	row := q.db.QueryRow(ctx, getTreasuryReceiptByID, arg.ID, arg.LegalEntityID)
+	var i TreasuryReceipts
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.ReceiptNumber,
+		&i.CashAccountID,
+		&i.ReceiptDate,
+		&i.ReceiptType,
+		&i.ReceivedFrom,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.PaymentMethod,
+		&i.ChequeNumber,
+		&i.ChequeDate,
+		&i.ReferenceNumber,
+		&i.Description,
+		&i.Status,
+		&i.GlOffsetAccountID,
+		&i.JournalEntryID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTreasuryReceiptByNumber = `-- name: GetTreasuryReceiptByNumber :one
+SELECT id, legal_entity_id, receipt_number, cash_account_id, receipt_date, receipt_type, received_from, amount, currency_code, payment_method, cheque_number, cheque_date, reference_number, description, status, gl_offset_account_id, journal_entry_id, created_by_user_id, created_at, updated_at FROM treasury.receipts
+WHERE legal_entity_id = $1 AND receipt_number = $2
+`
+
+type GetTreasuryReceiptByNumberParams struct {
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+	ReceiptNumber string      `json:"receipt_number"`
+}
+
+func (q *Queries) GetTreasuryReceiptByNumber(ctx context.Context, arg GetTreasuryReceiptByNumberParams) (TreasuryReceipts, error) {
+	row := q.db.QueryRow(ctx, getTreasuryReceiptByNumber, arg.LegalEntityID, arg.ReceiptNumber)
+	var i TreasuryReceipts
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.ReceiptNumber,
+		&i.CashAccountID,
+		&i.ReceiptDate,
+		&i.ReceiptType,
+		&i.ReceivedFrom,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.PaymentMethod,
+		&i.ChequeNumber,
+		&i.ChequeDate,
+		&i.ReferenceNumber,
+		&i.Description,
+		&i.Status,
+		&i.GlOffsetAccountID,
+		&i.JournalEntryID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -729,6 +888,53 @@ func (q *Queries) ListReceipts(ctx context.Context, arg ListReceiptsParams) ([]L
 	return items, nil
 }
 
+const listTreasuryReceipts = `-- name: ListTreasuryReceipts :many
+SELECT id, legal_entity_id, receipt_number, cash_account_id, receipt_date, receipt_type, received_from, amount, currency_code, payment_method, cheque_number, cheque_date, reference_number, description, status, gl_offset_account_id, journal_entry_id, created_by_user_id, created_at, updated_at FROM treasury.receipts
+WHERE legal_entity_id = $1
+ORDER BY receipt_date DESC, receipt_number DESC
+`
+
+func (q *Queries) ListTreasuryReceipts(ctx context.Context, legalEntityID pgtype.UUID) ([]TreasuryReceipts, error) {
+	rows, err := q.db.Query(ctx, listTreasuryReceipts, legalEntityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TreasuryReceipts{}
+	for rows.Next() {
+		var i TreasuryReceipts
+		if err := rows.Scan(
+			&i.ID,
+			&i.LegalEntityID,
+			&i.ReceiptNumber,
+			&i.CashAccountID,
+			&i.ReceiptDate,
+			&i.ReceiptType,
+			&i.ReceivedFrom,
+			&i.Amount,
+			&i.CurrencyCode,
+			&i.PaymentMethod,
+			&i.ChequeNumber,
+			&i.ChequeDate,
+			&i.ReferenceNumber,
+			&i.Description,
+			&i.Status,
+			&i.GlOffsetAccountID,
+			&i.JournalEntryID,
+			&i.CreatedByUserID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockOpenItem = `-- name: LockOpenItem :one
 SELECT id, legal_entity_id, customer_id, document_type, document_number, document_id, document_date, due_date, currency_code, original_amount, allocated_amount, remaining_amount, status, created_at, updated_at FROM receivables.open_items
 WHERE id = $1
@@ -877,6 +1083,55 @@ func (q *Queries) UpdateReceiptStatus(ctx context.Context, arg UpdateReceiptStat
 		&i.JournalEntryID,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateTreasuryReceiptStatus = `-- name: UpdateTreasuryReceiptStatus :one
+UPDATE treasury.receipts
+SET status = $3,
+    journal_entry_id = COALESCE($4, journal_entry_id),
+    updated_at = now()
+WHERE id = $1 AND legal_entity_id = $2
+RETURNING id, legal_entity_id, receipt_number, cash_account_id, receipt_date, receipt_type, received_from, amount, currency_code, payment_method, cheque_number, cheque_date, reference_number, description, status, gl_offset_account_id, journal_entry_id, created_by_user_id, created_at, updated_at
+`
+
+type UpdateTreasuryReceiptStatusParams struct {
+	ID             pgtype.UUID `json:"id"`
+	LegalEntityID  pgtype.UUID `json:"legal_entity_id"`
+	Status         string      `json:"status"`
+	JournalEntryID pgtype.UUID `json:"journal_entry_id"`
+}
+
+func (q *Queries) UpdateTreasuryReceiptStatus(ctx context.Context, arg UpdateTreasuryReceiptStatusParams) (TreasuryReceipts, error) {
+	row := q.db.QueryRow(ctx, updateTreasuryReceiptStatus,
+		arg.ID,
+		arg.LegalEntityID,
+		arg.Status,
+		arg.JournalEntryID,
+	)
+	var i TreasuryReceipts
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.ReceiptNumber,
+		&i.CashAccountID,
+		&i.ReceiptDate,
+		&i.ReceiptType,
+		&i.ReceivedFrom,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.PaymentMethod,
+		&i.ChequeNumber,
+		&i.ChequeDate,
+		&i.ReferenceNumber,
+		&i.Description,
+		&i.Status,
+		&i.GlOffsetAccountID,
+		&i.JournalEntryID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

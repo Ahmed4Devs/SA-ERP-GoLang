@@ -207,6 +207,83 @@ func (q *Queries) CreateSupplierPaymentAllocation(ctx context.Context, arg Creat
 	return i, err
 }
 
+const createTreasuryPayment = `-- name: CreateTreasuryPayment :one
+INSERT INTO treasury.payments (
+    id, legal_entity_id, payment_number, cash_account_id, payment_date,
+    payment_type, paid_to, amount, currency_code, reference_number,
+    description, status, gl_offset_account_id, journal_entry_id,
+    created_by_user_id, approved_by_user_id, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10,
+    $11, $12, $13, $14,
+    $15, $16, now(), now()
+)
+RETURNING id, legal_entity_id, payment_number, cash_account_id, payment_date, payment_type, paid_to, amount, currency_code, reference_number, description, status, gl_offset_account_id, journal_entry_id, created_by_user_id, approved_by_user_id, created_at, updated_at
+`
+
+type CreateTreasuryPaymentParams struct {
+	ID                pgtype.UUID    `json:"id"`
+	LegalEntityID     pgtype.UUID    `json:"legal_entity_id"`
+	PaymentNumber     string         `json:"payment_number"`
+	CashAccountID     pgtype.UUID    `json:"cash_account_id"`
+	PaymentDate       pgtype.Date    `json:"payment_date"`
+	PaymentType       string         `json:"payment_type"`
+	PaidTo            string         `json:"paid_to"`
+	Amount            pgtype.Numeric `json:"amount"`
+	CurrencyCode      string         `json:"currency_code"`
+	ReferenceNumber   pgtype.Text    `json:"reference_number"`
+	Description       pgtype.Text    `json:"description"`
+	Status            string         `json:"status"`
+	GlOffsetAccountID pgtype.UUID    `json:"gl_offset_account_id"`
+	JournalEntryID    pgtype.UUID    `json:"journal_entry_id"`
+	CreatedByUserID   pgtype.UUID    `json:"created_by_user_id"`
+	ApprovedByUserID  pgtype.UUID    `json:"approved_by_user_id"`
+}
+
+func (q *Queries) CreateTreasuryPayment(ctx context.Context, arg CreateTreasuryPaymentParams) (TreasuryPayments, error) {
+	row := q.db.QueryRow(ctx, createTreasuryPayment,
+		arg.ID,
+		arg.LegalEntityID,
+		arg.PaymentNumber,
+		arg.CashAccountID,
+		arg.PaymentDate,
+		arg.PaymentType,
+		arg.PaidTo,
+		arg.Amount,
+		arg.CurrencyCode,
+		arg.ReferenceNumber,
+		arg.Description,
+		arg.Status,
+		arg.GlOffsetAccountID,
+		arg.JournalEntryID,
+		arg.CreatedByUserID,
+		arg.ApprovedByUserID,
+	)
+	var i TreasuryPayments
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.PaymentNumber,
+		&i.CashAccountID,
+		&i.PaymentDate,
+		&i.PaymentType,
+		&i.PaidTo,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.ReferenceNumber,
+		&i.Description,
+		&i.Status,
+		&i.GlOffsetAccountID,
+		&i.JournalEntryID,
+		&i.CreatedByUserID,
+		&i.ApprovedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getPayablesOpenItemByID = `-- name: GetPayablesOpenItemByID :one
 SELECT id, legal_entity_id, supplier_id, document_type, document_number, document_id, document_date, due_date, currency_code, original_amount, allocated_amount, remaining_amount, status, created_at, updated_at FROM payables.open_items
 WHERE id = $1
@@ -336,6 +413,78 @@ func (q *Queries) GetSupplierPaymentByID(ctx context.Context, id pgtype.UUID) (G
 		&i.SupplierNumber,
 		&i.DisbursementAccountNumber,
 		&i.DisbursementAccountNameAr,
+	)
+	return i, err
+}
+
+const getTreasuryPaymentByID = `-- name: GetTreasuryPaymentByID :one
+SELECT id, legal_entity_id, payment_number, cash_account_id, payment_date, payment_type, paid_to, amount, currency_code, reference_number, description, status, gl_offset_account_id, journal_entry_id, created_by_user_id, approved_by_user_id, created_at, updated_at FROM treasury.payments
+WHERE id = $1 AND legal_entity_id = $2
+`
+
+type GetTreasuryPaymentByIDParams struct {
+	ID            pgtype.UUID `json:"id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+}
+
+func (q *Queries) GetTreasuryPaymentByID(ctx context.Context, arg GetTreasuryPaymentByIDParams) (TreasuryPayments, error) {
+	row := q.db.QueryRow(ctx, getTreasuryPaymentByID, arg.ID, arg.LegalEntityID)
+	var i TreasuryPayments
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.PaymentNumber,
+		&i.CashAccountID,
+		&i.PaymentDate,
+		&i.PaymentType,
+		&i.PaidTo,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.ReferenceNumber,
+		&i.Description,
+		&i.Status,
+		&i.GlOffsetAccountID,
+		&i.JournalEntryID,
+		&i.CreatedByUserID,
+		&i.ApprovedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTreasuryPaymentByNumber = `-- name: GetTreasuryPaymentByNumber :one
+SELECT id, legal_entity_id, payment_number, cash_account_id, payment_date, payment_type, paid_to, amount, currency_code, reference_number, description, status, gl_offset_account_id, journal_entry_id, created_by_user_id, approved_by_user_id, created_at, updated_at FROM treasury.payments
+WHERE legal_entity_id = $1 AND payment_number = $2
+`
+
+type GetTreasuryPaymentByNumberParams struct {
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+	PaymentNumber string      `json:"payment_number"`
+}
+
+func (q *Queries) GetTreasuryPaymentByNumber(ctx context.Context, arg GetTreasuryPaymentByNumberParams) (TreasuryPayments, error) {
+	row := q.db.QueryRow(ctx, getTreasuryPaymentByNumber, arg.LegalEntityID, arg.PaymentNumber)
+	var i TreasuryPayments
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.PaymentNumber,
+		&i.CashAccountID,
+		&i.PaymentDate,
+		&i.PaymentType,
+		&i.PaidTo,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.ReferenceNumber,
+		&i.Description,
+		&i.Status,
+		&i.GlOffsetAccountID,
+		&i.JournalEntryID,
+		&i.CreatedByUserID,
+		&i.ApprovedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -661,6 +810,51 @@ func (q *Queries) ListSupplierPayments(ctx context.Context, arg ListSupplierPaym
 	return items, nil
 }
 
+const listTreasuryPayments = `-- name: ListTreasuryPayments :many
+SELECT id, legal_entity_id, payment_number, cash_account_id, payment_date, payment_type, paid_to, amount, currency_code, reference_number, description, status, gl_offset_account_id, journal_entry_id, created_by_user_id, approved_by_user_id, created_at, updated_at FROM treasury.payments
+WHERE legal_entity_id = $1
+ORDER BY payment_date DESC, payment_number DESC
+`
+
+func (q *Queries) ListTreasuryPayments(ctx context.Context, legalEntityID pgtype.UUID) ([]TreasuryPayments, error) {
+	rows, err := q.db.Query(ctx, listTreasuryPayments, legalEntityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TreasuryPayments{}
+	for rows.Next() {
+		var i TreasuryPayments
+		if err := rows.Scan(
+			&i.ID,
+			&i.LegalEntityID,
+			&i.PaymentNumber,
+			&i.CashAccountID,
+			&i.PaymentDate,
+			&i.PaymentType,
+			&i.PaidTo,
+			&i.Amount,
+			&i.CurrencyCode,
+			&i.ReferenceNumber,
+			&i.Description,
+			&i.Status,
+			&i.GlOffsetAccountID,
+			&i.JournalEntryID,
+			&i.CreatedByUserID,
+			&i.ApprovedByUserID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockPayablesOpenItem = `-- name: LockPayablesOpenItem :one
 SELECT id, legal_entity_id, supplier_id, document_type, document_number, document_id, document_date, due_date, currency_code, original_amount, allocated_amount, remaining_amount, status, created_at, updated_at FROM payables.open_items
 WHERE id = $1
@@ -763,4 +957,54 @@ func (q *Queries) UpdateSupplierPaymentStatus(ctx context.Context, arg UpdateSup
 		arg.JournalEntryID,
 	)
 	return err
+}
+
+const updateTreasuryPaymentStatus = `-- name: UpdateTreasuryPaymentStatus :one
+UPDATE treasury.payments
+SET status = $3,
+    journal_entry_id = COALESCE($4, journal_entry_id),
+    approved_by_user_id = COALESCE($5, approved_by_user_id),
+    updated_at = now()
+WHERE id = $1 AND legal_entity_id = $2
+RETURNING id, legal_entity_id, payment_number, cash_account_id, payment_date, payment_type, paid_to, amount, currency_code, reference_number, description, status, gl_offset_account_id, journal_entry_id, created_by_user_id, approved_by_user_id, created_at, updated_at
+`
+
+type UpdateTreasuryPaymentStatusParams struct {
+	ID               pgtype.UUID `json:"id"`
+	LegalEntityID    pgtype.UUID `json:"legal_entity_id"`
+	Status           string      `json:"status"`
+	JournalEntryID   pgtype.UUID `json:"journal_entry_id"`
+	ApprovedByUserID pgtype.UUID `json:"approved_by_user_id"`
+}
+
+func (q *Queries) UpdateTreasuryPaymentStatus(ctx context.Context, arg UpdateTreasuryPaymentStatusParams) (TreasuryPayments, error) {
+	row := q.db.QueryRow(ctx, updateTreasuryPaymentStatus,
+		arg.ID,
+		arg.LegalEntityID,
+		arg.Status,
+		arg.JournalEntryID,
+		arg.ApprovedByUserID,
+	)
+	var i TreasuryPayments
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.PaymentNumber,
+		&i.CashAccountID,
+		&i.PaymentDate,
+		&i.PaymentType,
+		&i.PaidTo,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.ReferenceNumber,
+		&i.Description,
+		&i.Status,
+		&i.GlOffsetAccountID,
+		&i.JournalEntryID,
+		&i.CreatedByUserID,
+		&i.ApprovedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

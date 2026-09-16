@@ -220,6 +220,100 @@ type AuthzUserRoleAssignments struct {
 	AssignedAt    pgtype.Timestamptz `json:"assigned_at"`
 }
 
+type BankingBankAccounts struct {
+	ID                  pgtype.UUID        `json:"id"`
+	LegalEntityID       pgtype.UUID        `json:"legal_entity_id"`
+	AccountCode         string             `json:"account_code"`
+	BankNameEn          string             `json:"bank_name_en"`
+	BankNameAr          string             `json:"bank_name_ar"`
+	BranchName          pgtype.Text        `json:"branch_name"`
+	AccountNumber       string             `json:"account_number"`
+	AccountNumberMasked string             `json:"account_number_masked"`
+	Iban                string             `json:"iban"`
+	SwiftBic            string             `json:"swift_bic"`
+	CurrencyCode        string             `json:"currency_code"`
+	GlAccountID         pgtype.UUID        `json:"gl_account_id"`
+	OpeningBalance      pgtype.Numeric     `json:"opening_balance"`
+	CurrentBalance      pgtype.Numeric     `json:"current_balance"`
+	AvailableBalance    pgtype.Numeric     `json:"available_balance"`
+	OverdraftLimit      pgtype.Numeric     `json:"overdraft_limit"`
+	Status              string             `json:"status"`
+	IsPrimary           bool               `json:"is_primary"`
+	ContactPerson       pgtype.Text        `json:"contact_person"`
+	ContactPhone        pgtype.Text        `json:"contact_phone"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BankingReconciliationMatches struct {
+	ID                pgtype.UUID        `json:"id"`
+	ReconciliationID  pgtype.UUID        `json:"reconciliation_id"`
+	StatementLineID   pgtype.UUID        `json:"statement_line_id"`
+	MatchType         string             `json:"match_type"`
+	MatchedEntityType string             `json:"matched_entity_type"`
+	MatchedEntityID   pgtype.UUID        `json:"matched_entity_id"`
+	MatchedAmount     pgtype.Numeric     `json:"matched_amount"`
+	DifferenceAmount  pgtype.Numeric     `json:"difference_amount"`
+	Notes             pgtype.Text        `json:"notes"`
+	MatchedByUserID   pgtype.UUID        `json:"matched_by_user_id"`
+	MatchedAt         pgtype.Timestamptz `json:"matched_at"`
+}
+
+type BankingReconciliations struct {
+	ID                     pgtype.UUID        `json:"id"`
+	LegalEntityID          pgtype.UUID        `json:"legal_entity_id"`
+	BankAccountID          pgtype.UUID        `json:"bank_account_id"`
+	StatementID            pgtype.UUID        `json:"statement_id"`
+	ReconciliationNumber   string             `json:"reconciliation_number"`
+	AsOfDate               pgtype.Date        `json:"as_of_date"`
+	StatementEndingBalance pgtype.Numeric     `json:"statement_ending_balance"`
+	GlBookBalance          pgtype.Numeric     `json:"gl_book_balance"`
+	UnreconciledDifference pgtype.Numeric     `json:"unreconciled_difference"`
+	Status                 string             `json:"status"`
+	Notes                  pgtype.Text        `json:"notes"`
+	ReconciledByUserID     pgtype.UUID        `json:"reconciled_by_user_id"`
+	ReconciledAt           pgtype.Timestamptz `json:"reconciled_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BankingStatementLines struct {
+	ID               pgtype.UUID        `json:"id"`
+	StatementID      pgtype.UUID        `json:"statement_id"`
+	LineNumber       int32              `json:"line_number"`
+	TransactionDate  pgtype.Date        `json:"transaction_date"`
+	ValueDate        pgtype.Date        `json:"value_date"`
+	Description      string             `json:"description"`
+	ReferenceNumber  pgtype.Text        `json:"reference_number"`
+	TransactionType  string             `json:"transaction_type"`
+	Amount           pgtype.Numeric     `json:"amount"`
+	CurrencyCode     string             `json:"currency_code"`
+	BalanceAfter     pgtype.Numeric     `json:"balance_after"`
+	ReconciledStatus string             `json:"reconciled_status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type BankingStatements struct {
+	ID               pgtype.UUID        `json:"id"`
+	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
+	BankAccountID    pgtype.UUID        `json:"bank_account_id"`
+	StatementNumber  string             `json:"statement_number"`
+	StatementDate    pgtype.Date        `json:"statement_date"`
+	StartDate        pgtype.Date        `json:"start_date"`
+	EndDate          pgtype.Date        `json:"end_date"`
+	OpeningBalance   pgtype.Numeric     `json:"opening_balance"`
+	ClosingBalance   pgtype.Numeric     `json:"closing_balance"`
+	TotalCredits     pgtype.Numeric     `json:"total_credits"`
+	TotalDebits      pgtype.Numeric     `json:"total_debits"`
+	CurrencyCode     string             `json:"currency_code"`
+	FileFormat       string             `json:"file_format"`
+	Status           string             `json:"status"`
+	SourceFilename   pgtype.Text        `json:"source_filename"`
+	ImportedByUserID pgtype.UUID        `json:"imported_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type IamApiKeys struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`
@@ -1612,6 +1706,93 @@ type TaxZeroRateReasons struct {
 	DescriptionAr pgtype.Text        `json:"description_ar"`
 	IsActive      bool               `json:"is_active"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type TreasuryCashAccounts struct {
+	ID              pgtype.UUID        `json:"id"`
+	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
+	BranchID        pgtype.UUID        `json:"branch_id"`
+	AccountCode     string             `json:"account_code"`
+	NameEn          string             `json:"name_en"`
+	NameAr          string             `json:"name_ar"`
+	AccountType     string             `json:"account_type"`
+	GlAccountID     pgtype.UUID        `json:"gl_account_id"`
+	CurrencyCode    string             `json:"currency_code"`
+	CustodianUserID pgtype.UUID        `json:"custodian_user_id"`
+	MaxLimit        pgtype.Numeric     `json:"max_limit"`
+	CurrentBalance  pgtype.Numeric     `json:"current_balance"`
+	Status          string             `json:"status"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type TreasuryPayments struct {
+	ID                pgtype.UUID        `json:"id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	PaymentNumber     string             `json:"payment_number"`
+	CashAccountID     pgtype.UUID        `json:"cash_account_id"`
+	PaymentDate       pgtype.Date        `json:"payment_date"`
+	PaymentType       string             `json:"payment_type"`
+	PaidTo            string             `json:"paid_to"`
+	Amount            pgtype.Numeric     `json:"amount"`
+	CurrencyCode      string             `json:"currency_code"`
+	ReferenceNumber   pgtype.Text        `json:"reference_number"`
+	Description       pgtype.Text        `json:"description"`
+	Status            string             `json:"status"`
+	GlOffsetAccountID pgtype.UUID        `json:"gl_offset_account_id"`
+	JournalEntryID    pgtype.UUID        `json:"journal_entry_id"`
+	CreatedByUserID   pgtype.UUID        `json:"created_by_user_id"`
+	ApprovedByUserID  pgtype.UUID        `json:"approved_by_user_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type TreasuryReceipts struct {
+	ID                pgtype.UUID        `json:"id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	ReceiptNumber     string             `json:"receipt_number"`
+	CashAccountID     pgtype.UUID        `json:"cash_account_id"`
+	ReceiptDate       pgtype.Date        `json:"receipt_date"`
+	ReceiptType       string             `json:"receipt_type"`
+	ReceivedFrom      string             `json:"received_from"`
+	Amount            pgtype.Numeric     `json:"amount"`
+	CurrencyCode      string             `json:"currency_code"`
+	PaymentMethod     string             `json:"payment_method"`
+	ChequeNumber      pgtype.Text        `json:"cheque_number"`
+	ChequeDate        pgtype.Date        `json:"cheque_date"`
+	ReferenceNumber   pgtype.Text        `json:"reference_number"`
+	Description       pgtype.Text        `json:"description"`
+	Status            string             `json:"status"`
+	GlOffsetAccountID pgtype.UUID        `json:"gl_offset_account_id"`
+	JournalEntryID    pgtype.UUID        `json:"journal_entry_id"`
+	CreatedByUserID   pgtype.UUID        `json:"created_by_user_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type TreasuryTransfers struct {
+	ID                       pgtype.UUID        `json:"id"`
+	LegalEntityID            pgtype.UUID        `json:"legal_entity_id"`
+	TransferNumber           string             `json:"transfer_number"`
+	TransferDate             pgtype.Date        `json:"transfer_date"`
+	SourceType               string             `json:"source_type"`
+	SourceCashAccountID      pgtype.UUID        `json:"source_cash_account_id"`
+	SourceBankAccountID      pgtype.UUID        `json:"source_bank_account_id"`
+	DestinationType          string             `json:"destination_type"`
+	DestinationCashAccountID pgtype.UUID        `json:"destination_cash_account_id"`
+	DestinationBankAccountID pgtype.UUID        `json:"destination_bank_account_id"`
+	Amount                   pgtype.Numeric     `json:"amount"`
+	CurrencyCode             string             `json:"currency_code"`
+	FeeAmount                pgtype.Numeric     `json:"fee_amount"`
+	FeeGlAccountID           pgtype.UUID        `json:"fee_gl_account_id"`
+	Status                   string             `json:"status"`
+	ReferenceNumber          pgtype.Text        `json:"reference_number"`
+	Notes                    pgtype.Text        `json:"notes"`
+	JournalEntryID           pgtype.UUID        `json:"journal_entry_id"`
+	InitiatedByUserID        pgtype.UUID        `json:"initiated_by_user_id"`
+	CompletedByUserID        pgtype.UUID        `json:"completed_by_user_id"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
 }
 
 type WarehouseBinLocations struct {

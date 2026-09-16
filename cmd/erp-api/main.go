@@ -24,7 +24,9 @@ import (
 	"erp/internal/purchasing"
 	"erp/internal/receivables"
 	"erp/internal/sales"
+	"erp/internal/banking"
 	"erp/internal/tax"
+	"erp/internal/treasury"
 	"erp/internal/workflow"
 )
 
@@ -224,6 +226,23 @@ func main() {
 			}
 		}
 		logger.Info("Purchasing module and procure-to-pay workflow registered")
+
+		// N. Treasury Module (Cash Accounts, Petty Cash, Receipts, Payments, Transfers)
+		treasuryModule := treasury.NewModule(cfg, db)
+		treasuryModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := treasuryModule.SeedDefaultTreasuryData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Treasury Data", "error", err)
+			} else {
+				logger.Info("Default Treasury Cash Accounts and Bank Master verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Treasury module and cash liquidity engine registered")
+
+		// O. Banking Module (Bank Accounts, Statements Import, Reconciliation Engine)
+		bankingModule := banking.NewModule(cfg, db)
+		bankingModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		logger.Info("Banking module and reconciliation engine registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

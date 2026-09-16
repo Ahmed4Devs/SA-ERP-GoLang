@@ -124,6 +124,99 @@ func (q *Queries) CreateTransferOrderLine(ctx context.Context, arg CreateTransfe
 	return i, err
 }
 
+const createTreasuryTransfer = `-- name: CreateTreasuryTransfer :one
+INSERT INTO treasury.transfers (
+    id, legal_entity_id, transfer_number, transfer_date, source_type,
+    source_cash_account_id, source_bank_account_id, destination_type,
+    destination_cash_account_id, destination_bank_account_id, amount,
+    currency_code, fee_amount, fee_gl_account_id, status,
+    reference_number, notes, journal_entry_id, initiated_by_user_id,
+    completed_by_user_id, created_at, updated_at
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8,
+    $9, $10, $11,
+    $12, $13, $14, $15,
+    $16, $17, $18, $19,
+    $20, now(), now()
+)
+RETURNING id, legal_entity_id, transfer_number, transfer_date, source_type, source_cash_account_id, source_bank_account_id, destination_type, destination_cash_account_id, destination_bank_account_id, amount, currency_code, fee_amount, fee_gl_account_id, status, reference_number, notes, journal_entry_id, initiated_by_user_id, completed_by_user_id, created_at, updated_at
+`
+
+type CreateTreasuryTransferParams struct {
+	ID                       pgtype.UUID    `json:"id"`
+	LegalEntityID            pgtype.UUID    `json:"legal_entity_id"`
+	TransferNumber           string         `json:"transfer_number"`
+	TransferDate             pgtype.Date    `json:"transfer_date"`
+	SourceType               string         `json:"source_type"`
+	SourceCashAccountID      pgtype.UUID    `json:"source_cash_account_id"`
+	SourceBankAccountID      pgtype.UUID    `json:"source_bank_account_id"`
+	DestinationType          string         `json:"destination_type"`
+	DestinationCashAccountID pgtype.UUID    `json:"destination_cash_account_id"`
+	DestinationBankAccountID pgtype.UUID    `json:"destination_bank_account_id"`
+	Amount                   pgtype.Numeric `json:"amount"`
+	CurrencyCode             string         `json:"currency_code"`
+	FeeAmount                pgtype.Numeric `json:"fee_amount"`
+	FeeGlAccountID           pgtype.UUID    `json:"fee_gl_account_id"`
+	Status                   string         `json:"status"`
+	ReferenceNumber          pgtype.Text    `json:"reference_number"`
+	Notes                    pgtype.Text    `json:"notes"`
+	JournalEntryID           pgtype.UUID    `json:"journal_entry_id"`
+	InitiatedByUserID        pgtype.UUID    `json:"initiated_by_user_id"`
+	CompletedByUserID        pgtype.UUID    `json:"completed_by_user_id"`
+}
+
+func (q *Queries) CreateTreasuryTransfer(ctx context.Context, arg CreateTreasuryTransferParams) (TreasuryTransfers, error) {
+	row := q.db.QueryRow(ctx, createTreasuryTransfer,
+		arg.ID,
+		arg.LegalEntityID,
+		arg.TransferNumber,
+		arg.TransferDate,
+		arg.SourceType,
+		arg.SourceCashAccountID,
+		arg.SourceBankAccountID,
+		arg.DestinationType,
+		arg.DestinationCashAccountID,
+		arg.DestinationBankAccountID,
+		arg.Amount,
+		arg.CurrencyCode,
+		arg.FeeAmount,
+		arg.FeeGlAccountID,
+		arg.Status,
+		arg.ReferenceNumber,
+		arg.Notes,
+		arg.JournalEntryID,
+		arg.InitiatedByUserID,
+		arg.CompletedByUserID,
+	)
+	var i TreasuryTransfers
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.TransferNumber,
+		&i.TransferDate,
+		&i.SourceType,
+		&i.SourceCashAccountID,
+		&i.SourceBankAccountID,
+		&i.DestinationType,
+		&i.DestinationCashAccountID,
+		&i.DestinationBankAccountID,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.FeeAmount,
+		&i.FeeGlAccountID,
+		&i.Status,
+		&i.ReferenceNumber,
+		&i.Notes,
+		&i.JournalEntryID,
+		&i.InitiatedByUserID,
+		&i.CompletedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getTransferOrderByID = `-- name: GetTransferOrderByID :one
 SELECT
     t.id,
@@ -190,6 +283,86 @@ func (q *Queries) GetTransferOrderByID(ctx context.Context, id pgtype.UUID) (Get
 		&i.FromWarehouseNameAr,
 		&i.ToWarehouseCode,
 		&i.ToWarehouseNameAr,
+	)
+	return i, err
+}
+
+const getTreasuryTransferByID = `-- name: GetTreasuryTransferByID :one
+SELECT id, legal_entity_id, transfer_number, transfer_date, source_type, source_cash_account_id, source_bank_account_id, destination_type, destination_cash_account_id, destination_bank_account_id, amount, currency_code, fee_amount, fee_gl_account_id, status, reference_number, notes, journal_entry_id, initiated_by_user_id, completed_by_user_id, created_at, updated_at FROM treasury.transfers
+WHERE id = $1 AND legal_entity_id = $2
+`
+
+type GetTreasuryTransferByIDParams struct {
+	ID            pgtype.UUID `json:"id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+}
+
+func (q *Queries) GetTreasuryTransferByID(ctx context.Context, arg GetTreasuryTransferByIDParams) (TreasuryTransfers, error) {
+	row := q.db.QueryRow(ctx, getTreasuryTransferByID, arg.ID, arg.LegalEntityID)
+	var i TreasuryTransfers
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.TransferNumber,
+		&i.TransferDate,
+		&i.SourceType,
+		&i.SourceCashAccountID,
+		&i.SourceBankAccountID,
+		&i.DestinationType,
+		&i.DestinationCashAccountID,
+		&i.DestinationBankAccountID,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.FeeAmount,
+		&i.FeeGlAccountID,
+		&i.Status,
+		&i.ReferenceNumber,
+		&i.Notes,
+		&i.JournalEntryID,
+		&i.InitiatedByUserID,
+		&i.CompletedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTreasuryTransferByNumber = `-- name: GetTreasuryTransferByNumber :one
+SELECT id, legal_entity_id, transfer_number, transfer_date, source_type, source_cash_account_id, source_bank_account_id, destination_type, destination_cash_account_id, destination_bank_account_id, amount, currency_code, fee_amount, fee_gl_account_id, status, reference_number, notes, journal_entry_id, initiated_by_user_id, completed_by_user_id, created_at, updated_at FROM treasury.transfers
+WHERE legal_entity_id = $1 AND transfer_number = $2
+`
+
+type GetTreasuryTransferByNumberParams struct {
+	LegalEntityID  pgtype.UUID `json:"legal_entity_id"`
+	TransferNumber string      `json:"transfer_number"`
+}
+
+func (q *Queries) GetTreasuryTransferByNumber(ctx context.Context, arg GetTreasuryTransferByNumberParams) (TreasuryTransfers, error) {
+	row := q.db.QueryRow(ctx, getTreasuryTransferByNumber, arg.LegalEntityID, arg.TransferNumber)
+	var i TreasuryTransfers
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.TransferNumber,
+		&i.TransferDate,
+		&i.SourceType,
+		&i.SourceCashAccountID,
+		&i.SourceBankAccountID,
+		&i.DestinationType,
+		&i.DestinationCashAccountID,
+		&i.DestinationBankAccountID,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.FeeAmount,
+		&i.FeeGlAccountID,
+		&i.Status,
+		&i.ReferenceNumber,
+		&i.Notes,
+		&i.JournalEntryID,
+		&i.InitiatedByUserID,
+		&i.CompletedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -358,6 +531,55 @@ func (q *Queries) ListTransferOrdersByEntity(ctx context.Context, arg ListTransf
 	return items, nil
 }
 
+const listTreasuryTransfers = `-- name: ListTreasuryTransfers :many
+SELECT id, legal_entity_id, transfer_number, transfer_date, source_type, source_cash_account_id, source_bank_account_id, destination_type, destination_cash_account_id, destination_bank_account_id, amount, currency_code, fee_amount, fee_gl_account_id, status, reference_number, notes, journal_entry_id, initiated_by_user_id, completed_by_user_id, created_at, updated_at FROM treasury.transfers
+WHERE legal_entity_id = $1
+ORDER BY transfer_date DESC, transfer_number DESC
+`
+
+func (q *Queries) ListTreasuryTransfers(ctx context.Context, legalEntityID pgtype.UUID) ([]TreasuryTransfers, error) {
+	rows, err := q.db.Query(ctx, listTreasuryTransfers, legalEntityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TreasuryTransfers{}
+	for rows.Next() {
+		var i TreasuryTransfers
+		if err := rows.Scan(
+			&i.ID,
+			&i.LegalEntityID,
+			&i.TransferNumber,
+			&i.TransferDate,
+			&i.SourceType,
+			&i.SourceCashAccountID,
+			&i.SourceBankAccountID,
+			&i.DestinationType,
+			&i.DestinationCashAccountID,
+			&i.DestinationBankAccountID,
+			&i.Amount,
+			&i.CurrencyCode,
+			&i.FeeAmount,
+			&i.FeeGlAccountID,
+			&i.Status,
+			&i.ReferenceNumber,
+			&i.Notes,
+			&i.JournalEntryID,
+			&i.InitiatedByUserID,
+			&i.CompletedByUserID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateTransferOrderLineQuantities = `-- name: UpdateTransferOrderLineQuantities :one
 UPDATE inventory.transfer_order_lines
 SET
@@ -420,6 +642,60 @@ func (q *Queries) UpdateTransferOrderStatus(ctx context.Context, arg UpdateTrans
 		&i.ReceivedDate,
 		&i.Notes,
 		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateTreasuryTransferStatus = `-- name: UpdateTreasuryTransferStatus :one
+UPDATE treasury.transfers
+SET status = $3,
+    journal_entry_id = COALESCE($4, journal_entry_id),
+    completed_by_user_id = COALESCE($5, completed_by_user_id),
+    updated_at = now()
+WHERE id = $1 AND legal_entity_id = $2
+RETURNING id, legal_entity_id, transfer_number, transfer_date, source_type, source_cash_account_id, source_bank_account_id, destination_type, destination_cash_account_id, destination_bank_account_id, amount, currency_code, fee_amount, fee_gl_account_id, status, reference_number, notes, journal_entry_id, initiated_by_user_id, completed_by_user_id, created_at, updated_at
+`
+
+type UpdateTreasuryTransferStatusParams struct {
+	ID                pgtype.UUID `json:"id"`
+	LegalEntityID     pgtype.UUID `json:"legal_entity_id"`
+	Status            string      `json:"status"`
+	JournalEntryID    pgtype.UUID `json:"journal_entry_id"`
+	CompletedByUserID pgtype.UUID `json:"completed_by_user_id"`
+}
+
+func (q *Queries) UpdateTreasuryTransferStatus(ctx context.Context, arg UpdateTreasuryTransferStatusParams) (TreasuryTransfers, error) {
+	row := q.db.QueryRow(ctx, updateTreasuryTransferStatus,
+		arg.ID,
+		arg.LegalEntityID,
+		arg.Status,
+		arg.JournalEntryID,
+		arg.CompletedByUserID,
+	)
+	var i TreasuryTransfers
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.TransferNumber,
+		&i.TransferDate,
+		&i.SourceType,
+		&i.SourceCashAccountID,
+		&i.SourceBankAccountID,
+		&i.DestinationType,
+		&i.DestinationCashAccountID,
+		&i.DestinationBankAccountID,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.FeeAmount,
+		&i.FeeGlAccountID,
+		&i.Status,
+		&i.ReferenceNumber,
+		&i.Notes,
+		&i.JournalEntryID,
+		&i.InitiatedByUserID,
+		&i.CompletedByUserID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
