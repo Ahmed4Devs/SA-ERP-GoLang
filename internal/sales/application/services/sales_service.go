@@ -393,7 +393,7 @@ func (s *salesService) CreateInvoice(ctx context.Context, cmd ports.CreateInvoic
 		}
 	}
 
-	invNumber := fmt.Sprintf("INV-%s-%04d", time.Now().Format("2006"), time.Now().UnixNano()%10000)
+	invNumber := fmt.Sprintf("INV-%s-%06d-%s", time.Now().Format("2006"), time.Now().UnixNano()%1000000, uuid.New().String()[:6])
 	currency := cmd.CurrencyCode
 	if currency == "" {
 		currency = "SAR"

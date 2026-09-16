@@ -21,6 +21,8 @@ sql:
       - "database/queries/treasury"
       - "database/queries/banking"
       - "database/queries/hr"
+      - "database/queries/attendance"
+      - "database/queries/leave"
     gen:
       go:
         package: "sqlc"

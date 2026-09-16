@@ -140,6 +140,87 @@ type AccountingJournals struct {
 	Version       int64              `json:"version"`
 }
 
+type AttendanceAdjustments struct {
+	ID                    pgtype.UUID        `json:"id"`
+	AttendanceRecordID    pgtype.UUID        `json:"attendance_record_id"`
+	RequestedByEmployeeID pgtype.UUID        `json:"requested_by_employee_id"`
+	OriginalClockIn       pgtype.Timestamptz `json:"original_clock_in"`
+	OriginalClockOut      pgtype.Timestamptz `json:"original_clock_out"`
+	AdjustedClockIn       pgtype.Timestamptz `json:"adjusted_clock_in"`
+	AdjustedClockOut      pgtype.Timestamptz `json:"adjusted_clock_out"`
+	Reason                string             `json:"reason"`
+	Status                string             `json:"status"`
+	ReviewedByUserID      pgtype.UUID        `json:"reviewed_by_user_id"`
+	ReviewedAt            pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNotes           pgtype.Text        `json:"review_notes"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
+type AttendanceOvertimeRequests struct {
+	ID               pgtype.UUID        `json:"id"`
+	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
+	EmployeeID       pgtype.UUID        `json:"employee_id"`
+	RequestDate      pgtype.Date        `json:"request_date"`
+	OvertimeDate     pgtype.Date        `json:"overtime_date"`
+	OvertimeHours    pgtype.Numeric     `json:"overtime_hours"`
+	RateMultiplier   pgtype.Numeric     `json:"rate_multiplier"`
+	Reason           string             `json:"reason"`
+	Status           string             `json:"status"`
+	ApprovedByUserID pgtype.UUID        `json:"approved_by_user_id"`
+	ApprovedAt       pgtype.Timestamptz `json:"approved_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AttendanceRecords struct {
+	ID                    pgtype.UUID        `json:"id"`
+	LegalEntityID         pgtype.UUID        `json:"legal_entity_id"`
+	EmployeeID            pgtype.UUID        `json:"employee_id"`
+	ShiftID               pgtype.UUID        `json:"shift_id"`
+	WorkDate              pgtype.Date        `json:"work_date"`
+	ClockIn               pgtype.Timestamptz `json:"clock_in"`
+	ClockOut              pgtype.Timestamptz `json:"clock_out"`
+	CheckInMethod         string             `json:"check_in_method"`
+	CheckOutMethod        pgtype.Text        `json:"check_out_method"`
+	ExpectedWorkHours     pgtype.Numeric     `json:"expected_work_hours"`
+	ActualWorkHours       pgtype.Numeric     `json:"actual_work_hours"`
+	LateMinutes           int32              `json:"late_minutes"`
+	EarlyDepartureMinutes int32              `json:"early_departure_minutes"`
+	OvertimeMinutes       int32              `json:"overtime_minutes"`
+	Status                string             `json:"status"`
+	Notes                 pgtype.Text        `json:"notes"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AttendanceShiftAssignments struct {
+	ID         pgtype.UUID        `json:"id"`
+	EmployeeID pgtype.UUID        `json:"employee_id"`
+	ShiftID    pgtype.UUID        `json:"shift_id"`
+	ValidFrom  pgtype.Date        `json:"valid_from"`
+	ValidTo    pgtype.Date        `json:"valid_to"`
+	IsActive   bool               `json:"is_active"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type AttendanceShifts struct {
+	ID                      pgtype.UUID        `json:"id"`
+	LegalEntityID           pgtype.UUID        `json:"legal_entity_id"`
+	Code                    string             `json:"code"`
+	NameEn                  string             `json:"name_en"`
+	NameAr                  string             `json:"name_ar"`
+	StartTime               pgtype.Time        `json:"start_time"`
+	EndTime                 pgtype.Time        `json:"end_time"`
+	GracePeriodMinutes      int32              `json:"grace_period_minutes"`
+	BreakDurationMinutes    int32              `json:"break_duration_minutes"`
+	HalfDayThresholdMinutes int32              `json:"half_day_threshold_minutes"`
+	IsNightShift            bool               `json:"is_night_shift"`
+	WorkDays                []byte             `json:"work_days"`
+	IsActive                bool               `json:"is_active"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AuditAccessEvents struct {
 	ID           pgtype.UUID        `json:"id"`
 	UserID       pgtype.UUID        `json:"user_id"`
@@ -783,6 +864,83 @@ type InventoryTransferOrders struct {
 	CreatedBy            pgtype.UUID        `json:"created_by"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type LeaveEmployeeBalances struct {
+	ID             pgtype.UUID        `json:"id"`
+	EmployeeID     pgtype.UUID        `json:"employee_id"`
+	LeaveTypeID    pgtype.UUID        `json:"leave_type_id"`
+	FiscalYear     int32              `json:"fiscal_year"`
+	AllocatedDays  pgtype.Numeric     `json:"allocated_days"`
+	AccruedDays    pgtype.Numeric     `json:"accrued_days"`
+	TakenDays      pgtype.Numeric     `json:"taken_days"`
+	PendingDays    pgtype.Numeric     `json:"pending_days"`
+	CarryoverDays  pgtype.Numeric     `json:"carryover_days"`
+	ClosingBalance pgtype.Numeric     `json:"closing_balance"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type LeavePolicies struct {
+	ID                     pgtype.UUID        `json:"id"`
+	LegalEntityID          pgtype.UUID        `json:"legal_entity_id"`
+	LeaveTypeID            pgtype.UUID        `json:"leave_type_id"`
+	AccrualFrequency       string             `json:"accrual_frequency"`
+	AccrualRatePerPeriod   pgtype.Numeric     `json:"accrual_rate_per_period"`
+	MaxCarryoverDays       pgtype.Numeric     `json:"max_carryover_days"`
+	ProbationRestricted    bool               `json:"probation_restricted"`
+	EncashmentAllowed      bool               `json:"encashment_allowed"`
+	MinServiceDaysRequired int32              `json:"min_service_days_required"`
+	IsActive               bool               `json:"is_active"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type LeaveRequests struct {
+	ID                    pgtype.UUID        `json:"id"`
+	LegalEntityID         pgtype.UUID        `json:"legal_entity_id"`
+	EmployeeID            pgtype.UUID        `json:"employee_id"`
+	LeaveTypeID           pgtype.UUID        `json:"leave_type_id"`
+	RequestNumber         string             `json:"request_number"`
+	StartDate             pgtype.Date        `json:"start_date"`
+	EndDate               pgtype.Date        `json:"end_date"`
+	TotalDays             pgtype.Numeric     `json:"total_days"`
+	ReturnDate            pgtype.Date        `json:"return_date"`
+	ReplacementEmployeeID pgtype.UUID        `json:"replacement_employee_id"`
+	Reason                string             `json:"reason"`
+	AttachmentUrl         pgtype.Text        `json:"attachment_url"`
+	Status                string             `json:"status"`
+	ReviewedByUserID      pgtype.UUID        `json:"reviewed_by_user_id"`
+	ReviewedAt            pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNotes           pgtype.Text        `json:"review_notes"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+}
+
+type LeaveTransactions struct {
+	ID              pgtype.UUID        `json:"id"`
+	EmployeeID      pgtype.UUID        `json:"employee_id"`
+	LeaveTypeID     pgtype.UUID        `json:"leave_type_id"`
+	FiscalYear      int32              `json:"fiscal_year"`
+	TransactionType string             `json:"transaction_type"`
+	Days            pgtype.Numeric     `json:"days"`
+	ReferenceID     pgtype.UUID        `json:"reference_id"`
+	Notes           pgtype.Text        `json:"notes"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type LeaveTypes struct {
+	ID                 pgtype.UUID        `json:"id"`
+	LegalEntityID      pgtype.UUID        `json:"legal_entity_id"`
+	Code               string             `json:"code"`
+	NameEn             string             `json:"name_en"`
+	NameAr             string             `json:"name_ar"`
+	IsPaid             bool               `json:"is_paid"`
+	RequiresAttachment bool               `json:"requires_attachment"`
+	DeductsFromAnnual  bool               `json:"deducts_from_annual"`
+	MaxDaysPerYear     pgtype.Numeric     `json:"max_days_per_year"`
+	IsActive           bool               `json:"is_active"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type OrganizationAddresses struct {

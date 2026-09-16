@@ -31,6 +31,8 @@ import {
   Package,
   Truck,
   Receipt,
+  Clock,
+  Calendar,
 } from "lucide-react";
 
 import arDict from "@/messages/ar.json";
@@ -122,6 +124,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { key: "treasury", href: "/treasury", icon: Landmark, label: t.nav.treasury || "الخزينة والسيولة", active: pathname === "/treasury" },
     { key: "banking", href: "/banking", icon: Building2, label: (t.nav as any)?.banking || "البنوك والمطابقات", active: pathname === "/banking" },
     { key: "hr", href: "/hr", icon: Users, label: t.nav.hr, active: pathname === "/hr" },
+    { key: "attendance", href: "/attendance", icon: Clock, label: (t.nav as any)?.attendance || "الحضور والانصراف", active: pathname === "/attendance" },
+    { key: "leave", href: "/leave", icon: Calendar, label: (t.nav as any)?.leave || "الإجازات والأرصدة", active: pathname === "/leave" },
     { key: "payroll", href: "#", icon: Banknote, label: t.nav.payroll },
     { key: "gosi", href: "#", icon: FileCheck2, label: t.nav.gosi },
     { key: "zatca", href: "#", icon: ReceiptText, label: t.nav.zatca },

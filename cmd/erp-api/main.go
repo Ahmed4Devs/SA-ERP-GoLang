@@ -25,9 +25,11 @@ import (
 	"erp/internal/receivables"
 	"erp/internal/sales"
 	"erp/internal/banking"
+	"erp/internal/hr"
+	"erp/internal/attendance"
+	"erp/internal/leave"
 	"erp/internal/tax"
 	"erp/internal/treasury"
-	"erp/internal/hr"
 	"erp/internal/workflow"
 )
 
@@ -256,6 +258,30 @@ func main() {
 			}
 		}
 		logger.Info("HR module and employee/contract management registered")
+
+		// Q. Attendance Module (Shifts, Rosters, Daily Timesheets, Overtime Engine)
+		attendanceModule := attendance.NewModule(cfg, db)
+		attendanceModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := attendanceModule.SeedDefaultAttendanceData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Attendance Data", "error", err)
+			} else {
+				logger.Info("Default Saudi Shifts, Working Hours, and Rosters verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Attendance module and time-tracking registered")
+
+		// R. Leave Module (Statutory Saudi Leaves, Policies, Accruals, Requests Ledger)
+		leaveModule := leave.NewModule(cfg, db)
+		leaveModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := leaveModule.SeedDefaultLeaveData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Leave Data", "error", err)
+			} else {
+				logger.Info("Default Saudi Statutory Leave Types and Accrual Policies verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Leave module and reconcilable balance ledger registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown
