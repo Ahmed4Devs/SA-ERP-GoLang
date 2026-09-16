@@ -21,6 +21,7 @@ import (
 	"erp/internal/platform/transaction"
 	"erp/internal/products"
 	"erp/internal/receivables"
+	"erp/internal/sales"
 	"erp/internal/tax"
 	"erp/internal/workflow"
 )
@@ -185,6 +186,18 @@ func main() {
 			}
 		}
 		logger.Info("Receivables module and accounts receivable engine registered")
+
+		// K. Sales Module (Quotations, Orders, Deliveries, ZATCA Invoices, Credit Notes)
+		salesModule := sales.NewModule(cfg, db)
+		salesModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := salesModule.SeedDefaultSalesData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Sales Data", "error", err)
+			} else {
+				logger.Info("Default Sales quotations, orders, and ZATCA invoices verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Sales module and order-to-cash workflow registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

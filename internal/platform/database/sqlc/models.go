@@ -909,6 +909,216 @@ type RefCurrencies struct {
 	IsActive      bool        `json:"is_active"`
 }
 
+type SalesCreditNoteLines struct {
+	ID             pgtype.UUID    `json:"id"`
+	CreditNoteID   pgtype.UUID    `json:"credit_note_id"`
+	LineNumber     int32          `json:"line_number"`
+	ItemID         pgtype.UUID    `json:"item_id"`
+	Description    string         `json:"description"`
+	Quantity       pgtype.Numeric `json:"quantity"`
+	UnitPrice      pgtype.Numeric `json:"unit_price"`
+	TaxableAmount  pgtype.Numeric `json:"taxable_amount"`
+	TaxCode        string         `json:"tax_code"`
+	TaxRatePercent pgtype.Numeric `json:"tax_rate_percent"`
+	TaxAmount      pgtype.Numeric `json:"tax_amount"`
+	TotalAmount    pgtype.Numeric `json:"total_amount"`
+}
+
+type SalesCreditNotes struct {
+	ID                pgtype.UUID        `json:"id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	CreditNoteNumber  string             `json:"credit_note_number"`
+	OriginalInvoiceID pgtype.UUID        `json:"original_invoice_id"`
+	CustomerID        pgtype.UUID        `json:"customer_id"`
+	IssueDate         pgtype.Date        `json:"issue_date"`
+	ReasonCode        string             `json:"reason_code"`
+	ReasonDetails     pgtype.Text        `json:"reason_details"`
+	CurrencyCode      string             `json:"currency_code"`
+	ExchangeRate      pgtype.Numeric     `json:"exchange_rate"`
+	Subtotal          pgtype.Numeric     `json:"subtotal"`
+	TaxAmount         pgtype.Numeric     `json:"tax_amount"`
+	TotalAmount       pgtype.Numeric     `json:"total_amount"`
+	Status            string             `json:"status"`
+	JournalEntryID    pgtype.UUID        `json:"journal_entry_id"`
+	OpenItemID        pgtype.UUID        `json:"open_item_id"`
+	CreatedByUserID   pgtype.UUID        `json:"created_by_user_id"`
+	PostedAt          pgtype.Timestamptz `json:"posted_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SalesDeliveries struct {
+	ID                pgtype.UUID        `json:"id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	DeliveryNumber    string             `json:"delivery_number"`
+	OrderID           pgtype.UUID        `json:"order_id"`
+	CustomerID        pgtype.UUID        `json:"customer_id"`
+	WarehouseID       pgtype.UUID        `json:"warehouse_id"`
+	DeliveryDate      pgtype.Date        `json:"delivery_date"`
+	Status            string             `json:"status"`
+	ShippingReference pgtype.Text        `json:"shipping_reference"`
+	Notes             pgtype.Text        `json:"notes"`
+	CreatedByUserID   pgtype.UUID        `json:"created_by_user_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SalesDeliveryLines struct {
+	ID                  pgtype.UUID    `json:"id"`
+	DeliveryID          pgtype.UUID    `json:"delivery_id"`
+	LineNumber          int32          `json:"line_number"`
+	OrderLineID         pgtype.UUID    `json:"order_line_id"`
+	ItemID              pgtype.UUID    `json:"item_id"`
+	Uom                 string         `json:"uom"`
+	Quantity            pgtype.Numeric `json:"quantity"`
+	WarehouseID         pgtype.UUID    `json:"warehouse_id"`
+	BinID               pgtype.UUID    `json:"bin_id"`
+	InventoryMovementID pgtype.UUID    `json:"inventory_movement_id"`
+	UnitCost            pgtype.Numeric `json:"unit_cost"`
+	TotalCost           pgtype.Numeric `json:"total_cost"`
+}
+
+type SalesInvoiceLines struct {
+	ID              pgtype.UUID    `json:"id"`
+	InvoiceID       pgtype.UUID    `json:"invoice_id"`
+	LineNumber      int32          `json:"line_number"`
+	ItemID          pgtype.UUID    `json:"item_id"`
+	Description     string         `json:"description"`
+	Uom             string         `json:"uom"`
+	Quantity        pgtype.Numeric `json:"quantity"`
+	UnitPrice       pgtype.Numeric `json:"unit_price"`
+	GrossAmount     pgtype.Numeric `json:"gross_amount"`
+	DiscountAmount  pgtype.Numeric `json:"discount_amount"`
+	TaxableAmount   pgtype.Numeric `json:"taxable_amount"`
+	TaxCode         string         `json:"tax_code"`
+	TaxRatePercent  pgtype.Numeric `json:"tax_rate_percent"`
+	TaxAmount       pgtype.Numeric `json:"tax_amount"`
+	NetAmount       pgtype.Numeric `json:"net_amount"`
+	ExemptionReason pgtype.Text    `json:"exemption_reason"`
+}
+
+type SalesInvoices struct {
+	ID                  pgtype.UUID        `json:"id"`
+	LegalEntityID       pgtype.UUID        `json:"legal_entity_id"`
+	InvoiceNumber       string             `json:"invoice_number"`
+	InvoiceType         string             `json:"invoice_type"`
+	OrderID             pgtype.UUID        `json:"order_id"`
+	DeliveryID          pgtype.UUID        `json:"delivery_id"`
+	CustomerID          pgtype.UUID        `json:"customer_id"`
+	CustomerNameAr      string             `json:"customer_name_ar"`
+	CustomerNameEn      string             `json:"customer_name_en"`
+	CustomerTaxID       pgtype.Text        `json:"customer_tax_id"`
+	CustomerCrNumber    pgtype.Text        `json:"customer_cr_number"`
+	CustomerAddressJson []byte             `json:"customer_address_json"`
+	IssueDate           pgtype.Date        `json:"issue_date"`
+	DueDate             pgtype.Date        `json:"due_date"`
+	PaymentTermsID      pgtype.UUID        `json:"payment_terms_id"`
+	CurrencyCode        string             `json:"currency_code"`
+	ExchangeRate        pgtype.Numeric     `json:"exchange_rate"`
+	Subtotal            pgtype.Numeric     `json:"subtotal"`
+	DiscountAmount      pgtype.Numeric     `json:"discount_amount"`
+	TaxableAmount       pgtype.Numeric     `json:"taxable_amount"`
+	TaxAmount           pgtype.Numeric     `json:"tax_amount"`
+	TotalAmount         pgtype.Numeric     `json:"total_amount"`
+	Status              string             `json:"status"`
+	JournalEntryID      pgtype.UUID        `json:"journal_entry_id"`
+	OpenItemID          pgtype.UUID        `json:"open_item_id"`
+	QrCodeData          pgtype.Text        `json:"qr_code_data"`
+	Notes               pgtype.Text        `json:"notes"`
+	CreatedByUserID     pgtype.UUID        `json:"created_by_user_id"`
+	PostedAt            pgtype.Timestamptz `json:"posted_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SalesOrderLines struct {
+	ID                pgtype.UUID    `json:"id"`
+	OrderID           pgtype.UUID    `json:"order_id"`
+	LineNumber        int32          `json:"line_number"`
+	ItemID            pgtype.UUID    `json:"item_id"`
+	DescriptionEn     string         `json:"description_en"`
+	DescriptionAr     string         `json:"description_ar"`
+	Uom               string         `json:"uom"`
+	Quantity          pgtype.Numeric `json:"quantity"`
+	DeliveredQuantity pgtype.Numeric `json:"delivered_quantity"`
+	InvoicedQuantity  pgtype.Numeric `json:"invoiced_quantity"`
+	UnitPrice         pgtype.Numeric `json:"unit_price"`
+	DiscountPercent   pgtype.Numeric `json:"discount_percent"`
+	DiscountAmount    pgtype.Numeric `json:"discount_amount"`
+	TaxableAmount     pgtype.Numeric `json:"taxable_amount"`
+	TaxCode           string         `json:"tax_code"`
+	TaxRatePercent    pgtype.Numeric `json:"tax_rate_percent"`
+	TaxAmount         pgtype.Numeric `json:"tax_amount"`
+	TotalAmount       pgtype.Numeric `json:"total_amount"`
+}
+
+type SalesOrders struct {
+	ID                   pgtype.UUID        `json:"id"`
+	LegalEntityID        pgtype.UUID        `json:"legal_entity_id"`
+	OrderNumber          string             `json:"order_number"`
+	CustomerID           pgtype.UUID        `json:"customer_id"`
+	QuotationID          pgtype.UUID        `json:"quotation_id"`
+	CustomerPoNumber     pgtype.Text        `json:"customer_po_number"`
+	OrderDate            pgtype.Date        `json:"order_date"`
+	ExpectedDeliveryDate pgtype.Date        `json:"expected_delivery_date"`
+	PaymentTermsID       pgtype.UUID        `json:"payment_terms_id"`
+	CurrencyCode         string             `json:"currency_code"`
+	ExchangeRate         pgtype.Numeric     `json:"exchange_rate"`
+	Subtotal             pgtype.Numeric     `json:"subtotal"`
+	DiscountAmount       pgtype.Numeric     `json:"discount_amount"`
+	TaxableAmount        pgtype.Numeric     `json:"taxable_amount"`
+	TaxAmount            pgtype.Numeric     `json:"tax_amount"`
+	TotalAmount          pgtype.Numeric     `json:"total_amount"`
+	Status               string             `json:"status"`
+	Notes                pgtype.Text        `json:"notes"`
+	CreatedByUserID      pgtype.UUID        `json:"created_by_user_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SalesQuotationLines struct {
+	ID              pgtype.UUID    `json:"id"`
+	QuotationID     pgtype.UUID    `json:"quotation_id"`
+	LineNumber      int32          `json:"line_number"`
+	ItemID          pgtype.UUID    `json:"item_id"`
+	DescriptionEn   string         `json:"description_en"`
+	DescriptionAr   string         `json:"description_ar"`
+	Uom             string         `json:"uom"`
+	Quantity        pgtype.Numeric `json:"quantity"`
+	UnitPrice       pgtype.Numeric `json:"unit_price"`
+	DiscountPercent pgtype.Numeric `json:"discount_percent"`
+	DiscountAmount  pgtype.Numeric `json:"discount_amount"`
+	TaxableAmount   pgtype.Numeric `json:"taxable_amount"`
+	TaxCode         string         `json:"tax_code"`
+	TaxRatePercent  pgtype.Numeric `json:"tax_rate_percent"`
+	TaxAmount       pgtype.Numeric `json:"tax_amount"`
+	TotalAmount     pgtype.Numeric `json:"total_amount"`
+}
+
+type SalesQuotations struct {
+	ID               pgtype.UUID        `json:"id"`
+	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
+	QuotationNumber  string             `json:"quotation_number"`
+	CustomerID       pgtype.UUID        `json:"customer_id"`
+	CustomerNameEn   string             `json:"customer_name_en"`
+	CustomerNameAr   string             `json:"customer_name_ar"`
+	QuoteDate        pgtype.Date        `json:"quote_date"`
+	ValidUntil       pgtype.Date        `json:"valid_until"`
+	CurrencyCode     string             `json:"currency_code"`
+	ExchangeRate     pgtype.Numeric     `json:"exchange_rate"`
+	Subtotal         pgtype.Numeric     `json:"subtotal"`
+	DiscountAmount   pgtype.Numeric     `json:"discount_amount"`
+	TaxableAmount    pgtype.Numeric     `json:"taxable_amount"`
+	TaxAmount        pgtype.Numeric     `json:"tax_amount"`
+	TotalAmount      pgtype.Numeric     `json:"total_amount"`
+	Status           string             `json:"status"`
+	ConvertedOrderID pgtype.UUID        `json:"converted_order_id"`
+	Notes            pgtype.Text        `json:"notes"`
+	CreatedByUserID  pgtype.UUID        `json:"created_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type TaxExemptionReasons struct {
 	Code          string             `json:"code"`
 	CategoryCode  string             `json:"category_code"`

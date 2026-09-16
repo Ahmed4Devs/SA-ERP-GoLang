@@ -15,6 +15,7 @@ sql:
       - "database/queries/products"
       - "database/queries/inventory"
       - "database/queries/receivables"
+      - "database/queries/sales"
     gen:
       go:
         package: "sqlc"

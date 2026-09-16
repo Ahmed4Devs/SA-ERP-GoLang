@@ -297,6 +297,7 @@ func TestTransactionManagerAtomicity(t *testing.T) {
 	txManager := transaction.NewManager(db.Pool)
 
 	testCurrencyCode := "TX1"
+	_, _ = db.Pool.Exec(ctx, "DELETE FROM reference.currencies WHERE code IN ('TX1', 'TX2')")
 
 	// 1. Test Rollback on Error
 	expectedErr := errors.New("simulated domain error")
