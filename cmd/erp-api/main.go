@@ -27,6 +27,7 @@ import (
 	"erp/internal/banking"
 	"erp/internal/tax"
 	"erp/internal/treasury"
+	"erp/internal/hr"
 	"erp/internal/workflow"
 )
 
@@ -243,6 +244,18 @@ func main() {
 		bankingModule := banking.NewModule(cfg, db)
 		bankingModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
 		logger.Info("Banking module and reconciliation engine registered")
+
+		// P. HR Module (Employee Master, Contracts, Jobs, Positions, Saudization Engine)
+		hrModule := hr.NewModule(cfg, db)
+		hrModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := hrModule.SeedDefaultHRData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default HR Data", "error", err)
+			} else {
+				logger.Info("Default Saudi Jobs, Positions, Employees, and Qiwa Contracts verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("HR module and employee/contract management registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

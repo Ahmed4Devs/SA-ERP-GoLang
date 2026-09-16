@@ -20,6 +20,7 @@ sql:
       - "database/queries/purchasing"
       - "database/queries/treasury"
       - "database/queries/banking"
+      - "database/queries/hr"
     gen:
       go:
         package: "sqlc"

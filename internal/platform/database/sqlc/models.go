@@ -314,6 +314,178 @@ type BankingStatements struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
+type HrBankAccounts struct {
+	ID            pgtype.UUID        `json:"id"`
+	EmployeeID    pgtype.UUID        `json:"employee_id"`
+	BankNameEn    string             `json:"bank_name_en"`
+	BankNameAr    string             `json:"bank_name_ar"`
+	Iban          string             `json:"iban"`
+	IbanMasked    string             `json:"iban_masked"`
+	SwiftBic      string             `json:"swift_bic"`
+	IsPrimary     bool               `json:"is_primary"`
+	AccountStatus string             `json:"account_status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type HrContractVersions struct {
+	ID                 pgtype.UUID        `json:"id"`
+	ContractID         pgtype.UUID        `json:"contract_id"`
+	VersionNumber      int32              `json:"version_number"`
+	EffectiveFrom      pgtype.Date        `json:"effective_from"`
+	EffectiveTo        pgtype.Date        `json:"effective_to"`
+	BasicSalary        pgtype.Numeric     `json:"basic_salary"`
+	HousingAllowance   pgtype.Numeric     `json:"housing_allowance"`
+	TransportAllowance pgtype.Numeric     `json:"transport_allowance"`
+	OtherAllowances    pgtype.Numeric     `json:"other_allowances"`
+	GrossSalary        pgtype.Numeric     `json:"gross_salary"`
+	ChangeReason       pgtype.Text        `json:"change_reason"`
+	ApprovedByUserID   pgtype.UUID        `json:"approved_by_user_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type HrContracts struct {
+	ID                  pgtype.UUID        `json:"id"`
+	LegalEntityID       pgtype.UUID        `json:"legal_entity_id"`
+	EmployeeID          pgtype.UUID        `json:"employee_id"`
+	ContractNumber      string             `json:"contract_number"`
+	ContractType        string             `json:"contract_type"`
+	StartDate           pgtype.Date        `json:"start_date"`
+	EndDate             pgtype.Date        `json:"end_date"`
+	ProbationDays       int32              `json:"probation_days"`
+	NoticePeriodDays    int32              `json:"notice_period_days"`
+	WorkingHoursPerWeek pgtype.Numeric     `json:"working_hours_per_week"`
+	WorkLocation        string             `json:"work_location"`
+	Status              string             `json:"status"`
+	Notes               pgtype.Text        `json:"notes"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type HrEmergencyContacts struct {
+	ID             pgtype.UUID        `json:"id"`
+	EmployeeID     pgtype.UUID        `json:"employee_id"`
+	ContactName    string             `json:"contact_name"`
+	Relationship   string             `json:"relationship"`
+	PrimaryPhone   string             `json:"primary_phone"`
+	SecondaryPhone pgtype.Text        `json:"secondary_phone"`
+	Address        pgtype.Text        `json:"address"`
+	IsPrimary      bool               `json:"is_primary"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type HrEmployeeContacts struct {
+	ID            pgtype.UUID        `json:"id"`
+	EmployeeID    pgtype.UUID        `json:"employee_id"`
+	WorkEmail     pgtype.Text        `json:"work_email"`
+	PersonalEmail pgtype.Text        `json:"personal_email"`
+	MobilePhone   string             `json:"mobile_phone"`
+	WorkPhone     pgtype.Text        `json:"work_phone"`
+	Extension     pgtype.Text        `json:"extension"`
+	BuildingNo    pgtype.Text        `json:"building_no"`
+	StreetName    pgtype.Text        `json:"street_name"`
+	District      pgtype.Text        `json:"district"`
+	City          string             `json:"city"`
+	PostalCode    pgtype.Text        `json:"postal_code"`
+	AdditionalNo  pgtype.Text        `json:"additional_no"`
+	CountryCode   string             `json:"country_code"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type HrEmployeeDocuments struct {
+	ID               pgtype.UUID        `json:"id"`
+	EmployeeID       pgtype.UUID        `json:"employee_id"`
+	DocumentType     string             `json:"document_type"`
+	Title            string             `json:"title"`
+	FileName         string             `json:"file_name"`
+	FileSizeBytes    int64              `json:"file_size_bytes"`
+	MimeType         string             `json:"mime_type"`
+	StoragePath      string             `json:"storage_path"`
+	UploadedByUserID pgtype.UUID        `json:"uploaded_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type HrEmployeeIdentifiers struct {
+	ID                    pgtype.UUID        `json:"id"`
+	EmployeeID            pgtype.UUID        `json:"employee_id"`
+	IdentifierType        string             `json:"identifier_type"`
+	IdentifierValue       string             `json:"identifier_value"`
+	IdentifierValueMasked string             `json:"identifier_value_masked"`
+	IssueDate             pgtype.Date        `json:"issue_date"`
+	ExpiryDate            pgtype.Date        `json:"expiry_date"`
+	IssuePlace            pgtype.Text        `json:"issue_place"`
+	IsPrimary             bool               `json:"is_primary"`
+	IsVerified            bool               `json:"is_verified"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
+type HrEmployees struct {
+	ID                     pgtype.UUID        `json:"id"`
+	LegalEntityID          pgtype.UUID        `json:"legal_entity_id"`
+	EmployeeNumber         string             `json:"employee_number"`
+	UserID                 pgtype.UUID        `json:"user_id"`
+	FirstNameEn            string             `json:"first_name_en"`
+	LastNameEn             string             `json:"last_name_en"`
+	FirstNameAr            string             `json:"first_name_ar"`
+	LastNameAr             string             `json:"last_name_ar"`
+	Gender                 string             `json:"gender"`
+	MaritalStatus          string             `json:"marital_status"`
+	DateOfBirth            pgtype.Date        `json:"date_of_birth"`
+	NationalityCountryCode string             `json:"nationality_country_code"`
+	IsSaudiNational        bool               `json:"is_saudi_national"`
+	HireDate               pgtype.Date        `json:"hire_date"`
+	ProbationEndDate       pgtype.Date        `json:"probation_end_date"`
+	TerminationDate        pgtype.Date        `json:"termination_date"`
+	EmploymentStatus       string             `json:"employment_status"`
+	PrimaryPositionID      pgtype.UUID        `json:"primary_position_id"`
+	DepartmentID           pgtype.UUID        `json:"department_id"`
+	BranchID               pgtype.UUID        `json:"branch_id"`
+	ManagerEmployeeID      pgtype.UUID        `json:"manager_employee_id"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type HrJobs struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Code          string             `json:"code"`
+	TitleEn       string             `json:"title_en"`
+	TitleAr       string             `json:"title_ar"`
+	JobFamily     string             `json:"job_family"`
+	JobLevel      string             `json:"job_level"`
+	Description   pgtype.Text        `json:"description"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type HrPositions struct {
+	ID                  pgtype.UUID        `json:"id"`
+	LegalEntityID       pgtype.UUID        `json:"legal_entity_id"`
+	Code                string             `json:"code"`
+	JobID               pgtype.UUID        `json:"job_id"`
+	DepartmentID        pgtype.UUID        `json:"department_id"`
+	BranchID            pgtype.UUID        `json:"branch_id"`
+	ReportsToPositionID pgtype.UUID        `json:"reports_to_position_id"`
+	Headcount           int32              `json:"headcount"`
+	Status              string             `json:"status"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type HrQualifications struct {
+	ID              pgtype.UUID        `json:"id"`
+	EmployeeID      pgtype.UUID        `json:"employee_id"`
+	DegreeType      string             `json:"degree_type"`
+	FieldOfStudy    string             `json:"field_of_study"`
+	InstitutionName string             `json:"institution_name"`
+	GraduationYear  int32              `json:"graduation_year"`
+	GradeGpa        pgtype.Text        `json:"grade_gpa"`
+	CountryCode     string             `json:"country_code"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type IamApiKeys struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`

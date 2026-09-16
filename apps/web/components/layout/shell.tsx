@@ -121,7 +121,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { key: "purchasing", href: "/purchasing", icon: ShoppingCart, label: t.nav.purchasing || "المشتريات والتعميد", active: pathname === "/purchasing" },
     { key: "treasury", href: "/treasury", icon: Landmark, label: t.nav.treasury || "الخزينة والسيولة", active: pathname === "/treasury" },
     { key: "banking", href: "/banking", icon: Building2, label: (t.nav as any)?.banking || "البنوك والمطابقات", active: pathname === "/banking" },
-    { key: "hr", href: "#", icon: Users, label: t.nav.hr },
+    { key: "hr", href: "/hr", icon: Users, label: t.nav.hr, active: pathname === "/hr" },
     { key: "payroll", href: "#", icon: Banknote, label: t.nav.payroll },
     { key: "gosi", href: "#", icon: FileCheck2, label: t.nav.gosi },
     { key: "zatca", href: "#", icon: ReceiptText, label: t.nav.zatca },
