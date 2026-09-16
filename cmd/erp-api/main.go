@@ -12,6 +12,7 @@ import (
 	"erp/internal/audit"
 	"erp/internal/authorization"
 	"erp/internal/iam"
+	"erp/internal/inventory"
 	"erp/internal/organization"
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
@@ -159,6 +160,18 @@ func main() {
 			}
 		}
 		logger.Info("Products module and catalog engine registered")
+
+		// I. Inventory Module (Warehouses, Bins, Movements Ledger, Projected Balances, Transfers)
+		inventoryModule := inventory.NewModule(cfg, db)
+		inventoryModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := inventoryModule.SeedDefaultInventoryData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Inventory Data", "error", err)
+			} else {
+				logger.Info("Default Saudi Central Warehouse, Bins, and Initial Stock Balances verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Inventory module and immutable movement ledger registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

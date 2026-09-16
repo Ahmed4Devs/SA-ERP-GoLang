@@ -317,6 +317,165 @@ type IamUsers struct {
 	Version           int64              `json:"version"`
 }
 
+type InventoryLots struct {
+	ID              pgtype.UUID        `json:"id"`
+	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
+	ItemID          pgtype.UUID        `json:"item_id"`
+	LotNumber       string             `json:"lot_number"`
+	ManufactureDate pgtype.Date        `json:"manufacture_date"`
+	ExpiryDate      pgtype.Date        `json:"expiry_date"`
+	IsBlocked       bool               `json:"is_blocked"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type InventorySerialNumbers struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	ItemID        pgtype.UUID        `json:"item_id"`
+	SerialNumber  string             `json:"serial_number"`
+	WarehouseID   pgtype.UUID        `json:"warehouse_id"`
+	BinID         pgtype.UUID        `json:"bin_id"`
+	Status        string             `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type InventoryStockAdjustmentLines struct {
+	ID           pgtype.UUID    `json:"id"`
+	AdjustmentID pgtype.UUID    `json:"adjustment_id"`
+	ItemID       pgtype.UUID    `json:"item_id"`
+	BinID        pgtype.UUID    `json:"bin_id"`
+	LotNumber    pgtype.Text    `json:"lot_number"`
+	SerialNumber pgtype.Text    `json:"serial_number"`
+	Quantity     pgtype.Numeric `json:"quantity"`
+	UnitCost     pgtype.Numeric `json:"unit_cost"`
+	TotalCost    pgtype.Numeric `json:"total_cost"`
+	Reason       pgtype.Text    `json:"reason"`
+}
+
+type InventoryStockAdjustments struct {
+	ID               pgtype.UUID        `json:"id"`
+	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
+	AdjustmentNumber string             `json:"adjustment_number"`
+	WarehouseID      pgtype.UUID        `json:"warehouse_id"`
+	AdjustmentType   string             `json:"adjustment_type"`
+	ReasonCode       string             `json:"reason_code"`
+	Status           string             `json:"status"`
+	AdjustmentDate   pgtype.Date        `json:"adjustment_date"`
+	PostedAt         pgtype.Timestamptz `json:"posted_at"`
+	PostedBy         pgtype.UUID        `json:"posted_by"`
+	Notes            pgtype.Text        `json:"notes"`
+	CreatedBy        pgtype.UUID        `json:"created_by"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type InventoryStockBalances struct {
+	ID                pgtype.UUID        `json:"id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	ItemID            pgtype.UUID        `json:"item_id"`
+	WarehouseID       pgtype.UUID        `json:"warehouse_id"`
+	BinID             pgtype.UUID        `json:"bin_id"`
+	QuantityOnHand    pgtype.Numeric     `json:"quantity_on_hand"`
+	QuantityReserved  pgtype.Numeric     `json:"quantity_reserved"`
+	QuantityAvailable pgtype.Numeric     `json:"quantity_available"`
+	AverageCost       pgtype.Numeric     `json:"average_cost"`
+	TotalValue        pgtype.Numeric     `json:"total_value"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	Version           int64              `json:"version"`
+}
+
+type InventoryStockCountLines struct {
+	ID              pgtype.UUID    `json:"id"`
+	CountID         pgtype.UUID    `json:"count_id"`
+	ItemID          pgtype.UUID    `json:"item_id"`
+	BinID           pgtype.UUID    `json:"bin_id"`
+	SystemQuantity  pgtype.Numeric `json:"system_quantity"`
+	CountedQuantity pgtype.Numeric `json:"counted_quantity"`
+	Variance        pgtype.Numeric `json:"variance"`
+	Notes           pgtype.Text    `json:"notes"`
+}
+
+type InventoryStockCounts struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	CountNumber   string             `json:"count_number"`
+	WarehouseID   pgtype.UUID        `json:"warehouse_id"`
+	CountType     string             `json:"count_type"`
+	Status        string             `json:"status"`
+	CountDate     pgtype.Date        `json:"count_date"`
+	ReconciledAt  pgtype.Timestamptz `json:"reconciled_at"`
+	ReconciledBy  pgtype.UUID        `json:"reconciled_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type InventoryStockMovements struct {
+	ID              pgtype.UUID        `json:"id"`
+	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
+	MovementNumber  string             `json:"movement_number"`
+	MovementType    string             `json:"movement_type"`
+	ItemID          pgtype.UUID        `json:"item_id"`
+	SkuID           pgtype.UUID        `json:"sku_id"`
+	WarehouseID     pgtype.UUID        `json:"warehouse_id"`
+	BinID           pgtype.UUID        `json:"bin_id"`
+	LotNumber       pgtype.Text        `json:"lot_number"`
+	SerialNumber    pgtype.Text        `json:"serial_number"`
+	Quantity        pgtype.Numeric     `json:"quantity"`
+	UomID           pgtype.UUID        `json:"uom_id"`
+	UnitCost        pgtype.Numeric     `json:"unit_cost"`
+	TotalCost       pgtype.Numeric     `json:"total_cost"`
+	SourceDocType   pgtype.Text        `json:"source_doc_type"`
+	SourceDocID     pgtype.UUID        `json:"source_doc_id"`
+	SourceDocLineID pgtype.UUID        `json:"source_doc_line_id"`
+	OccurredAt      pgtype.Timestamptz `json:"occurred_at"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type InventoryStockReservations struct {
+	ID                pgtype.UUID        `json:"id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	ItemID            pgtype.UUID        `json:"item_id"`
+	WarehouseID       pgtype.UUID        `json:"warehouse_id"`
+	BinID             pgtype.UUID        `json:"bin_id"`
+	Quantity          pgtype.Numeric     `json:"quantity"`
+	ReservationStatus string             `json:"reservation_status"`
+	DemandSourceType  string             `json:"demand_source_type"`
+	DemandSourceID    pgtype.UUID        `json:"demand_source_id"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type InventoryTransferOrderLines struct {
+	ID                 pgtype.UUID    `json:"id"`
+	TransferOrderID    pgtype.UUID    `json:"transfer_order_id"`
+	ItemID             pgtype.UUID    `json:"item_id"`
+	SkuID              pgtype.UUID    `json:"sku_id"`
+	RequestedQuantity  pgtype.Numeric `json:"requested_quantity"`
+	DispatchedQuantity pgtype.Numeric `json:"dispatched_quantity"`
+	ReceivedQuantity   pgtype.Numeric `json:"received_quantity"`
+	UomID              pgtype.UUID    `json:"uom_id"`
+	Notes              pgtype.Text    `json:"notes"`
+}
+
+type InventoryTransferOrders struct {
+	ID                   pgtype.UUID        `json:"id"`
+	LegalEntityID        pgtype.UUID        `json:"legal_entity_id"`
+	OrderNumber          string             `json:"order_number"`
+	FromWarehouseID      pgtype.UUID        `json:"from_warehouse_id"`
+	ToWarehouseID        pgtype.UUID        `json:"to_warehouse_id"`
+	Status               string             `json:"status"`
+	ShippingDate         pgtype.Timestamptz `json:"shipping_date"`
+	ExpectedDeliveryDate pgtype.Timestamptz `json:"expected_delivery_date"`
+	ReceivedDate         pgtype.Timestamptz `json:"received_date"`
+	Notes                pgtype.Text        `json:"notes"`
+	CreatedBy            pgtype.UUID        `json:"created_by"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type OrganizationAddresses struct {
 	ID               pgtype.UUID        `json:"id"`
 	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
@@ -726,6 +885,36 @@ type TaxZeroRateReasons struct {
 	DescriptionAr pgtype.Text        `json:"description_ar"`
 	IsActive      bool               `json:"is_active"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type WarehouseBinLocations struct {
+	ID          pgtype.UUID        `json:"id"`
+	WarehouseID pgtype.UUID        `json:"warehouse_id"`
+	Code        string             `json:"code"`
+	Aisle       pgtype.Text        `json:"aisle"`
+	Rack        pgtype.Text        `json:"rack"`
+	Shelf       pgtype.Text        `json:"shelf"`
+	Bin         pgtype.Text        `json:"bin"`
+	IsDefault   bool               `json:"is_default"`
+	IsActive    bool               `json:"is_active"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WarehouseWarehouses struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	WarehouseType string             `json:"warehouse_type"`
+	IsActive      bool               `json:"is_active"`
+	AddressLine1  pgtype.Text        `json:"address_line1"`
+	City          pgtype.Text        `json:"city"`
+	PostalCode    pgtype.Text        `json:"postal_code"`
+	CountryCode   pgtype.Text        `json:"country_code"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type WorkflowApprovalDecisions struct {
