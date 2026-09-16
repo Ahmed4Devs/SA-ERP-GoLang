@@ -464,6 +464,122 @@ type PlatformOutboxEvents struct {
 	LastError     pgtype.Text        `json:"last_error"`
 }
 
+type ProductsBarcodes struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	ItemID        pgtype.UUID        `json:"item_id"`
+	SkuID         pgtype.UUID        `json:"sku_id"`
+	UomID         pgtype.UUID        `json:"uom_id"`
+	Barcode       string             `json:"barcode"`
+	BarcodeFormat string             `json:"barcode_format"`
+	IsPrimary     bool               `json:"is_primary"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type ProductsCategories struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	ParentID      pgtype.UUID        `json:"parent_id"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	Description   pgtype.Text        `json:"description"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ProductsItemTaxProfiles struct {
+	ID                  pgtype.UUID        `json:"id"`
+	ItemID              pgtype.UUID        `json:"item_id"`
+	TaxCodeID           pgtype.UUID        `json:"tax_code_id"`
+	ExemptionReasonCode pgtype.Text        `json:"exemption_reason_code"`
+	ZeroRateReasonCode  pgtype.Text        `json:"zero_rate_reason_code"`
+	IsActive            bool               `json:"is_active"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type ProductsItemUoms struct {
+	ID             pgtype.UUID        `json:"id"`
+	ItemID         pgtype.UUID        `json:"item_id"`
+	UomID          pgtype.UUID        `json:"uom_id"`
+	ConversionRate pgtype.Numeric     `json:"conversion_rate"`
+	IsBaseUom      bool               `json:"is_base_uom"`
+	IsSalesUom     bool               `json:"is_sales_uom"`
+	IsPurchaseUom  bool               `json:"is_purchase_uom"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type ProductsItemVariants struct {
+	ID          pgtype.UUID        `json:"id"`
+	ItemID      pgtype.UUID        `json:"item_id"`
+	VariantCode string             `json:"variant_code"`
+	NameEn      string             `json:"name_en"`
+	NameAr      string             `json:"name_ar"`
+	Attributes  []byte             `json:"attributes"`
+	IsActive    bool               `json:"is_active"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ProductsItems struct {
+	ID                pgtype.UUID        `json:"id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	CategoryID        pgtype.UUID        `json:"category_id"`
+	Code              string             `json:"code"`
+	NameEn            string             `json:"name_en"`
+	NameAr            string             `json:"name_ar"`
+	DescriptionEn     pgtype.Text        `json:"description_en"`
+	DescriptionAr     pgtype.Text        `json:"description_ar"`
+	ItemType          string             `json:"item_type"`
+	TrackingType      string             `json:"tracking_type"`
+	BaseUomID         pgtype.UUID        `json:"base_uom_id"`
+	PurchaseUomID     pgtype.UUID        `json:"purchase_uom_id"`
+	SalesUomID        pgtype.UUID        `json:"sales_uom_id"`
+	DefaultTaxCodeID  pgtype.UUID        `json:"default_tax_code_id"`
+	CostPrice         pgtype.Numeric     `json:"cost_price"`
+	ListPrice         pgtype.Numeric     `json:"list_price"`
+	IsSalesEnabled    bool               `json:"is_sales_enabled"`
+	IsPurchaseEnabled bool               `json:"is_purchase_enabled"`
+	IsActive          bool               `json:"is_active"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	Version           int64              `json:"version"`
+}
+
+type ProductsSkus struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	ItemID        pgtype.UUID        `json:"item_id"`
+	VariantID     pgtype.UUID        `json:"variant_id"`
+	SkuCode       string             `json:"sku_code"`
+	CostPrice     pgtype.Numeric     `json:"cost_price"`
+	SellingPrice  pgtype.Numeric     `json:"selling_price"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ProductsUnitsOfMeasure struct {
+	ID        pgtype.UUID        `json:"id"`
+	Code      string             `json:"code"`
+	NameEn    string             `json:"name_en"`
+	NameAr    string             `json:"name_ar"`
+	SymbolEn  pgtype.Text        `json:"symbol_en"`
+	SymbolAr  pgtype.Text        `json:"symbol_ar"`
+	UomType   string             `json:"uom_type"`
+	IsActive  bool               `json:"is_active"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type ProductsUomConversions struct {
+	ID             pgtype.UUID        `json:"id"`
+	FromUomID      pgtype.UUID        `json:"from_uom_id"`
+	ToUomID        pgtype.UUID        `json:"to_uom_id"`
+	ConversionRate pgtype.Numeric     `json:"conversion_rate"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type RefCountries struct {
 	Code        string      `json:"code"`
 	NameEn      string      `json:"name_en"`

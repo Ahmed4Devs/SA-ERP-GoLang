@@ -12,6 +12,7 @@ sql:
       - "database/queries/workflow"
       - "database/queries/accounting"
       - "database/queries/tax"
+      - "database/queries/products"
     gen:
       go:
         package: "sqlc"

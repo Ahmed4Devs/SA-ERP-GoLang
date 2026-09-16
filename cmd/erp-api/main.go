@@ -18,6 +18,7 @@ import (
 	platformhttp "erp/internal/platform/http"
 	"erp/internal/platform/observability"
 	"erp/internal/platform/transaction"
+	"erp/internal/products"
 	"erp/internal/tax"
 	"erp/internal/workflow"
 )
@@ -146,6 +147,18 @@ func main() {
 			}
 		}
 		logger.Info("Tax module and ZATCA VAT engine registered")
+
+		// H. Products Module (ERP Product Master, UOMs, Variants, SKUs, Barcodes)
+		productsModule := products.NewModule(cfg, db)
+		productsModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := productsModule.SeedDefaultProductsData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Products Data", "error", err)
+			} else {
+				logger.Info("Default Saudi Categories, UOMs, and Product Master catalog verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Products module and catalog engine registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown
