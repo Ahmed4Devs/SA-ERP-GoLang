@@ -118,7 +118,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { key: "sales", href: "/sales", icon: ShoppingBag, label: t.nav.sales || "المبيعات والفوترة", active: pathname === "/sales" },
     { key: "suppliers", href: "/suppliers", icon: Truck, label: (t.nav as any)?.suppliers || "الموردون والدائنون (AP)", active: pathname === "/suppliers" },
     { key: "payables", href: "/payables", icon: Receipt, label: (t.nav as any)?.payables || "الفواتير وسندات الصرف", active: pathname === "/payables" },
-    { key: "purchasing", href: "#", icon: ShoppingCart, label: t.nav.purchasing },
+    { key: "purchasing", href: "/purchasing", icon: ShoppingCart, label: t.nav.purchasing || "المشتريات والتعميد", active: pathname === "/purchasing" },
     { key: "treasury", href: "#", icon: Landmark, label: t.nav.treasury },
     { key: "hr", href: "#", icon: Users, label: t.nav.hr },
     { key: "payroll", href: "#", icon: Banknote, label: t.nav.payroll },

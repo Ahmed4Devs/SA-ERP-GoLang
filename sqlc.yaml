@@ -17,6 +17,7 @@ sql:
       - "database/queries/receivables"
       - "database/queries/sales"
       - "database/queries/payables"
+      - "database/queries/purchasing"
     gen:
       go:
         package: "sqlc"

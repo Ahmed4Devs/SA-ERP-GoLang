@@ -21,6 +21,7 @@ import (
 	"erp/internal/platform/observability"
 	"erp/internal/platform/transaction"
 	"erp/internal/products"
+	"erp/internal/purchasing"
 	"erp/internal/receivables"
 	"erp/internal/sales"
 	"erp/internal/tax"
@@ -211,6 +212,18 @@ func main() {
 			}
 		}
 		logger.Info("Payables module and supplier management registered")
+
+		// M. Purchasing Module (Purchase Requests, RFQs, Quotes, Purchase Orders, Goods Receipts, 3-Way Match)
+		purchasingModule := purchasing.NewModule(cfg, db)
+		purchasingModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := purchasingModule.SeedDefaultPurchasingData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Purchasing Data", "error", err)
+			} else {
+				logger.Info("Default Purchasing PRs, POs, and Receipts verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Purchasing module and procure-to-pay workflow registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown
