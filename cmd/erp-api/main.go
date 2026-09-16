@@ -14,6 +14,7 @@ import (
 	"erp/internal/iam"
 	"erp/internal/inventory"
 	"erp/internal/organization"
+	"erp/internal/payables"
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
 	platformhttp "erp/internal/platform/http"
@@ -198,6 +199,18 @@ func main() {
 			}
 		}
 		logger.Info("Sales module and order-to-cash workflow registered")
+
+		// L. Payables Module (Suppliers, Payment Terms, Supplier Invoices, Payments, Aging)
+		payablesModule := payables.NewModule(cfg, db)
+		payablesModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := payablesModule.SeedDefaultPayablesData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Payables Data", "error", err)
+			} else {
+				logger.Info("Default Saudi Suppliers, Payment Terms, and AP verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Payables module and supplier management registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

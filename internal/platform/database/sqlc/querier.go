@@ -20,6 +20,9 @@ type Querier interface {
 	CountJournalEntriesByLegalEntity(ctx context.Context, legalEntityID pgtype.UUID) (int64, error)
 	CountReceipts(ctx context.Context, arg CountReceiptsParams) (int64, error)
 	CountRecentFailedAttempts(ctx context.Context, arg CountRecentFailedAttemptsParams) (int64, error)
+	CountSupplierInvoices(ctx context.Context, arg CountSupplierInvoicesParams) (int64, error)
+	CountSupplierPayments(ctx context.Context, arg CountSupplierPaymentsParams) (int64, error)
+	CountSuppliers(ctx context.Context, arg CountSuppliersParams) (int64, error)
 	CreateAccount(ctx context.Context, arg CreateAccountParams) (AccountingAccounts, error)
 	CreateAddress(ctx context.Context, arg CreateAddressParams) (OrganizationAddresses, error)
 	CreateApprovalDecision(ctx context.Context, arg CreateApprovalDecisionParams) (WorkflowApprovalDecisions, error)
@@ -54,6 +57,10 @@ type Querier interface {
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (SalesOrders, error)
 	CreateOrderLine(ctx context.Context, arg CreateOrderLineParams) (SalesOrderLines, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (OrganizationOrganizations, error)
+	// Open Items Queries
+	CreatePayablesOpenItem(ctx context.Context, arg CreatePayablesOpenItemParams) (PayablesOpenItems, error)
+	// Payment Terms Queries
+	CreatePayablesPaymentTerm(ctx context.Context, arg CreatePayablesPaymentTermParams) (PayablesPaymentTerms, error)
 	// Payment Terms Queries
 	CreatePaymentTerm(ctx context.Context, arg CreatePaymentTermParams) (ReceivablesPaymentTerms, error)
 	CreateQuotation(ctx context.Context, arg CreateQuotationParams) (SalesQuotations, error)
@@ -73,6 +80,19 @@ type Querier interface {
 	CreateStockCount(ctx context.Context, arg CreateStockCountParams) (InventoryStockCounts, error)
 	CreateStockCountLine(ctx context.Context, arg CreateStockCountLineParams) (InventoryStockCountLines, error)
 	CreateStockReservation(ctx context.Context, arg CreateStockReservationParams) (InventoryStockReservations, error)
+	// Supplier Queries
+	CreateSupplier(ctx context.Context, arg CreateSupplierParams) (PayablesSuppliers, error)
+	CreateSupplierAccount(ctx context.Context, arg CreateSupplierAccountParams) (PayablesSupplierAccounts, error)
+	// Supplier Credit Notes
+	CreateSupplierCreditNote(ctx context.Context, arg CreateSupplierCreditNoteParams) (PayablesSupplierCreditNotes, error)
+	CreateSupplierCreditNoteLine(ctx context.Context, arg CreateSupplierCreditNoteLineParams) (PayablesSupplierCreditNoteLines, error)
+	// Supplier Invoices Queries
+	CreateSupplierInvoice(ctx context.Context, arg CreateSupplierInvoiceParams) (PayablesSupplierInvoices, error)
+	CreateSupplierInvoiceLine(ctx context.Context, arg CreateSupplierInvoiceLineParams) (PayablesSupplierInvoiceLines, error)
+	// Supplier Payments Queries
+	CreateSupplierPayment(ctx context.Context, arg CreateSupplierPaymentParams) (PayablesPayments, error)
+	// Payment Allocations Queries
+	CreateSupplierPaymentAllocation(ctx context.Context, arg CreateSupplierPaymentAllocationParams) (PayablesPaymentAllocations, error)
 	CreateTaxCode(ctx context.Context, arg CreateTaxCodeParams) (TaxTaxCodes, error)
 	CreateTaxPeriod(ctx context.Context, arg CreateTaxPeriodParams) (TaxTaxPeriods, error)
 	CreateTaxRateVersion(ctx context.Context, arg CreateTaxRateVersionParams) (TaxTaxRateVersions, error)
@@ -166,6 +186,8 @@ type Querier interface {
 	GetOrganizationByCode(ctx context.Context, code string) (OrganizationOrganizations, error)
 	GetOrganizationByID(ctx context.Context, id pgtype.UUID) (OrganizationOrganizations, error)
 	GetPasswordByUserID(ctx context.Context, userID pgtype.UUID) (IamPasswordCredentials, error)
+	GetPayablesOpenItemByID(ctx context.Context, id pgtype.UUID) (PayablesOpenItems, error)
+	GetPayablesPaymentTermByID(ctx context.Context, id pgtype.UUID) (PayablesPaymentTerms, error)
 	GetPaymentTermByID(ctx context.Context, id pgtype.UUID) (ReceivablesPaymentTerms, error)
 	GetPublishedVersionByDefinitionID(ctx context.Context, definitionID pgtype.UUID) (WorkflowDefinitionVersions, error)
 	GetQuotation(ctx context.Context, id pgtype.UUID) (SalesQuotations, error)
@@ -181,6 +203,13 @@ type Querier interface {
 	GetSessionByTokenHash(ctx context.Context, tokenHash string) (GetSessionByTokenHashRow, error)
 	GetStockAdjustmentByID(ctx context.Context, id pgtype.UUID) (GetStockAdjustmentByIDRow, error)
 	GetStockCountByID(ctx context.Context, id pgtype.UUID) (GetStockCountByIDRow, error)
+	GetSupplierAgingSummary(ctx context.Context, supplierID pgtype.UUID) (GetSupplierAgingSummaryRow, error)
+	GetSupplierByID(ctx context.Context, id pgtype.UUID) (GetSupplierByIDRow, error)
+	GetSupplierByNumber(ctx context.Context, arg GetSupplierByNumberParams) (PayablesSuppliers, error)
+	GetSupplierCreditNoteByID(ctx context.Context, id pgtype.UUID) (GetSupplierCreditNoteByIDRow, error)
+	GetSupplierInvoiceByID(ctx context.Context, id pgtype.UUID) (GetSupplierInvoiceByIDRow, error)
+	GetSupplierInvoiceByNumber(ctx context.Context, arg GetSupplierInvoiceByNumberParams) (PayablesSupplierInvoices, error)
+	GetSupplierPaymentByID(ctx context.Context, id pgtype.UUID) (GetSupplierPaymentByIDRow, error)
 	GetTaxCategoryByCode(ctx context.Context, code string) (TaxTaxCategories, error)
 	GetTaxCodeByEntityAndCode(ctx context.Context, arg GetTaxCodeByEntityAndCodeParams) (TaxTaxCodes, error)
 	GetTaxCodeByID(ctx context.Context, id pgtype.UUID) (TaxTaxCodes, error)
@@ -264,9 +293,12 @@ type Querier interface {
 	ListNumberSequencesByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationNumberSequences, error)
 	ListOpenItemsByCustomer(ctx context.Context, arg ListOpenItemsByCustomerParams) ([]ListOpenItemsByCustomerRow, error)
 	ListOpenItemsByLegalEntity(ctx context.Context, arg ListOpenItemsByLegalEntityParams) ([]ListOpenItemsByLegalEntityRow, error)
+	ListOpenItemsByLegalEntityPayables(ctx context.Context, arg ListOpenItemsByLegalEntityPayablesParams) ([]ListOpenItemsByLegalEntityPayablesRow, error)
+	ListOpenItemsBySupplier(ctx context.Context, arg ListOpenItemsBySupplierParams) ([]ListOpenItemsBySupplierRow, error)
 	ListOrderLines(ctx context.Context, orderID pgtype.UUID) ([]SalesOrderLines, error)
 	ListOrders(ctx context.Context, arg ListOrdersParams) ([]SalesOrders, error)
 	ListOrganizations(ctx context.Context) ([]OrganizationOrganizations, error)
+	ListPayablesPaymentTerms(ctx context.Context, arg ListPayablesPaymentTermsParams) ([]PayablesPaymentTerms, error)
 	ListPaymentTerms(ctx context.Context, arg ListPaymentTermsParams) ([]ReceivablesPaymentTerms, error)
 	ListPendingApprovalRequestsForUser(ctx context.Context, assignedUserID pgtype.UUID) ([]ListPendingApprovalRequestsForUserRow, error)
 	ListPermissions(ctx context.Context) ([]AuthzPermissions, error)
@@ -286,6 +318,14 @@ type Querier interface {
 	ListStockAdjustmentsByEntity(ctx context.Context, arg ListStockAdjustmentsByEntityParams) ([]ListStockAdjustmentsByEntityRow, error)
 	ListStockCountLines(ctx context.Context, countID pgtype.UUID) ([]ListStockCountLinesRow, error)
 	ListStockCountsByEntity(ctx context.Context, arg ListStockCountsByEntityParams) ([]ListStockCountsByEntityRow, error)
+	ListSupplierAccounts(ctx context.Context, supplierID pgtype.UUID) ([]ListSupplierAccountsRow, error)
+	ListSupplierCreditNoteLines(ctx context.Context, creditNoteID pgtype.UUID) ([]PayablesSupplierCreditNoteLines, error)
+	ListSupplierCreditNotes(ctx context.Context, arg ListSupplierCreditNotesParams) ([]ListSupplierCreditNotesRow, error)
+	ListSupplierInvoiceLines(ctx context.Context, invoiceID pgtype.UUID) ([]ListSupplierInvoiceLinesRow, error)
+	ListSupplierInvoices(ctx context.Context, arg ListSupplierInvoicesParams) ([]ListSupplierInvoicesRow, error)
+	ListSupplierPaymentAllocations(ctx context.Context, paymentID pgtype.UUID) ([]ListSupplierPaymentAllocationsRow, error)
+	ListSupplierPayments(ctx context.Context, arg ListSupplierPaymentsParams) ([]ListSupplierPaymentsRow, error)
+	ListSuppliers(ctx context.Context, arg ListSuppliersParams) ([]ListSuppliersRow, error)
 	ListTaxCategories(ctx context.Context) ([]TaxTaxCategories, error)
 	ListTaxCodesByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]ListTaxCodesByEntityRow, error)
 	ListTaxPeriodsByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]TaxTaxPeriods, error)
@@ -306,6 +346,7 @@ type Querier interface {
 	ListZeroRateReasons(ctx context.Context) ([]TaxZeroRateReasons, error)
 	LockBalance(ctx context.Context, arg LockBalanceParams) (InventoryStockBalances, error)
 	LockOpenItem(ctx context.Context, id pgtype.UUID) (ReceivablesOpenItems, error)
+	LockPayablesOpenItem(ctx context.Context, id pgtype.UUID) (PayablesOpenItems, error)
 	MarkJournalEntryReversed(ctx context.Context, arg MarkJournalEntryReversedParams) (AccountingJournalEntries, error)
 	MarkOutboxEventPublished(ctx context.Context, id pgtype.UUID) error
 	PostCreditNote(ctx context.Context, arg PostCreditNoteParams) (SalesCreditNotes, error)
@@ -320,6 +361,7 @@ type Querier interface {
 	SearchItems(ctx context.Context, arg SearchItemsParams) ([]SearchItemsRow, error)
 	SetCreditHold(ctx context.Context, arg SetCreditHoldParams) (ReceivablesCustomerCreditLimits, error)
 	SetPassword(ctx context.Context, arg SetPasswordParams) error
+	SetSupplierStatus(ctx context.Context, arg SetSupplierStatusParams) error
 	UpdateAccount(ctx context.Context, arg UpdateAccountParams) (AccountingAccounts, error)
 	UpdateApprovalRequestStatus(ctx context.Context, arg UpdateApprovalRequestStatusParams) (WorkflowApprovalRequests, error)
 	UpdateBranch(ctx context.Context, arg UpdateBranchParams) (OrganizationBranches, error)
@@ -342,6 +384,7 @@ type Querier interface {
 	UpdateOrderLineInvoicedQty(ctx context.Context, arg UpdateOrderLineInvoicedQtyParams) (SalesOrderLines, error)
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (SalesOrders, error)
 	UpdateOrganization(ctx context.Context, arg UpdateOrganizationParams) (OrganizationOrganizations, error)
+	UpdatePayablesOpenItemAllocation(ctx context.Context, arg UpdatePayablesOpenItemAllocationParams) (PayablesOpenItems, error)
 	UpdateQuotationStatus(ctx context.Context, arg UpdateQuotationStatusParams) (SalesQuotations, error)
 	UpdateReceiptAllocationAmounts(ctx context.Context, arg UpdateReceiptAllocationAmountsParams) (ReceivablesReceipts, error)
 	UpdateReceiptStatus(ctx context.Context, arg UpdateReceiptStatusParams) (ReceivablesReceipts, error)
@@ -352,6 +395,10 @@ type Querier interface {
 	UpdateStockBalanceCostAndValue(ctx context.Context, arg UpdateStockBalanceCostAndValueParams) (InventoryStockBalances, error)
 	UpdateStockCountLine(ctx context.Context, arg UpdateStockCountLineParams) (InventoryStockCountLines, error)
 	UpdateStockCountStatus(ctx context.Context, arg UpdateStockCountStatusParams) (InventoryStockCounts, error)
+	UpdateSupplier(ctx context.Context, arg UpdateSupplierParams) (PayablesSuppliers, error)
+	UpdateSupplierInvoicePaymentStatus(ctx context.Context, arg UpdateSupplierInvoicePaymentStatusParams) error
+	UpdateSupplierInvoiceStatus(ctx context.Context, arg UpdateSupplierInvoiceStatusParams) error
+	UpdateSupplierPaymentStatus(ctx context.Context, arg UpdateSupplierPaymentStatusParams) error
 	UpdateTaxCode(ctx context.Context, arg UpdateTaxCodeParams) (TaxTaxCodes, error)
 	UpdateTaxPeriodStatus(ctx context.Context, arg UpdateTaxPeriodStatusParams) (TaxTaxPeriods, error)
 	UpdateTaxReturn(ctx context.Context, arg UpdateTaxReturnParams) (TaxTaxReturns, error)

@@ -29,6 +29,8 @@ import {
   History,
   GitMerge,
   Package,
+  Truck,
+  Receipt,
 } from "lucide-react";
 
 import arDict from "@/messages/ar.json";
@@ -114,6 +116,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { key: "inventory", href: "/inventory", icon: Boxes, label: t.nav.inventory, active: pathname === "/inventory" },
     { key: "customers", href: "/customers", icon: Users, label: (t.nav as any)?.customers || "العملاء والمدينون (AR)", active: pathname === "/customers" },
     { key: "sales", href: "/sales", icon: ShoppingBag, label: t.nav.sales || "المبيعات والفوترة", active: pathname === "/sales" },
+    { key: "suppliers", href: "/suppliers", icon: Truck, label: (t.nav as any)?.suppliers || "الموردون والدائنون (AP)", active: pathname === "/suppliers" },
+    { key: "payables", href: "/payables", icon: Receipt, label: (t.nav as any)?.payables || "الفواتير وسندات الصرف", active: pathname === "/payables" },
     { key: "purchasing", href: "#", icon: ShoppingCart, label: t.nav.purchasing },
     { key: "treasury", href: "#", icon: Landmark, label: t.nav.treasury },
     { key: "hr", href: "#", icon: Users, label: t.nav.hr },
