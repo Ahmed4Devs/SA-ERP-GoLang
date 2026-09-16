@@ -1242,6 +1242,203 @@ type PayablesSuppliers struct {
 	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
 }
 
+type PayrollAdvances struct {
+	ID              pgtype.UUID        `json:"id"`
+	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
+	EmployeeID      pgtype.UUID        `json:"employee_id"`
+	Amount          pgtype.Numeric     `json:"amount"`
+	RequestDate     pgtype.Date        `json:"request_date"`
+	Status          string             `json:"status"`
+	DeductedInRunID pgtype.UUID        `json:"deducted_in_run_id"`
+	Reason          pgtype.Text        `json:"reason"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type PayrollCalculationLines struct {
+	ID            pgtype.UUID        `json:"id"`
+	RunEmployeeID pgtype.UUID        `json:"run_employee_id"`
+	ComponentID   pgtype.UUID        `json:"component_id"`
+	LineType      string             `json:"line_type"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	Rate          pgtype.Numeric     `json:"rate"`
+	BasisAmount   pgtype.Numeric     `json:"basis_amount"`
+	Amount        pgtype.Numeric     `json:"amount"`
+	FormulaNote   pgtype.Text        `json:"formula_note"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type PayrollEmployeeSalaryAssignments struct {
+	ID                 pgtype.UUID        `json:"id"`
+	LegalEntityID      pgtype.UUID        `json:"legal_entity_id"`
+	EmployeeID         pgtype.UUID        `json:"employee_id"`
+	SalaryStructureID  pgtype.UUID        `json:"salary_structure_id"`
+	EffectiveFrom      pgtype.Date        `json:"effective_from"`
+	EffectiveTo        pgtype.Date        `json:"effective_to"`
+	BasicSalary        pgtype.Numeric     `json:"basic_salary"`
+	HousingAllowance   pgtype.Numeric     `json:"housing_allowance"`
+	TransportAllowance pgtype.Numeric     `json:"transport_allowance"`
+	OtherAllowances    pgtype.Numeric     `json:"other_allowances"`
+	GrossSalary        pgtype.Numeric     `json:"gross_salary"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type PayrollEndOfServiceCalculations struct {
+	ID                    pgtype.UUID        `json:"id"`
+	LegalEntityID         pgtype.UUID        `json:"legal_entity_id"`
+	EmployeeID            pgtype.UUID        `json:"employee_id"`
+	CalculationNumber     string             `json:"calculation_number"`
+	HireDate              pgtype.Date        `json:"hire_date"`
+	TerminationDate       pgtype.Date        `json:"termination_date"`
+	TerminationReason     string             `json:"termination_reason"`
+	ServiceYears          pgtype.Numeric     `json:"service_years"`
+	LastGrossSalary       pgtype.Numeric     `json:"last_gross_salary"`
+	AwardAmount           pgtype.Numeric     `json:"award_amount"`
+	StatutoryRateFraction pgtype.Numeric     `json:"statutory_rate_fraction"`
+	FinalSettlementAmount pgtype.Numeric     `json:"final_settlement_amount"`
+	CalculationBreakdown  []byte             `json:"calculation_breakdown"`
+	Status                string             `json:"status"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
+type PayrollLoanInstallments struct {
+	ID                pgtype.UUID        `json:"id"`
+	LoanID            pgtype.UUID        `json:"loan_id"`
+	PayrollRunID      pgtype.UUID        `json:"payroll_run_id"`
+	InstallmentNumber int32              `json:"installment_number"`
+	DueDate           pgtype.Date        `json:"due_date"`
+	Amount            pgtype.Numeric     `json:"amount"`
+	Status            string             `json:"status"`
+	DeductedAt        pgtype.Timestamptz `json:"deducted_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type PayrollLoans struct {
+	ID                 pgtype.UUID        `json:"id"`
+	LegalEntityID      pgtype.UUID        `json:"legal_entity_id"`
+	EmployeeID         pgtype.UUID        `json:"employee_id"`
+	LoanNumber         string             `json:"loan_number"`
+	PrincipalAmount    pgtype.Numeric     `json:"principal_amount"`
+	MonthlyInstallment pgtype.Numeric     `json:"monthly_installment"`
+	RemainingBalance   pgtype.Numeric     `json:"remaining_balance"`
+	DisbursementDate   pgtype.Date        `json:"disbursement_date"`
+	Status             string             `json:"status"`
+	Reason             pgtype.Text        `json:"reason"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type PayrollPayslips struct {
+	ID                  pgtype.UUID        `json:"id"`
+	LegalEntityID       pgtype.UUID        `json:"legal_entity_id"`
+	RunEmployeeID       pgtype.UUID        `json:"run_employee_id"`
+	PayslipNumber       string             `json:"payslip_number"`
+	EmployeeID          pgtype.UUID        `json:"employee_id"`
+	PeriodID            pgtype.UUID        `json:"period_id"`
+	IssueDate           pgtype.Date        `json:"issue_date"`
+	GrossSalary         pgtype.Numeric     `json:"gross_salary"`
+	TotalDeductions     pgtype.Numeric     `json:"total_deductions"`
+	NetSalary           pgtype.Numeric     `json:"net_salary"`
+	CalculationSnapshot []byte             `json:"calculation_snapshot"`
+	IsViewedByEmployee  bool               `json:"is_viewed_by_employee"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type PayrollPeriods struct {
+	ID             pgtype.UUID        `json:"id"`
+	LegalEntityID  pgtype.UUID        `json:"legal_entity_id"`
+	FiscalPeriodID pgtype.UUID        `json:"fiscal_period_id"`
+	PeriodNameEn   string             `json:"period_name_en"`
+	PeriodNameAr   string             `json:"period_name_ar"`
+	PeriodYear     int32              `json:"period_year"`
+	PeriodMonth    int32              `json:"period_month"`
+	StartDate      pgtype.Date        `json:"start_date"`
+	EndDate        pgtype.Date        `json:"end_date"`
+	PaymentDueDate pgtype.Date        `json:"payment_due_date"`
+	IsClosed       bool               `json:"is_closed"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type PayrollRunEmployees struct {
+	ID                    pgtype.UUID        `json:"id"`
+	RunID                 pgtype.UUID        `json:"run_id"`
+	EmployeeID            pgtype.UUID        `json:"employee_id"`
+	ContractID            pgtype.UUID        `json:"contract_id"`
+	BasicSalary           pgtype.Numeric     `json:"basic_salary"`
+	HousingAllowance      pgtype.Numeric     `json:"housing_allowance"`
+	TransportAllowance    pgtype.Numeric     `json:"transport_allowance"`
+	OtherAllowances       pgtype.Numeric     `json:"other_allowances"`
+	OvertimeAmount        pgtype.Numeric     `json:"overtime_amount"`
+	GrossSalary           pgtype.Numeric     `json:"gross_salary"`
+	GosiEmployeeDeduction pgtype.Numeric     `json:"gosi_employee_deduction"`
+	LoanDeduction         pgtype.Numeric     `json:"loan_deduction"`
+	AbsenceDeduction      pgtype.Numeric     `json:"absence_deduction"`
+	OtherDeductions       pgtype.Numeric     `json:"other_deductions"`
+	TotalDeductions       pgtype.Numeric     `json:"total_deductions"`
+	NetSalary             pgtype.Numeric     `json:"net_salary"`
+	PaymentStatus         string             `json:"payment_status"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
+type PayrollRuns struct {
+	ID               pgtype.UUID        `json:"id"`
+	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
+	PeriodID         pgtype.UUID        `json:"period_id"`
+	RunNumber        string             `json:"run_number"`
+	RunDate          pgtype.Date        `json:"run_date"`
+	CutoffDate       pgtype.Date        `json:"cutoff_date"`
+	Status           string             `json:"status"`
+	TotalBasic       pgtype.Numeric     `json:"total_basic"`
+	TotalAllowances  pgtype.Numeric     `json:"total_allowances"`
+	TotalGross       pgtype.Numeric     `json:"total_gross"`
+	TotalDeductions  pgtype.Numeric     `json:"total_deductions"`
+	TotalNet         pgtype.Numeric     `json:"total_net"`
+	EmployeeCount    int32              `json:"employee_count"`
+	JournalEntryID   pgtype.UUID        `json:"journal_entry_id"`
+	WpsFileGenerated bool               `json:"wps_file_generated"`
+	WpsFileName      pgtype.Text        `json:"wps_file_name"`
+	PostedAt         pgtype.Timestamptz `json:"posted_at"`
+	PostedBy         pgtype.UUID        `json:"posted_by"`
+	CreatedBy        pgtype.UUID        `json:"created_by"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type PayrollSalaryComponents struct {
+	ID                   pgtype.UUID        `json:"id"`
+	LegalEntityID        pgtype.UUID        `json:"legal_entity_id"`
+	Code                 string             `json:"code"`
+	NameEn               string             `json:"name_en"`
+	NameAr               string             `json:"name_ar"`
+	ComponentType        string             `json:"component_type"`
+	IsTaxableOrGosiBasis bool               `json:"is_taxable_or_gosi_basis"`
+	CalculationType      string             `json:"calculation_type"`
+	FormulaExpression    pgtype.Text        `json:"formula_expression"`
+	DefaultAmount        pgtype.Numeric     `json:"default_amount"`
+	IsActive             bool               `json:"is_active"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type PayrollSalaryStructureLines struct {
+	ID                pgtype.UUID        `json:"id"`
+	SalaryStructureID pgtype.UUID        `json:"salary_structure_id"`
+	ComponentID       pgtype.UUID        `json:"component_id"`
+	LineNumber        int32              `json:"line_number"`
+	RatePercentage    pgtype.Numeric     `json:"rate_percentage"`
+	FixedAmount       pgtype.Numeric     `json:"fixed_amount"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type PayrollSalaryStructures struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	CurrencyCode  string             `json:"currency_code"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type PlatformIdempotencyKeys struct {
 	ID             pgtype.UUID        `json:"id"`
 	Scope          string             `json:"scope"`

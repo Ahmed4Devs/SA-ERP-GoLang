@@ -23,6 +23,7 @@ sql:
       - "database/queries/hr"
       - "database/queries/attendance"
       - "database/queries/leave"
+      - "database/queries/payroll"
     gen:
       go:
         package: "sqlc"

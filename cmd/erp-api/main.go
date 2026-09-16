@@ -28,6 +28,7 @@ import (
 	"erp/internal/hr"
 	"erp/internal/attendance"
 	"erp/internal/leave"
+	"erp/internal/payroll"
 	"erp/internal/tax"
 	"erp/internal/treasury"
 	"erp/internal/workflow"
@@ -282,6 +283,18 @@ func main() {
 			}
 		}
 		logger.Info("Leave module and reconcilable balance ledger registered")
+
+		// S. Payroll Module (Deterministic Engine, WPS/SIF File Generator, Payslips, Loans, EOS)
+		payrollModule := payroll.NewModule(cfg, db)
+		payrollModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := payrollModule.SeedDefaultPayrollData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Payroll Data", "error", err)
+			} else {
+				logger.Info("Default Saudi Payroll Components, Structures, and Sample Periods verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Payroll module and deterministic calculation engine registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

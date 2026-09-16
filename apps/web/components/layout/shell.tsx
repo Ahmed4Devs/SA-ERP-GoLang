@@ -126,7 +126,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { key: "hr", href: "/hr", icon: Users, label: t.nav.hr, active: pathname === "/hr" },
     { key: "attendance", href: "/attendance", icon: Clock, label: (t.nav as any)?.attendance || "الحضور والانصراف", active: pathname === "/attendance" },
     { key: "leave", href: "/leave", icon: Calendar, label: (t.nav as any)?.leave || "الإجازات والأرصدة", active: pathname === "/leave" },
-    { key: "payroll", href: "#", icon: Banknote, label: t.nav.payroll },
+    { key: "payroll", href: "/payroll", icon: Banknote, label: t.nav.payroll, active: pathname === "/payroll" },
     { key: "gosi", href: "#", icon: FileCheck2, label: t.nav.gosi },
     { key: "zatca", href: "#", icon: ReceiptText, label: t.nav.zatca },
     { key: "reports", href: "#", icon: BarChart3, label: t.nav.reports },

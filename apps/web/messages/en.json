@@ -731,6 +731,36 @@
     "col_tx_balance_after": "Balance After",
     "col_tx_ref": "Legal Reference",
     "col_tx_date": "Date"
+  },
+  "payroll": {
+    "badge": "Payroll Engine & Wage Protection (WPS)",
+    "title": "Payroll Management & Disbursement Runs",
+    "subtitle": "Deterministic, immutable payroll calculation engine compliant with Saudi Wage Protection System (WPS / SIF), GOSI, and Labor Law EOS Award",
+    "kpi_total_payroll": "Total Monthly Payroll (Gross)",
+    "kpi_total_net": "Net Payable Salaries",
+    "kpi_gosi_deductions": "GOSI Deductions",
+    "kpi_wps_compliance": "WPS Compliance Rate",
+    "tab_runs": "Payroll Runs",
+    "tab_payslips": "Individual Payslips",
+    "tab_components": "Salary Structures & Components",
+    "tab_eos": "End of Service Award Calculator",
+    "btn_new_run": "Create Payroll Run",
+    "btn_calculate": "Calculate Payroll",
+    "btn_approve": "Approve Run",
+    "btn_post": "Post to General Ledger",
+    "btn_export_wps": "Export WPS File (SIF)",
+    "btn_calculate_eos": "Calculate EOS Award",
+    "col_run_number": "Run #",
+    "col_period": "Period",
+    "col_run_date": "Due Date",
+    "col_employees_count": "Employees",
+    "col_total_gross": "Total Gross",
+    "col_total_deductions": "Total Deductions",
+    "col_total_net": "Total Net",
+    "col_status": "Status",
+    "col_je_status": "GL Journal Entry",
+    "col_actions": "Actions"
   }
 }
+
 

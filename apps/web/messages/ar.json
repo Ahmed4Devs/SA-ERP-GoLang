@@ -731,6 +731,36 @@
     "col_tx_balance_after": "الرصيد بعد الحركة",
     "col_tx_ref": "المرجع النظامي",
     "col_tx_date": "تاريخ الحركة"
+  },
+  "payroll": {
+    "badge": "محرك الرواتب وحماية الأجور WPS",
+    "title": "إدارة الرواتب والأجور ومسيرات الصرف",
+    "subtitle": "حسابات دقيقة غير قابلة للتعديل بعد الترحيل، متوافقة 100% مع نظام حماية الأجور السعودي (WPS / MHRSD) وتأمينات GOSI ومكافأة نهاية الخدمة",
+    "kpi_total_payroll": "إجمالي كتلة الرواتب (شهرياً)",
+    "kpi_total_net": "صافي الرواتب المستحقة للصرف",
+    "kpi_gosi_deductions": "استقطاعات التأمينات (GOSI)",
+    "kpi_wps_compliance": "نسبة الامتثال لحماية الأجور",
+    "tab_runs": "مسيرات الرواتب (Payroll Runs)",
+    "tab_payslips": "قسائم الرواتب الفردية (Payslips)",
+    "tab_components": "عناصر وهياكل الرواتب (Salary Structures)",
+    "tab_eos": "حاسبة مكافأة نهاية الخدمة (EOS Calculator)",
+    "btn_new_run": "إنشاء مسير رواتب جديد",
+    "btn_calculate": "حساب المسير",
+    "btn_approve": "اعتماد المسير",
+    "btn_post": "ترحيل المسير للدفتر العام",
+    "btn_export_wps": "تصدير ملف حماية الأجور (SIF)",
+    "btn_calculate_eos": "احتساب مكافأة نهاية الخدمة",
+    "col_run_number": "رقم المسير",
+    "col_period": "فترة المسير",
+    "col_run_date": "تاريخ الاستحقاق",
+    "col_employees_count": "عدد الموظفين",
+    "col_total_gross": "إجمالي المستحقات",
+    "col_total_deductions": "إجمالي الاستقطاعات",
+    "col_total_net": "صافي الصرف",
+    "col_status": "الحالة التشغيلية",
+    "col_je_status": "القيد المحاسبي",
+    "col_actions": "الإجراءات"
   }
 }
+
 
