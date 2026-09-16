@@ -784,6 +784,115 @@ type ProductsUomConversions struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type ReceivablesCustomerAccounts struct {
+	ID           pgtype.UUID        `json:"id"`
+	CustomerID   pgtype.UUID        `json:"customer_id"`
+	GlAccountID  pgtype.UUID        `json:"gl_account_id"`
+	CurrencyCode string             `json:"currency_code"`
+	IsPrimary    bool               `json:"is_primary"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type ReceivablesCustomerCreditLimits struct {
+	ID             pgtype.UUID        `json:"id"`
+	CustomerID     pgtype.UUID        `json:"customer_id"`
+	CreditLimit    pgtype.Numeric     `json:"credit_limit"`
+	CurrentBalance pgtype.Numeric     `json:"current_balance"`
+	MaxOverdueDays int32              `json:"max_overdue_days"`
+	BlockAction    string             `json:"block_action"`
+	IsCreditHold   bool               `json:"is_credit_hold"`
+	HoldReason     pgtype.Text        `json:"hold_reason"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ReceivablesCustomers struct {
+	ID               pgtype.UUID        `json:"id"`
+	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
+	CustomerNumber   string             `json:"customer_number"`
+	CustomerType     string             `json:"customer_type"`
+	NameEn           string             `json:"name_en"`
+	NameAr           string             `json:"name_ar"`
+	TaxID            pgtype.Text        `json:"tax_id"`
+	CrNumber         pgtype.Text        `json:"cr_number"`
+	NationalID       pgtype.Text        `json:"national_id"`
+	BuildingNo       pgtype.Text        `json:"building_no"`
+	StreetName       pgtype.Text        `json:"street_name"`
+	District         pgtype.Text        `json:"district"`
+	City             string             `json:"city"`
+	PostalCode       pgtype.Text        `json:"postal_code"`
+	AdditionalNo     pgtype.Text        `json:"additional_no"`
+	CountryCode      string             `json:"country_code"`
+	Email            pgtype.Text        `json:"email"`
+	Phone            pgtype.Text        `json:"phone"`
+	ContactPerson    pgtype.Text        `json:"contact_person"`
+	PaymentTermsID   pgtype.UUID        `json:"payment_terms_id"`
+	CurrencyCode     string             `json:"currency_code"`
+	DefaultAccountID pgtype.UUID        `json:"default_account_id"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ReceivablesOpenItems struct {
+	ID              pgtype.UUID        `json:"id"`
+	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
+	CustomerID      pgtype.UUID        `json:"customer_id"`
+	DocumentType    string             `json:"document_type"`
+	DocumentNumber  string             `json:"document_number"`
+	DocumentID      pgtype.UUID        `json:"document_id"`
+	DocumentDate    pgtype.Date        `json:"document_date"`
+	DueDate         pgtype.Date        `json:"due_date"`
+	CurrencyCode    string             `json:"currency_code"`
+	OriginalAmount  pgtype.Numeric     `json:"original_amount"`
+	AllocatedAmount pgtype.Numeric     `json:"allocated_amount"`
+	RemainingAmount pgtype.Numeric     `json:"remaining_amount"`
+	Status          string             `json:"status"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ReceivablesPaymentTerms struct {
+	ID              pgtype.UUID        `json:"id"`
+	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
+	Code            string             `json:"code"`
+	NameEn          string             `json:"name_en"`
+	NameAr          string             `json:"name_ar"`
+	DueDays         int32              `json:"due_days"`
+	DiscountDays    int32              `json:"discount_days"`
+	DiscountPercent pgtype.Numeric     `json:"discount_percent"`
+	IsActive        bool               `json:"is_active"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type ReceivablesReceiptAllocations struct {
+	ID              pgtype.UUID        `json:"id"`
+	ReceiptID       pgtype.UUID        `json:"receipt_id"`
+	OpenItemID      pgtype.UUID        `json:"open_item_id"`
+	AllocatedAmount pgtype.Numeric     `json:"allocated_amount"`
+	AllocatedAt     pgtype.Timestamptz `json:"allocated_at"`
+	CreatedByUserID pgtype.UUID        `json:"created_by_user_id"`
+}
+
+type ReceivablesReceipts struct {
+	ID                pgtype.UUID        `json:"id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	ReceiptNumber     string             `json:"receipt_number"`
+	CustomerID        pgtype.UUID        `json:"customer_id"`
+	ReceiptDate       pgtype.Date        `json:"receipt_date"`
+	PaymentMethod     string             `json:"payment_method"`
+	DepositAccountID  pgtype.UUID        `json:"deposit_account_id"`
+	Amount            pgtype.Numeric     `json:"amount"`
+	CurrencyCode      string             `json:"currency_code"`
+	ReferenceNumber   pgtype.Text        `json:"reference_number"`
+	Status            string             `json:"status"`
+	Notes             pgtype.Text        `json:"notes"`
+	AllocatedAmount   pgtype.Numeric     `json:"allocated_amount"`
+	UnallocatedAmount pgtype.Numeric     `json:"unallocated_amount"`
+	JournalEntryID    pgtype.UUID        `json:"journal_entry_id"`
+	CreatedByUserID   pgtype.UUID        `json:"created_by_user_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type RefCountries struct {
 	Code        string      `json:"code"`
 	NameEn      string      `json:"name_en"`

@@ -20,6 +20,7 @@ import (
 	"erp/internal/platform/observability"
 	"erp/internal/platform/transaction"
 	"erp/internal/products"
+	"erp/internal/receivables"
 	"erp/internal/tax"
 	"erp/internal/workflow"
 )
@@ -172,6 +173,18 @@ func main() {
 			}
 		}
 		logger.Info("Inventory module and immutable movement ledger registered")
+
+		// J. Receivables Module (Customers, Credit Limits, Payment Terms, Open Items, Receipts)
+		receivablesModule := receivables.NewModule(cfg, db)
+		receivablesModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := receivablesModule.SeedDefaultReceivablesData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Receivables Data", "error", err)
+			} else {
+				logger.Info("Default Saudi Payment Terms, Credit Limits, and Customer Master verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Receivables module and accounts receivable engine registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

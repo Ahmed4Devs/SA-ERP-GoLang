@@ -112,6 +112,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { key: "tax", href: "/tax", icon: ReceiptText, label: t.nav.tax || "Tax & VAT", active: pathname === "/tax" },
     { key: "products", href: "/products", icon: Package, label: (t.products as any)?.tab_items || "الأصناف والمنتجات", active: pathname === "/products" },
     { key: "inventory", href: "/inventory", icon: Boxes, label: t.nav.inventory, active: pathname === "/inventory" },
+    { key: "customers", href: "/customers", icon: Users, label: (t.nav as any)?.customers || "العملاء والمدينون (AR)", active: pathname === "/customers" },
     { key: "sales", href: "#", icon: ShoppingBag, label: t.nav.sales },
     { key: "purchasing", href: "#", icon: ShoppingCart, label: t.nav.purchasing },
     { key: "treasury", href: "#", icon: Landmark, label: t.nav.treasury },

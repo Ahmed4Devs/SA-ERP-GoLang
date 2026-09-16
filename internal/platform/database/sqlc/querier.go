@@ -16,7 +16,9 @@ type Querier interface {
 	AssignUserRole(ctx context.Context, arg AssignUserRoleParams) (AuthzUserRoleAssignments, error)
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
 	CountAuditEvents(ctx context.Context, arg CountAuditEventsParams) (int64, error)
+	CountCustomers(ctx context.Context, arg CountCustomersParams) (int64, error)
 	CountJournalEntriesByLegalEntity(ctx context.Context, legalEntityID pgtype.UUID) (int64, error)
+	CountReceipts(ctx context.Context, arg CountReceiptsParams) (int64, error)
 	CountRecentFailedAttempts(ctx context.Context, arg CountRecentFailedAttemptsParams) (int64, error)
 	CreateAccount(ctx context.Context, arg CreateAccountParams) (AccountingAccounts, error)
 	CreateAddress(ctx context.Context, arg CreateAddressParams) (OrganizationAddresses, error)
@@ -27,6 +29,8 @@ type Querier interface {
 	CreateBranch(ctx context.Context, arg CreateBranchParams) (OrganizationBranches, error)
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (ProductsCategories, error)
 	CreateCostCenter(ctx context.Context, arg CreateCostCenterParams) (OrganizationCostCenters, error)
+	// Customer Queries
+	CreateCustomer(ctx context.Context, arg CreateCustomerParams) (ReceivablesCustomers, error)
 	CreateDefinitionVersion(ctx context.Context, arg CreateDefinitionVersionParams) (WorkflowDefinitionVersions, error)
 	CreateDelegation(ctx context.Context, arg CreateDelegationParams) (WorkflowDelegations, error)
 	CreateDepartment(ctx context.Context, arg CreateDepartmentParams) (OrganizationDepartments, error)
@@ -39,7 +43,15 @@ type Querier interface {
 	CreateLegalEntity(ctx context.Context, arg CreateLegalEntityParams) (OrganizationLegalEntities, error)
 	CreateLot(ctx context.Context, arg CreateLotParams) (InventoryLots, error)
 	CreateNumberSequence(ctx context.Context, arg CreateNumberSequenceParams) (OrganizationNumberSequences, error)
+	// Open Items Queries
+	CreateOpenItem(ctx context.Context, arg CreateOpenItemParams) (ReceivablesOpenItems, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (OrganizationOrganizations, error)
+	// Payment Terms Queries
+	CreatePaymentTerm(ctx context.Context, arg CreatePaymentTermParams) (ReceivablesPaymentTerms, error)
+	// Receipts Queries
+	CreateReceipt(ctx context.Context, arg CreateReceiptParams) (ReceivablesReceipts, error)
+	// Receipt Allocations Queries
+	CreateReceiptAllocation(ctx context.Context, arg CreateReceiptAllocationParams) (ReceivablesReceiptAllocations, error)
 	CreateRole(ctx context.Context, arg CreateRoleParams) (AuthzRoles, error)
 	CreateSKU(ctx context.Context, arg CreateSKUParams) (ProductsSkus, error)
 	CreateSerialNumber(ctx context.Context, arg CreateSerialNumberParams) (InventorySerialNumbers, error)
@@ -95,7 +107,12 @@ type Querier interface {
 	GetChartOfAccountsByID(ctx context.Context, id pgtype.UUID) (AccountingChartOfAccounts, error)
 	GetCostCenterByID(ctx context.Context, id pgtype.UUID) (OrganizationCostCenters, error)
 	GetCountry(ctx context.Context, code string) (RefCountries, error)
+	GetCreditLimitByCustomerID(ctx context.Context, customerID pgtype.UUID) (ReceivablesCustomerCreditLimits, error)
 	GetCurrency(ctx context.Context, code string) (RefCurrencies, error)
+	GetCustomerAccounts(ctx context.Context, customerID pgtype.UUID) ([]GetCustomerAccountsRow, error)
+	GetCustomerAgingSummary(ctx context.Context, customerID pgtype.UUID) (GetCustomerAgingSummaryRow, error)
+	GetCustomerByID(ctx context.Context, id pgtype.UUID) (GetCustomerByIDRow, error)
+	GetCustomerByNumber(ctx context.Context, arg GetCustomerByNumberParams) (ReceivablesCustomers, error)
 	GetDefaultBinByWarehouse(ctx context.Context, warehouseID pgtype.UUID) (WarehouseBinLocations, error)
 	GetDefinitionVersionByID(ctx context.Context, id pgtype.UUID) (WorkflowDefinitionVersions, error)
 	GetDepartmentByID(ctx context.Context, id pgtype.UUID) (OrganizationDepartments, error)
@@ -126,11 +143,15 @@ type Querier interface {
 	GetMovementByNumber(ctx context.Context, arg GetMovementByNumberParams) (GetMovementByNumberRow, error)
 	GetNumberSequenceByEntityAndCode(ctx context.Context, arg GetNumberSequenceByEntityAndCodeParams) (OrganizationNumberSequences, error)
 	GetNumberSequenceForUpdate(ctx context.Context, arg GetNumberSequenceForUpdateParams) (OrganizationNumberSequences, error)
+	GetOpenItemByID(ctx context.Context, id pgtype.UUID) (ReceivablesOpenItems, error)
 	GetOpenTaxPeriodForDate(ctx context.Context, arg GetOpenTaxPeriodForDateParams) (TaxTaxPeriods, error)
 	GetOrganizationByCode(ctx context.Context, code string) (OrganizationOrganizations, error)
 	GetOrganizationByID(ctx context.Context, id pgtype.UUID) (OrganizationOrganizations, error)
 	GetPasswordByUserID(ctx context.Context, userID pgtype.UUID) (IamPasswordCredentials, error)
+	GetPaymentTermByID(ctx context.Context, id pgtype.UUID) (ReceivablesPaymentTerms, error)
 	GetPublishedVersionByDefinitionID(ctx context.Context, definitionID pgtype.UUID) (WorkflowDefinitionVersions, error)
+	GetReceiptByID(ctx context.Context, id pgtype.UUID) (GetReceiptByIDRow, error)
+	GetReceiptByNumber(ctx context.Context, arg GetReceiptByNumberParams) (ReceivablesReceipts, error)
 	GetReservationByID(ctx context.Context, id pgtype.UUID) (InventoryStockReservations, error)
 	GetRoleByCode(ctx context.Context, code string) (AuthzRoles, error)
 	GetRoleByID(ctx context.Context, id pgtype.UUID) (AuthzRoles, error)
@@ -197,6 +218,7 @@ type Querier interface {
 	ListChartOfAccountsByLegalEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]AccountingChartOfAccounts, error)
 	ListCostCentersByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationCostCenters, error)
 	ListCostLayers(ctx context.Context, arg ListCostLayersParams) ([]ListCostLayersRow, error)
+	ListCustomers(ctx context.Context, arg ListCustomersParams) ([]ListCustomersRow, error)
 	ListDelegationsByDelegator(ctx context.Context, delegatorID pgtype.UUID) ([]ListDelegationsByDelegatorRow, error)
 	ListDepartmentsByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationDepartments, error)
 	ListEntityChangesByEventID(ctx context.Context, eventID pgtype.UUID) ([]AuditEntityChanges, error)
@@ -214,10 +236,15 @@ type Querier interface {
 	ListLotsByItem(ctx context.Context, arg ListLotsByItemParams) ([]InventoryLots, error)
 	ListMovementsByEntity(ctx context.Context, arg ListMovementsByEntityParams) ([]ListMovementsByEntityRow, error)
 	ListNumberSequencesByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationNumberSequences, error)
+	ListOpenItemsByCustomer(ctx context.Context, arg ListOpenItemsByCustomerParams) ([]ListOpenItemsByCustomerRow, error)
+	ListOpenItemsByLegalEntity(ctx context.Context, arg ListOpenItemsByLegalEntityParams) ([]ListOpenItemsByLegalEntityRow, error)
 	ListOrganizations(ctx context.Context) ([]OrganizationOrganizations, error)
+	ListPaymentTerms(ctx context.Context, arg ListPaymentTermsParams) ([]ReceivablesPaymentTerms, error)
 	ListPendingApprovalRequestsForUser(ctx context.Context, assignedUserID pgtype.UUID) ([]ListPendingApprovalRequestsForUserRow, error)
 	ListPermissions(ctx context.Context) ([]AuthzPermissions, error)
 	ListPermissionsForRole(ctx context.Context, roleID pgtype.UUID) ([]AuthzPermissions, error)
+	ListReceiptAllocations(ctx context.Context, receiptID pgtype.UUID) ([]ListReceiptAllocationsRow, error)
+	ListReceipts(ctx context.Context, arg ListReceiptsParams) ([]ListReceiptsRow, error)
 	ListRoles(ctx context.Context) ([]AuthzRoles, error)
 	ListSKUsByItem(ctx context.Context, itemID pgtype.UUID) ([]ListSKUsByItemRow, error)
 	ListSecurityEvents(ctx context.Context, arg ListSecurityEventsParams) ([]AuditSecurityEvents, error)
@@ -248,6 +275,7 @@ type Querier interface {
 	ListWorkflowDefinitions(ctx context.Context) ([]WorkflowDefinitions, error)
 	ListZeroRateReasons(ctx context.Context) ([]TaxZeroRateReasons, error)
 	LockBalance(ctx context.Context, arg LockBalanceParams) (InventoryStockBalances, error)
+	LockOpenItem(ctx context.Context, id pgtype.UUID) (ReceivablesOpenItems, error)
 	MarkJournalEntryReversed(ctx context.Context, arg MarkJournalEntryReversedParams) (AccountingJournalEntries, error)
 	MarkOutboxEventPublished(ctx context.Context, id pgtype.UUID) error
 	PostJournalEntry(ctx context.Context, arg PostJournalEntryParams) (AccountingJournalEntries, error)
@@ -258,6 +286,7 @@ type Querier interface {
 	RevokeDelegation(ctx context.Context, arg RevokeDelegationParams) error
 	RevokeUserRole(ctx context.Context, arg RevokeUserRoleParams) error
 	SearchItems(ctx context.Context, arg SearchItemsParams) ([]SearchItemsRow, error)
+	SetCreditHold(ctx context.Context, arg SetCreditHoldParams) (ReceivablesCustomerCreditLimits, error)
 	SetPassword(ctx context.Context, arg SetPasswordParams) error
 	UpdateAccount(ctx context.Context, arg UpdateAccountParams) (AccountingAccounts, error)
 	UpdateApprovalRequestStatus(ctx context.Context, arg UpdateApprovalRequestStatusParams) (WorkflowApprovalRequests, error)
@@ -265,13 +294,19 @@ type Querier interface {
 	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (ProductsCategories, error)
 	UpdateCostCenter(ctx context.Context, arg UpdateCostCenterParams) (OrganizationCostCenters, error)
 	UpdateCostLayerRemaining(ctx context.Context, arg UpdateCostLayerRemainingParams) (InventoryCostLayers, error)
+	UpdateCustomer(ctx context.Context, arg UpdateCustomerParams) (ReceivablesCustomers, error)
+	UpdateCustomerBalance(ctx context.Context, arg UpdateCustomerBalanceParams) (ReceivablesCustomerCreditLimits, error)
+	UpdateCustomerStatus(ctx context.Context, arg UpdateCustomerStatusParams) (ReceivablesCustomers, error)
 	UpdateDepartment(ctx context.Context, arg UpdateDepartmentParams) (OrganizationDepartments, error)
 	UpdateFiscalPeriodStatus(ctx context.Context, arg UpdateFiscalPeriodStatusParams) (AccountingFiscalPeriods, error)
 	UpdateInstanceStepStatus(ctx context.Context, arg UpdateInstanceStepStatusParams) (WorkflowInstanceSteps, error)
 	UpdateItem(ctx context.Context, arg UpdateItemParams) (ProductsItems, error)
 	UpdateJournalEntryStatus(ctx context.Context, arg UpdateJournalEntryStatusParams) (AccountingJournalEntries, error)
 	UpdateLegalEntity(ctx context.Context, arg UpdateLegalEntityParams) (OrganizationLegalEntities, error)
+	UpdateOpenItemAllocation(ctx context.Context, arg UpdateOpenItemAllocationParams) (ReceivablesOpenItems, error)
 	UpdateOrganization(ctx context.Context, arg UpdateOrganizationParams) (OrganizationOrganizations, error)
+	UpdateReceiptAllocationAmounts(ctx context.Context, arg UpdateReceiptAllocationAmountsParams) (ReceivablesReceipts, error)
+	UpdateReceiptStatus(ctx context.Context, arg UpdateReceiptStatusParams) (ReceivablesReceipts, error)
 	UpdateSKUPrices(ctx context.Context, arg UpdateSKUPricesParams) (ProductsSkus, error)
 	UpdateSerialNumberStatus(ctx context.Context, arg UpdateSerialNumberStatusParams) (InventorySerialNumbers, error)
 	UpdateSessionLastActive(ctx context.Context, tokenHash string) error
@@ -293,7 +328,11 @@ type Querier interface {
 	UpsertAccountBalance(ctx context.Context, arg UpsertAccountBalanceParams) (AccountingAccountBalances, error)
 	UpsertBalance(ctx context.Context, arg UpsertBalanceParams) (InventoryStockBalances, error)
 	UpsertCountry(ctx context.Context, arg UpsertCountryParams) error
+	// Credit Limit Queries
+	UpsertCreditLimit(ctx context.Context, arg UpsertCreditLimitParams) (ReceivablesCustomerCreditLimits, error)
 	UpsertCurrency(ctx context.Context, arg UpsertCurrencyParams) error
+	// Customer Accounts
+	UpsertCustomerAccount(ctx context.Context, arg UpsertCustomerAccountParams) (ReceivablesCustomerAccounts, error)
 	UpsertItemTaxProfile(ctx context.Context, arg UpsertItemTaxProfileParams) (ProductsItemTaxProfiles, error)
 	UpsertItemUOM(ctx context.Context, arg UpsertItemUOMParams) (ProductsItemUoms, error)
 }
