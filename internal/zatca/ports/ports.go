@@ -78,3 +78,49 @@ type Service interface {
 	ListDocuments(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.ZATCADocument, error)
 	GetSummary(ctx context.Context, legalEntityID uuid.UUID) (*domain.ZATCASummary, error)
 }
+
+// ----------------------------------------------------------------------------
+// Phase 26 Interfaces (Sections 31 & 32)
+// ----------------------------------------------------------------------------
+
+// ZATCAClient is the external HTTP client for FATOORA Clearance and Reporting APIs.
+type ZATCAClient interface {
+	Clearance(ctx context.Context, request domain.ClearanceRequest, csid *domain.CSID) (domain.ClearanceResponse, error)
+	Report(ctx context.Context, request domain.ReportingRequest, csid *domain.CSID) (domain.ReportingResponse, error)
+}
+
+// ZATCAOnboardingClient handles the compliance onboarding and certificate issuance lifecycle.
+type ZATCAOnboardingClient interface {
+	RequestComplianceCSID(ctx context.Context, request domain.ComplianceCSIDRequest) (domain.ComplianceCSIDResponse, error)
+	RunComplianceChecks(ctx context.Context, request domain.ComplianceCheckRequest, csid *domain.CSID) (domain.ComplianceCheckResponse, error)
+	RequestProductionCSID(ctx context.Context, request domain.ProductionCSIDRequest, csid *domain.CSID) (domain.ProductionCSIDResponse, error)
+	RenewProductionCSID(ctx context.Context, request domain.RenewalRequest, currentCSID *domain.CSID) (domain.RenewalResponse, error)
+}
+
+// SubmissionRepository persists FATOORA submission audits and attempt logs.
+type SubmissionRepository interface {
+	CreateSubmission(ctx context.Context, sub *domain.ZATCASubmission) (*domain.ZATCASubmission, error)
+	UpdateSubmission(ctx context.Context, sub *domain.ZATCASubmission) (*domain.ZATCASubmission, error)
+	GetSubmissionByID(ctx context.Context, id, legalEntityID uuid.UUID) (*domain.ZATCASubmission, error)
+	GetSubmissionByDocumentID(ctx context.Context, docID, legalEntityID uuid.UUID) (*domain.ZATCASubmission, error)
+	ListSubmissions(ctx context.Context, filter domain.SubmissionFilter) ([]*domain.ZATCASubmission, error)
+	RecordAttempt(ctx context.Context, attempt *domain.SubmissionAttempt) error
+	ListAttempts(ctx context.Context, submissionID uuid.UUID) ([]domain.SubmissionAttempt, error)
+	GetPendingRetrySubmissions(ctx context.Context, limit int) ([]*domain.ZATCASubmission, error)
+}
+
+// OnboardingService orchestrates the complete onboarding lifecycle of an EGS unit.
+type OnboardingService interface {
+	StartOnboarding(ctx context.Context, legalEntityID, egsUnitID uuid.UUID, otp string) (*domain.OnboardingResult, error)
+	GetOnboardingStatus(ctx context.Context, legalEntityID, egsUnitID uuid.UUID) (*domain.OnboardingStatus, error)
+}
+
+// SubmissionService coordinates Clearance (B2B) and Reporting (B2C) workflows.
+type SubmissionService interface {
+	SubmitClearance(ctx context.Context, documentID, legalEntityID uuid.UUID) (*domain.ClearanceResponse, error)
+	SubmitReporting(ctx context.Context, documentID, legalEntityID uuid.UUID) (*domain.ReportingResponse, error)
+	RetrySubmission(ctx context.Context, submissionID, legalEntityID uuid.UUID) error
+	ListSubmissions(ctx context.Context, filter domain.SubmissionFilter) ([]*domain.ZATCASubmission, error)
+	GetSubmission(ctx context.Context, id, legalEntityID uuid.UUID) (*domain.ZATCASubmission, error)
+}
+

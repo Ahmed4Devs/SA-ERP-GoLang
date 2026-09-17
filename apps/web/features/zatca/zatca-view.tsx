@@ -24,8 +24,24 @@ import {
   RefreshCw,
   Hash,
   Binary,
+  History,
+  Send,
+  ExternalLink,
 } from "lucide-react";
 import { useLocale } from "@/components/layout/shell";
+
+interface ZATCASubmissionItem {
+  id: string;
+  documentId: string;
+  invoiceNumber: string;
+  submissionMode: "CLEARANCE" | "REPORTING";
+  environment: "SANDBOX" | "SIMULATION" | "PRODUCTION";
+  status: "CLEARED" | "REPORTED" | "WARNING" | "REJECTED" | "RETRY_PENDING" | "FAILED";
+  zatcaRequestId: string;
+  attemptsCount: number;
+  submittedAt: string;
+  responsePayload?: string;
+}
 
 interface ZATCADocumentItem {
   id: string;
@@ -228,12 +244,40 @@ const INITIAL_CSIDS: CSIDItem[] = [
   },
 ];
 
+const INITIAL_SUBMISSIONS: ZATCASubmissionItem[] = [
+  {
+    id: "sub-001",
+    documentId: "doc-001",
+    invoiceNumber: "INV-2026-0001",
+    submissionMode: "CLEARANCE",
+    environment: "SANDBOX",
+    status: "CLEARED",
+    zatcaRequestId: "REQ-CLR-20260301-8899",
+    attemptsCount: 1,
+    submittedAt: "2026-03-01 09:15:32",
+    responsePayload: `{"clearanceStatus":"CLEARED","validationResults":{"overallStatus":"PASSED","ruleVersion":"BR-KSA-2.1"}}`,
+  },
+  {
+    id: "sub-002",
+    documentId: "doc-002",
+    invoiceNumber: "INV-2026-0002",
+    submissionMode: "REPORTING",
+    environment: "SANDBOX",
+    status: "REPORTED",
+    zatcaRequestId: "REQ-REP-20260302-3344",
+    attemptsCount: 1,
+    submittedAt: "2026-03-02 14:20:15",
+    responsePayload: `{"reportingStatus":"REPORTED","validationResults":{"overallStatus":"PASSED","ruleVersion":"BR-KSA-2.1"}}`,
+  },
+];
+
 export function ZATCAView() {
   const { locale } = useLocale();
   const isAr = locale === "ar";
 
-  const [activeTab, setActiveTab] = useState<"documents" | "egs" | "csids" | "validator">("documents");
+  const [activeTab, setActiveTab] = useState<"documents" | "submissions" | "egs" | "csids" | "validator">("documents");
   const [documents, setDocuments] = useState<ZATCADocumentItem[]>(INITIAL_DOCUMENTS);
+  const [submissions, setSubmissions] = useState<ZATCASubmissionItem[]>(INITIAL_SUBMISSIONS);
   const [egsUnits, setEgsUnits] = useState<EGSUnitItem[]>(INITIAL_EGS);
   const [csids, setCsids] = useState<CSIDItem[]>(INITIAL_CSIDS);
 
@@ -244,7 +288,11 @@ export function ZATCAView() {
   // Modals
   const [previewXml, setPreviewXml] = useState<string | null>(null);
   const [previewQR, setPreviewQR] = useState<string | null>(null);
+  const [previewResponse, setPreviewResponse] = useState<string | null>(null);
   const [isRegisterEGSOpen, setIsRegisterEGSOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [onboardTargetEGS, setOnboardTargetEGS] = useState<EGSUnitItem | null>(null);
+  const [otpValue, setOtpValue] = useState("");
 
   // New EGS Form
   const [newEGS, setNewEGS] = useState({
@@ -281,6 +329,96 @@ export function ZATCAView() {
       )
     );
     showNotification(isAr ? "تم توقيع الفاتورة إلكترونياً بختم CSID وتوليد الرمز المشفر" : "Document digitally signed with CSID certificate");
+  };
+
+  const handleClearance = (id: string) => {
+    const doc = documents.find((d) => d.id === id);
+    if (!doc) return;
+
+    setDocuments((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, status: "CLEARED" } : d))
+    );
+
+    const newSub: ZATCASubmissionItem = {
+      id: `sub-${Date.now()}`,
+      documentId: doc.id,
+      invoiceNumber: doc.invoiceNumber,
+      submissionMode: "CLEARANCE",
+      environment: "SANDBOX",
+      status: "CLEARED",
+      zatcaRequestId: `REQ-CLR-${Date.now().toString().slice(-6)}`,
+      attemptsCount: 1,
+      submittedAt: new Date().toISOString().replace("T", " ").slice(0, 19),
+      responsePayload: JSON.stringify({
+        clearanceStatus: "CLEARED",
+        clearedInvoice: "UBL-2.1-STAMPED-BASE64",
+        validationResults: { overallStatus: "PASSED", ruleVersion: "BR-KSA-2.1" },
+      }),
+    };
+    setSubmissions([newSub, ...submissions]);
+    showNotification(isAr ? "تم اعتماد الفاتورة لدى منصة فاتورة زاتكا (ZATCA Clearance Approved)" : "Invoice successfully cleared by ZATCA gateway");
+  };
+
+  const handleReporting = (id: string) => {
+    const doc = documents.find((d) => d.id === id);
+    if (!doc) return;
+
+    setDocuments((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, status: "REPORTED" } : d))
+    );
+
+    const newSub: ZATCASubmissionItem = {
+      id: `sub-${Date.now()}`,
+      documentId: doc.id,
+      invoiceNumber: doc.invoiceNumber,
+      submissionMode: "REPORTING",
+      environment: "SANDBOX",
+      status: "REPORTED",
+      zatcaRequestId: `REQ-REP-${Date.now().toString().slice(-6)}`,
+      attemptsCount: 1,
+      submittedAt: new Date().toISOString().replace("T", " ").slice(0, 19),
+      responsePayload: JSON.stringify({
+        reportingStatus: "REPORTED",
+        validationResults: { overallStatus: "PASSED", ruleVersion: "BR-KSA-2.1" },
+      }),
+    };
+    setSubmissions([newSub, ...submissions]);
+    showNotification(isAr ? "تم إبلاغ الفاتورة المبسطة لمنصة فاتورة زاتكا (ZATCA Reporting Succeeded)" : "Simplified invoice successfully reported to ZATCA");
+  };
+
+  const handleRetrySubmission = (subId: string) => {
+    setSubmissions((prev) =>
+      prev.map((s) =>
+        s.id === subId ? { ...s, status: "CLEARED", attemptsCount: s.attemptsCount + 1 } : s
+      )
+    );
+    showNotification(isAr ? "تمت إعادة إرسال الفاتورة بنجاح واعتمادها" : "Submission retry succeeded and invoice cleared");
+  };
+
+  const handleStartOnboarding = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onboardTargetEGS || !otpValue) return;
+
+    // Issue Production CSID and update EGS
+    const newCSID: CSIDItem = {
+      id: `csid-${Date.now()}`,
+      egsCustomId: onboardTargetEGS.customId,
+      csidType: "PRODUCTION",
+      binarySecurityToken: "MIIC/DCCAeSgAwIBAgITbwAAAAP0/r3p5Q7TCAAAAAAA8DANBgkqhkiG9w0BAQsFADARMQ8wDQYDVQQDEwZaQVRDQTIwHhcNMjYwMTAxMDAwMDAwWhcNMjgwMTAxMDAwMDAwWjARMQ8wDQYDVQQDEwZaQVRDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKxQ==",
+      publicKeyPEM: "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...\n-----END PUBLIC KEY-----",
+      expiresAt: "2031-03-01",
+      status: "ACTIVE",
+    };
+
+    setCsids([...csids, newCSID]);
+    setEgsUnits((prev) =>
+      prev.map((u) => (u.id === onboardTargetEGS.id ? { ...u, status: "ACTIVE" } : u))
+    );
+
+    setIsOnboardingOpen(false);
+    setOtpValue("");
+    setOnboardTargetEGS(null);
+    showNotification(isAr ? "تم إتمام الربط والتكامل بنجاح وإصدار الختم المشفر للإنتاج (Production CSID)" : "Onboarding completed and Production CSID issued successfully");
   };
 
   const handleRegisterEGS = (e: React.FormEvent) => {
@@ -467,6 +605,21 @@ export function ZATCAView() {
         </button>
 
         <button
+          onClick={() => setActiveTab("submissions")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            activeTab === "submissions"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          }`}
+        >
+          <History className="h-4 w-4" />
+          <span>{isAr ? "سجل الإرسال والربط (Submissions)" : "Submissions Audit"}</span>
+          <span className="px-1.5 py-0.5 rounded-md text-xs bg-background/20 font-bold">
+            {submissions.length}
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab("egs")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
             activeTab === "egs"
@@ -630,6 +783,118 @@ export function ZATCAView() {
                               {isAr ? "توقيع ECDSA" : "Sign"}
                             </button>
                           )}
+                          {doc.status === "SIGNED" && doc.submissionMode === "CLEARANCE" && (
+                            <button
+                              onClick={() => handleClearance(doc.id)}
+                              className="px-2.5 py-1 text-xs rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors flex items-center gap-1"
+                            >
+                              <ShieldCheck className="h-3 w-3" />
+                              <span>{isAr ? "اعتماد" : "Clear"}</span>
+                            </button>
+                          )}
+                          {doc.status === "SIGNED" && doc.submissionMode === "REPORTING" && (
+                            <button
+                              onClick={() => handleReporting(doc.id)}
+                              className="px-2.5 py-1 text-xs rounded-lg font-medium bg-amber-600 hover:bg-amber-700 text-white transition-colors flex items-center gap-1"
+                            >
+                              <Send className="h-3 w-3" />
+                              <span>{isAr ? "إبلاغ" : "Report"}</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: Submissions Audit (Phase 26) */}
+      {activeTab === "submissions" && (
+        <div className="space-y-4">
+          <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+            <div className="p-4 border-b bg-muted/20 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="h-5 w-5 text-primary" />
+                <h3 className="font-bold text-foreground text-sm">
+                  {isAr ? "سجل عمليات الإرسال والربط مع هيئة الزكاة (ZATCA Submissions Audit)" : "ZATCA Submissions Audit Trail"}
+                </h3>
+              </div>
+              <span className="text-xs text-muted-foreground font-mono">
+                {submissions.length} {isAr ? "عملية مسجلة" : "records"}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-start">
+                <thead className="bg-muted/40 text-muted-foreground border-b uppercase font-semibold">
+                  <tr>
+                    <th className="px-4 py-3 text-start">{isAr ? "رقم الفاتورة" : "Invoice #"}</th>
+                    <th className="px-4 py-3 text-start">{isAr ? "نوع الإرسال" : "Mode"}</th>
+                    <th className="px-4 py-3 text-start">{isAr ? "البيئة" : "Environment"}</th>
+                    <th className="px-4 py-3 text-start">{isAr ? "حالة الربط" : "Status"}</th>
+                    <th className="px-4 py-3 text-start">{isAr ? "معرف الطلب (Request ID)" : "Request ID"}</th>
+                    <th className="px-4 py-3 text-start">{isAr ? "المحاولات" : "Attempts"}</th>
+                    <th className="px-4 py-3 text-start">{isAr ? "وقت الإرسال" : "Timestamp"}</th>
+                    <th className="px-4 py-3 text-end">{isAr ? "الإجراءات" : "Actions"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {submissions.map((sub) => (
+                    <tr key={sub.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3 font-mono font-bold text-foreground">{sub.invoiceNumber}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          sub.submissionMode === "CLEARANCE" ? "bg-blue-500/10 text-blue-600" : "bg-amber-500/10 text-amber-600"
+                        }`}>
+                          {sub.submissionMode}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-0.5 rounded text-[10px] bg-muted font-mono">{sub.environment}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          sub.status === "CLEARED" || sub.status === "REPORTED"
+                            ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                            : sub.status === "RETRY_PENDING"
+                            ? "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                            : "bg-red-500/10 text-red-600 border border-red-500/20"
+                        }`}>
+                          {sub.status === "CLEARED" || sub.status === "REPORTED" ? (
+                            <CheckCircle2 className="h-3 w-3" />
+                          ) : (
+                            <AlertTriangle className="h-3 w-3" />
+                          )}
+                          {sub.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-muted-foreground">{sub.zatcaRequestId}</td>
+                      <td className="px-4 py-3 font-mono">{sub.attemptsCount}</td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono">{sub.submittedAt}</td>
+                      <td className="px-4 py-3 text-end">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {sub.responsePayload && (
+                            <button
+                              onClick={() => setPreviewResponse(sub.responsePayload || "")}
+                              className="px-2.5 py-1 text-xs rounded-lg font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors flex items-center gap-1"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              <span>{isAr ? "الاستجابة" : "Payload"}</span>
+                            </button>
+                          )}
+                          {(sub.status === "RETRY_PENDING" || sub.status === "FAILED") && (
+                            <button
+                              onClick={() => handleRetrySubmission(sub.id)}
+                              className="px-2.5 py-1 text-xs rounded-lg font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1"
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                              <span>{isAr ? "إعادة إرسال" : "Retry"}</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -676,6 +941,19 @@ export function ZATCAView() {
                     <span className="block font-medium text-foreground">{isAr ? "نوع الفواتير المصرح بها:" : "Permitted Invoices:"}</span>
                     <span className="font-mono text-primary font-semibold">{u.invoiceTypeMask}</span>
                   </div>
+                </div>
+
+                <div className="pt-2 border-t flex items-center justify-end">
+                  <button
+                    onClick={() => {
+                      setOnboardTargetEGS(u);
+                      setIsOnboardingOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                  >
+                    <Key className="h-3.5 w-3.5" />
+                    <span>{isAr ? "ربط وتوليد ختم الإنتاج (OTP Onboarding)" : "Onboard with OTP"}</span>
+                  </button>
                 </div>
               </div>
             ))}
@@ -951,6 +1229,106 @@ export function ZATCAView() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: Onboarding with OTP (Phase 26) */}
+      {isOnboardingOpen && onboardTargetEGS && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <Key className="h-5 w-5 text-primary" />
+                <span>{isAr ? "إتمام الربط والتكامل (FATOORA OTP Onboarding)" : "Onboard EGS Unit with OTP"}</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setIsOnboardingOpen(false);
+                  setOnboardTargetEGS(null);
+                }}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleStartOnboarding} className="space-y-4 pt-2">
+              <div className="p-3 bg-muted/40 rounded-xl space-y-1 text-xs">
+                <span className="text-muted-foreground block">{isAr ? "وحدة الحلول المحددة:" : "Target EGS Unit:"}</span>
+                <span className="font-mono font-bold text-foreground block">{onboardTargetEGS.customId} ({onboardTargetEGS.serialNumber})</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground mb-1">
+                  {isAr ? "رمز التحقق OTP الصادر من منصة فاتورة (6 أرقام)" : "6-Digit FATOORA Portal OTP"}
+                </label>
+                <input
+                  type="text"
+                  required
+                  maxLength={6}
+                  placeholder="123456"
+                  value={otpValue}
+                  onChange={(e) => setOtpValue(e.target.value)}
+                  className="w-full bg-background border rounded-lg px-3 py-2 text-lg text-center font-mono tracking-widest focus:ring-2 focus:ring-primary focus:outline-none"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {isAr ? "يمكنك الحصول على الرمز من بوابة هيئة الزكاة والضريبة والجمارك > قائمة الأجهزة" : "Generate OTP from ZATCA FATOORA Portal > Solution Units"}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOnboardingOpen(false);
+                    setOnboardTargetEGS(null);
+                  }}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border hover:bg-muted transition-colors"
+                >
+                  {isAr ? "إلغاء" : "Cancel"}
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                >
+                  {isAr ? "تأكيد الربط وإصدار الختم" : "Confirm Onboarding"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: Submission Response Payload */}
+      {previewResponse && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <ExternalLink className="h-5 w-5 text-primary" />
+                <span>{isAr ? "استجابة منصة فاتورة (ZATCA Response)" : "ZATCA Gateway Response"}</span>
+              </h3>
+              <button
+                onClick={() => setPreviewResponse(null)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-muted rounded-xl font-mono text-xs overflow-y-auto max-h-96 whitespace-pre-wrap text-left" dir="ltr">
+              {JSON.stringify(JSON.parse(previewResponse), null, 2)}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t">
+              <button
+                onClick={() => setPreviewResponse(null)}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                {isAr ? "إغلاق" : "Close"}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -42,7 +42,16 @@ const (
 	DocumentStatusReported     DocumentStatus = "REPORTED"
 	DocumentStatusWarning      DocumentStatus = "WARNING"
 	DocumentStatusRejected     DocumentStatus = "REJECTED"
+	DocumentStatusRetryPending DocumentStatus = "RETRY_PENDING"
 	DocumentStatusFailed       DocumentStatus = "FAILED"
+)
+
+type Environment string
+
+const (
+	EnvironmentSandbox    Environment = "SANDBOX"
+	EnvironmentSimulation Environment = "SIMULATION"
+	EnvironmentProduction Environment = "PRODUCTION"
 )
 
 type CSIDType string
@@ -199,3 +208,162 @@ type ZATCASummary struct {
 	FailedCount    int64 `json:"failed_count"`
 	ActiveEGSCount int   `json:"active_egs_count"`
 }
+
+// ----------------------------------------------------------------------------
+// ZATCA FATOORA Phase 2 API Models
+// ----------------------------------------------------------------------------
+
+// ClearanceRequest is sent to the Clearance API (B2B Standard Invoices).
+type ClearanceRequest struct {
+	InvoiceHash string `json:"invoiceHash"`
+	UUID        string `json:"uuid"`
+	Invoice     string `json:"invoice"` // Base64-encoded signed UBL XML
+}
+
+// ClearanceResponse is received from the Clearance API.
+type ClearanceResponse struct {
+	ClearanceStatus       string              `json:"clearanceStatus"` // 'CLEARED' or 'NOT_CLEARED'
+	ClearedInvoice        string              `json:"clearedInvoice,omitempty"` // Base64-encoded UBL with ZATCA clearance stamp
+	ValidationResults     *ValidationResult   `json:"validationResults,omitempty"`
+	WarningMessages       []ValidationMessage `json:"warningMessages,omitempty"`
+	ErrorMessages         []ValidationMessage `json:"errorMessages,omitempty"`
+	ZATCARequestID        string              `json:"zatcaRequestId,omitempty"`
+}
+
+// ReportingRequest is sent to the Reporting API (B2C Simplified Invoices).
+type ReportingRequest struct {
+	InvoiceHash string `json:"invoiceHash"`
+	UUID        string `json:"uuid"`
+	Invoice     string `json:"invoice"` // Base64-encoded signed UBL XML
+}
+
+// ReportingResponse is received from the Reporting API.
+type ReportingResponse struct {
+	ReportingStatus       string              `json:"reportingStatus"` // 'REPORTED' or 'NOT_REPORTED'
+	ValidationResults     *ValidationResult   `json:"validationResults,omitempty"`
+	WarningMessages       []ValidationMessage `json:"warningMessages,omitempty"`
+	ErrorMessages         []ValidationMessage `json:"errorMessages,omitempty"`
+	ZATCARequestID        string              `json:"zatcaRequestId,omitempty"`
+}
+
+// ComplianceCSIDRequest is sent to issue a Compliance CSID using an OTP.
+type ComplianceCSIDRequest struct {
+	CSR string `json:"csr"` // Base64-encoded PKCS#10 Certificate Signing Request
+	OTP string `json:"otp"` // One-Time-Password from FATOORA portal
+}
+
+// ComplianceCSIDResponse contains the issued Compliance CSID certificate and secret.
+type ComplianceCSIDResponse struct {
+	RequestID           string `json:"requestID"`
+	DispositionMessage  string `json:"dispositionMessage"`
+	BinarySecurityToken string `json:"binarySecurityToken"` // Base64 X.509 cert
+	Secret              string `json:"secret"`
+	Errors              []string `json:"errors,omitempty"`
+}
+
+// ComplianceCheckRequest is used to validate sample invoices against ZATCA compliance checks.
+type ComplianceCheckRequest struct {
+	InvoiceHash string `json:"invoiceHash"`
+	UUID        string `json:"uuid"`
+	Invoice     string `json:"invoice"` // Base64 signed XML
+	InvoiceType string `json:"invoiceType"` // 'Standard' or 'Simplified'
+}
+
+// ComplianceCheckResponse contains validation results from compliance testing.
+type ComplianceCheckResponse struct {
+	Status            string              `json:"status"` // 'PASS' or 'FAIL'
+	ValidationResults *ValidationResult   `json:"validationResults,omitempty"`
+	WarningMessages   []ValidationMessage `json:"warningMessages,omitempty"`
+	ErrorMessages     []ValidationMessage `json:"errorMessages,omitempty"`
+}
+
+// ProductionCSIDRequest requests the permanent Production CSID after compliance checks pass.
+type ProductionCSIDRequest struct {
+	ComplianceRequestID string `json:"compliance_request_id"`
+}
+
+// ProductionCSIDResponse contains the issued Production CSID and token.
+type ProductionCSIDResponse struct {
+	RequestID           string `json:"requestID"`
+	DispositionMessage  string `json:"dispositionMessage"`
+	BinarySecurityToken string `json:"binarySecurityToken"` // Base64 Production X.509 cert
+	Secret              string `json:"secret"`
+	Errors              []string `json:"errors,omitempty"`
+}
+
+// RenewalRequest is used to renew an existing Production CSID.
+type RenewalRequest struct {
+	CSR string `json:"csr"`
+	OTP string `json:"otp"`
+}
+
+// RenewalResponse is returned upon certificate renewal.
+type RenewalResponse struct {
+	RequestID           string `json:"requestID"`
+	DispositionMessage  string `json:"dispositionMessage"`
+	BinarySecurityToken string `json:"binarySecurityToken"`
+	Secret              string `json:"secret"`
+}
+
+// ----------------------------------------------------------------------------
+// Submissions & Audit
+// ----------------------------------------------------------------------------
+
+type ZATCASubmission struct {
+	ID                uuid.UUID          `json:"id"`
+	DocumentID        uuid.UUID          `json:"document_id"`
+	LegalEntityID     uuid.UUID          `json:"legal_entity_id"`
+	SubmissionMode    SubmissionMode     `json:"submission_mode"`
+	Environment       Environment        `json:"environment"`
+	Status            string             `json:"status"` // 'PENDING', 'CLEARED', 'REPORTED', 'REJECTED', 'RETRY_PENDING', 'FAILED'
+	RequestPayload    string             `json:"request_payload,omitempty"`
+	ResponsePayload   string             `json:"response_payload,omitempty"`
+	ZATCARequestID    string             `json:"zatca_request_id,omitempty"`
+	ClearedInvoiceXML string             `json:"cleared_invoice_xml,omitempty"`
+	WarningMessages   []string           `json:"warning_messages,omitempty"`
+	ErrorMessages     []string           `json:"error_messages,omitempty"`
+	AttemptsCount     int                `json:"attempts_count"`
+	SubmittedAt       time.Time          `json:"submitted_at"`
+	CompletedAt       *time.Time         `json:"completed_at,omitempty"`
+	Attempts          []SubmissionAttempt `json:"attempts,omitempty"`
+}
+
+type SubmissionAttempt struct {
+	ID              uuid.UUID `json:"id"`
+	SubmissionID    uuid.UUID `json:"submission_id"`
+	AttemptNumber   int       `json:"attempt_number"`
+	HTTPStatusCode  int       `json:"http_status_code"`
+	RequestPayload  string    `json:"request_payload,omitempty"`
+	ResponsePayload string    `json:"response_payload,omitempty"`
+	ErrorMessage    string    `json:"error_message,omitempty"`
+	AttemptedAt     time.Time `json:"attempted_at"`
+}
+
+type SubmissionFilter struct {
+	LegalEntityID  uuid.UUID       `json:"legal_entity_id"`
+	DocumentID     *uuid.UUID      `json:"document_id,omitempty"`
+	SubmissionMode *SubmissionMode `json:"submission_mode,omitempty"`
+	Environment    *Environment    `json:"environment,omitempty"`
+	Status         *string         `json:"status,omitempty"`
+	Limit          int             `json:"limit"`
+	Offset         int             `json:"offset"`
+}
+
+type OnboardingStatus struct {
+	EGSUnitID              uuid.UUID  `json:"egs_unit_id"`
+	HasComplianceCSID      bool       `json:"has_compliance_csid"`
+	ComplianceChecksPassed bool       `json:"compliance_checks_passed"`
+	HasProductionCSID      bool       `json:"has_production_csid"`
+	ProductionCSIDExpiresAt *time.Time `json:"production_csid_expires_at,omitempty"`
+	CurrentEnvironment     Environment `json:"current_environment"`
+	Status                 string     `json:"status"` // 'NOT_ONBOARDED', 'COMPLIANCE_IN_PROGRESS', 'ONBOARDED'
+}
+
+type OnboardingResult struct {
+	EGSUnitID           uuid.UUID `json:"egs_unit_id"`
+	ComplianceRequestID string    `json:"compliance_request_id"`
+	ProductionCSIDID    uuid.UUID `json:"production_csid_id"`
+	Status              string    `json:"status"`
+	Message             string    `json:"message"`
+}
+

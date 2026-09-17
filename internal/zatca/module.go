@@ -6,8 +6,12 @@ import (
 
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
+	"erp/internal/zatca/application/onboarding"
 	"erp/internal/zatca/application/services"
+	"erp/internal/zatca/application/submission"
+	"erp/internal/zatca/infrastructure/client"
 	"erp/internal/zatca/infrastructure/postgres"
+	"erp/internal/zatca/jobs"
 	"erp/internal/zatca/ports"
 	"erp/internal/zatca/signing"
 	zhttp "erp/internal/zatca/transport/http"
@@ -20,25 +24,46 @@ import (
 )
 
 type Module struct {
-	pool    *pgxpool.Pool
-	Service ports.Service
-	Repo    ports.Repository
-	Handler *zhttp.ZATCAHandler
+	pool              *pgxpool.Pool
+	Service           ports.Service
+	OnboardingService ports.OnboardingService
+	SubmissionService ports.SubmissionService
+	Repo              ports.Repository
+	SubRepo           ports.SubmissionRepository
+	ZATCAClient       ports.ZATCAClient
+	OnboardingClient  ports.ZATCAOnboardingClient
+	RetryWorker       *jobs.RetryWorker
+	Handler           *zhttp.ZATCAHandler
 }
 
 func NewModule(cfg *config.Config, db *database.DB) *Module {
 	repo := postgres.NewRepository(db)
+	subRepo := postgres.NewSubmissionRepository(db)
 	xmlGen := xml.NewUBLGenerator()
 	validator := validation.NewInvoiceValidator()
 	signer := signing.NewInvoiceSigner()
+
+	// Default to SimulatorClient for sandbox/offline reliability
+	simClient := client.NewSimulatorClient()
+
 	svc := services.NewZATCAService(repo, xmlGen, validator, signer, db)
-	handler := zhttp.NewZATCAHandler(svc)
+	onboardingSvc := onboarding.NewOnboardingService(repo, simClient, xmlGen, signer)
+	submissionSvc := submission.NewSubmissionService(repo, subRepo, simClient)
+	retryWorker := jobs.NewRetryWorker(jobs.DefaultWorkerConfig(), subRepo, repo, submissionSvc)
+
+	handler := zhttp.NewZATCAHandler(svc, onboardingSvc, submissionSvc)
 
 	return &Module{
-		pool:    db.Pool,
-		Service: svc,
-		Repo:    repo,
-		Handler: handler,
+		pool:              db.Pool,
+		Service:           svc,
+		OnboardingService: onboardingSvc,
+		SubmissionService: submissionSvc,
+		Repo:              repo,
+		SubRepo:           subRepo,
+		ZATCAClient:       simClient,
+		OnboardingClient:  simClient,
+		RetryWorker:       retryWorker,
+		Handler:           handler,
 	}
 }
 

@@ -12,11 +12,17 @@ import (
 )
 
 type ZATCAHandler struct {
-	svc ports.Service
+	svc           ports.Service
+	onboardingSvc ports.OnboardingService
+	submissionSvc ports.SubmissionService
 }
 
-func NewZATCAHandler(svc ports.Service) *ZATCAHandler {
-	return &ZATCAHandler{svc: svc}
+func NewZATCAHandler(svc ports.Service, onboardingSvc ports.OnboardingService, submissionSvc ports.SubmissionService) *ZATCAHandler {
+	return &ZATCAHandler{
+		svc:           svc,
+		onboardingSvc: onboardingSvc,
+		submissionSvc: submissionSvc,
+	}
 }
 
 func (h *ZATCAHandler) Routes(authMiddleware func(http.Handler) http.Handler) http.Handler {
@@ -34,6 +40,10 @@ func (h *ZATCAHandler) Routes(authMiddleware func(http.Handler) http.Handler) ht
 		protected.Get("/egs-units/{id}/csids", h.ListCSIDs)
 		protected.Post("/egs-units/{id}/csids", h.GenerateCSID)
 
+		// Onboarding (Phase 26)
+		protected.Post("/onboarding/start", h.StartOnboarding)
+		protected.Get("/onboarding/status", h.GetOnboardingStatus)
+
 		// Documents
 		protected.Get("/documents", h.ListDocuments)
 		protected.Post("/documents/generate", h.GenerateDocument)
@@ -41,6 +51,13 @@ func (h *ZATCAHandler) Routes(authMiddleware func(http.Handler) http.Handler) ht
 		protected.Get("/documents/{id}/xml", h.GetDocumentXML)
 		protected.Post("/documents/{id}/validate", h.ValidateDocument)
 		protected.Post("/documents/{id}/sign", h.SignDocument)
+
+		// Submissions (Phase 26 Clearance & Reporting)
+		protected.Post("/documents/{id}/clearance", h.SubmitClearance)
+		protected.Post("/documents/{id}/reporting", h.SubmitReporting)
+		protected.Get("/submissions", h.ListSubmissions)
+		protected.Get("/submissions/{id}", h.GetSubmission)
+		protected.Post("/submissions/{id}/retry", h.RetrySubmission)
 
 		// Summary
 		protected.Get("/summary", h.GetSummary)
@@ -359,3 +376,209 @@ func (h *ZATCAHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, summary)
 }
+
+// ----------------------------------------------------------------------------
+// Phase 26 Handlers (Onboarding, Clearance, Reporting, Retries, Audit)
+// ----------------------------------------------------------------------------
+
+type StartOnboardingPayload struct {
+	LegalEntityID string `json:"legal_entity_id"`
+	EGSUnitID     string `json:"egs_unit_id"`
+	OTP           string `json:"otp"`
+}
+
+func (h *ZATCAHandler) StartOnboarding(w http.ResponseWriter, r *http.Request) {
+	if h.onboardingSvc == nil {
+		writeError(w, http.StatusNotImplemented, "onboarding service not enabled")
+		return
+	}
+
+	var payload StartOnboardingPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	leID, err := uuid.Parse(payload.LegalEntityID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid legal_entity_id")
+		return
+	}
+
+	egsID, err := uuid.Parse(payload.EGSUnitID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid egs_unit_id")
+		return
+	}
+
+	res, err := h.onboardingSvc.StartOnboarding(r.Context(), leID, egsID, payload.OTP)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (h *ZATCAHandler) GetOnboardingStatus(w http.ResponseWriter, r *http.Request) {
+	if h.onboardingSvc == nil {
+		writeError(w, http.StatusNotImplemented, "onboarding service not enabled")
+		return
+	}
+
+	leID, err := uuid.Parse(r.URL.Query().Get("legal_entity_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "legal_entity_id query parameter is required")
+		return
+	}
+
+	egsID, err := uuid.Parse(r.URL.Query().Get("egs_unit_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "egs_unit_id query parameter is required")
+		return
+	}
+
+	status, err := h.onboardingSvc.GetOnboardingStatus(r.Context(), leID, egsID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *ZATCAHandler) SubmitClearance(w http.ResponseWriter, r *http.Request) {
+	if h.submissionSvc == nil {
+		writeError(w, http.StatusNotImplemented, "submission service not enabled")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid document id")
+		return
+	}
+
+	leID, err := uuid.Parse(r.URL.Query().Get("legal_entity_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "legal_entity_id query parameter is required")
+		return
+	}
+
+	resp, err := h.submissionSvc.SubmitClearance(r.Context(), id, leID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *ZATCAHandler) SubmitReporting(w http.ResponseWriter, r *http.Request) {
+	if h.submissionSvc == nil {
+		writeError(w, http.StatusNotImplemented, "submission service not enabled")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid document id")
+		return
+	}
+
+	leID, err := uuid.Parse(r.URL.Query().Get("legal_entity_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "legal_entity_id query parameter is required")
+		return
+	}
+
+	resp, err := h.submissionSvc.SubmitReporting(r.Context(), id, leID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *ZATCAHandler) ListSubmissions(w http.ResponseWriter, r *http.Request) {
+	if h.submissionSvc == nil {
+		writeError(w, http.StatusNotImplemented, "submission service not enabled")
+		return
+	}
+
+	leID, err := uuid.Parse(r.URL.Query().Get("legal_entity_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "legal_entity_id query parameter is required")
+		return
+	}
+
+	filter := domain.SubmissionFilter{
+		LegalEntityID: leID,
+		Limit:         50,
+	}
+
+	if docIDStr := r.URL.Query().Get("document_id"); docIDStr != "" {
+		if dID, parseErr := uuid.Parse(docIDStr); parseErr == nil {
+			filter.DocumentID = &dID
+		}
+	}
+	if statusStr := r.URL.Query().Get("status"); statusStr != "" {
+		filter.Status = &statusStr
+	}
+
+	submissions, err := h.submissionSvc.ListSubmissions(r.Context(), filter)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, submissions)
+}
+
+func (h *ZATCAHandler) GetSubmission(w http.ResponseWriter, r *http.Request) {
+	if h.submissionSvc == nil {
+		writeError(w, http.StatusNotImplemented, "submission service not enabled")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid submission id")
+		return
+	}
+
+	leID, err := uuid.Parse(r.URL.Query().Get("legal_entity_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "legal_entity_id query parameter is required")
+		return
+	}
+
+	sub, err := h.submissionSvc.GetSubmission(r.Context(), id, leID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, sub)
+}
+
+func (h *ZATCAHandler) RetrySubmission(w http.ResponseWriter, r *http.Request) {
+	if h.submissionSvc == nil {
+		writeError(w, http.StatusNotImplemented, "submission service not enabled")
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid submission id")
+		return
+	}
+
+	leID, err := uuid.Parse(r.URL.Query().Get("legal_entity_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "legal_entity_id query parameter is required")
+		return
+	}
+
+	if err := h.submissionSvc.RetrySubmission(r.Context(), id, leID); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "RETRY_TRIGGERED"})
+}
+
