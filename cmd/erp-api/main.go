@@ -14,6 +14,7 @@ import (
 	"erp/internal/authorization"
 	"erp/internal/banking"
 	"erp/internal/budgeting"
+	"erp/internal/dashboard"
 	"erp/internal/documents"
 	"erp/internal/fixedassets"
 	"erp/internal/gosi"
@@ -394,6 +395,11 @@ func main() {
 			}
 		}
 		logger.Info("Reporting module and business intelligence engine registered")
+
+		// AA. Executive Dashboard Module (Cross-Module Aggregation & Command Center)
+		dashboardModule := dashboard.NewModule(cfg, db)
+		dashboardModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		logger.Info("Executive Dashboard module and aggregation engine registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown
