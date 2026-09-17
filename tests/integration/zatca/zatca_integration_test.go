@@ -38,10 +38,10 @@ func setupZATCAIntegrationTest(t *testing.T) (*zatca.Module, *database.DB, uuid.
 	}
 
 	txManager := transaction.NewManager(db.Pool)
-	_ = database.MigrateDown(ctx, cfg.Database.URL, "../../../database/migrations")
 	if err := database.MigrateUp(ctx, cfg.Database.URL, "../../../database/migrations"); err != nil {
 		t.Fatalf("failed to run migrations: %v", err)
 	}
+	_, _ = db.Pool.Exec(ctx, `TRUNCATE TABLE zatca.egs_units, zatca.csids, zatca.invoice_sequences, zatca.documents, zatca.document_hashes, zatca.submissions, zatca.submission_attempts, zatca.validation_results, zatca.validation_messages CASCADE`)
 
 	iamMod := iam.NewModule(cfg, db, txManager)
 	orgMod := organization.NewModule(cfg, db, txManager)

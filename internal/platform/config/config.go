@@ -23,6 +23,7 @@ type Config struct {
 	Environment Environment
 	HTTP        HTTPConfig
 	Database    DatabaseConfig
+	Storage     StorageConfig
 	LogLevel    string
 }
 
@@ -37,6 +38,11 @@ type DatabaseConfig struct {
 	URL      string
 	MaxConns int32
 	MinConns int32
+}
+
+type StorageConfig struct {
+	Provider string
+	LocalDir string
 }
 
 func Load() (*Config, error) {
@@ -58,6 +64,10 @@ func Load() (*Config, error) {
 			URL:      getEnv("DATABASE_URL", "postgres://postgres:toor@localhost:5432/erp_dev?sslmode=disable"),
 			MaxConns: int32(getIntEnv("DB_MAX_CONNS", 25)),
 			MinConns: int32(getIntEnv("DB_MIN_CONNS", 5)),
+		},
+		Storage: StorageConfig{
+			Provider: getEnv("STORAGE_PROVIDER", "local"),
+			LocalDir: getEnv("STORAGE_LOCAL_DIR", "./data/storage"),
 		},
 	}
 

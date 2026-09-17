@@ -36,10 +36,10 @@ func setupZATCATest(t *testing.T) (*zatca.Module, *database.DB, uuid.UUID, uuid.
 	}
 
 	txManager := transaction.NewManager(db.Pool)
-	_ = database.MigrateDown(ctx, cfg.Database.URL, "../../../database/migrations")
 	if err := database.MigrateUp(ctx, cfg.Database.URL, "../../../database/migrations"); err != nil {
 		t.Fatalf("failed to run migrations: %v", err)
 	}
+	_, _ = db.Pool.Exec(ctx, `TRUNCATE TABLE zatca.egs_units, zatca.csids, zatca.invoice_sequences, zatca.documents, zatca.document_hashes, zatca.submissions, zatca.submission_attempts, zatca.validation_results, zatca.validation_messages CASCADE`)
 
 	iamMod := iam.NewModule(cfg, db, txManager)
 	orgMod := organization.NewModule(cfg, db, txManager)
@@ -68,7 +68,7 @@ func setupZATCATest(t *testing.T) (*zatca.Module, *database.DB, uuid.UUID, uuid.
 
 func sampleInvoiceData() domain.InvoiceData {
 	return domain.InvoiceData{
-		InvoiceNumber:       "INV-2026-0001",
+		InvoiceNumber:       "INV-2026-" + uuid.New().String()[:8],
 		UUID:                uuid.New(),
 		IssueDate:           time.Now().Format("2006-01-02"),
 		IssueTime:           "10:30:00",

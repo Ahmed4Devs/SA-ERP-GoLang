@@ -9,33 +9,35 @@ import (
 	"syscall"
 
 	"erp/internal/accounting"
+	"erp/internal/attendance"
 	"erp/internal/audit"
 	"erp/internal/authorization"
+	"erp/internal/banking"
+	"erp/internal/budgeting"
+	"erp/internal/documents"
+	"erp/internal/fixedassets"
+	"erp/internal/gosi"
+	"erp/internal/hr"
 	"erp/internal/iam"
 	"erp/internal/inventory"
+	"erp/internal/leave"
 	"erp/internal/organization"
 	"erp/internal/payables"
+	"erp/internal/payroll"
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
 	platformhttp "erp/internal/platform/http"
 	"erp/internal/platform/observability"
+	"erp/internal/platform/storage"
 	"erp/internal/platform/transaction"
 	"erp/internal/products"
 	"erp/internal/purchasing"
 	"erp/internal/receivables"
 	"erp/internal/sales"
-	"erp/internal/banking"
-	"erp/internal/hr"
-	"erp/internal/attendance"
-	"erp/internal/leave"
-	"erp/internal/payroll"
-	"erp/internal/gosi"
-	"erp/internal/fixedassets"
-	"erp/internal/budgeting"
-	"erp/internal/zatca"
 	"erp/internal/tax"
 	"erp/internal/treasury"
 	"erp/internal/workflow"
+	"erp/internal/zatca"
 )
 
 func main() {
@@ -347,6 +349,23 @@ func main() {
 			}
 		}
 		logger.Info("ZATCA electronic invoicing core engine registered")
+
+		// X. Documents Module (Secure Blob Storage, Versions & Entity Attachments)
+		blobStore, err := storage.NewLocalFilesystemBlobStore(cfg.Storage.LocalDir)
+		if err != nil {
+			logger.Error("Failed to initialize local filesystem blob store", "error", err)
+		} else {
+			documentsModule := documents.NewModule(cfg, db, blobStore)
+			documentsModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+			if seededLE != nil {
+				if err := documentsModule.SeedDefaultDocumentsData(ctx, seededLE.ID); err != nil {
+					logger.Warn("Failed to seed default Documents Data", "error", err)
+				} else {
+					logger.Info("Default Company Documents and Legal Certificates verified", "legal_entity_id", seededLE.ID.String())
+				}
+			}
+			logger.Info("Documents module and secure blob storage registered")
+		}
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown
