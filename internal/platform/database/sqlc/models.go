@@ -395,6 +395,119 @@ type BankingStatements struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
+type GosiContributionCalculationLines struct {
+	ID             pgtype.UUID        `json:"id"`
+	CalculationID  pgtype.UUID        `json:"calculation_id"`
+	RuleVersionID  pgtype.UUID        `json:"rule_version_id"`
+	RuleCode       string             `json:"rule_code"`
+	RuleNameEn     pgtype.Text        `json:"rule_name_en"`
+	RuleNameAr     pgtype.Text        `json:"rule_name_ar"`
+	BasisAmount    pgtype.Numeric     `json:"basis_amount"`
+	EmployeeRate   pgtype.Numeric     `json:"employee_rate"`
+	EmployerRate   pgtype.Numeric     `json:"employer_rate"`
+	EmployeeAmount pgtype.Numeric     `json:"employee_amount"`
+	EmployerAmount pgtype.Numeric     `json:"employer_amount"`
+	FormulaNote    pgtype.Text        `json:"formula_note"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type GosiContributionCalculations struct {
+	ID                  pgtype.UUID        `json:"id"`
+	LegalEntityID       pgtype.UUID        `json:"legal_entity_id"`
+	EmployeeID          pgtype.UUID        `json:"employee_id"`
+	ProfileID           pgtype.UUID        `json:"profile_id"`
+	CalculationYear     int32              `json:"calculation_year"`
+	CalculationMonth    int32              `json:"calculation_month"`
+	ContributionBasis   pgtype.Numeric     `json:"contribution_basis"`
+	TotalEmployeeAmount pgtype.Numeric     `json:"total_employee_amount"`
+	TotalEmployerAmount pgtype.Numeric     `json:"total_employer_amount"`
+	TotalAmount         pgtype.Numeric     `json:"total_amount"`
+	CalculationSnapshot []byte             `json:"calculation_snapshot"`
+	ExportBatchID       pgtype.UUID        `json:"export_batch_id"`
+	Status              string             `json:"status"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type GosiContributionRuleVersions struct {
+	ID                pgtype.UUID        `json:"id"`
+	RuleID            pgtype.UUID        `json:"rule_id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	VersionNumber     int32              `json:"version_number"`
+	EffectiveFrom     pgtype.Date        `json:"effective_from"`
+	EffectiveTo       pgtype.Date        `json:"effective_to"`
+	NationalityScope  string             `json:"nationality_scope"`
+	EmployeeRate      pgtype.Numeric     `json:"employee_rate"`
+	EmployerRate      pgtype.Numeric     `json:"employer_rate"`
+	MinimumBasis      pgtype.Numeric     `json:"minimum_basis"`
+	MaximumBasis      pgtype.Numeric     `json:"maximum_basis"`
+	CalculationConfig []byte             `json:"calculation_config"`
+	LegalReference    pgtype.Text        `json:"legal_reference"`
+	Notes             pgtype.Text        `json:"notes"`
+	IsActive          bool               `json:"is_active"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type GosiContributionRules struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	DescriptionEn pgtype.Text        `json:"description_en"`
+	DescriptionAr pgtype.Text        `json:"description_ar"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type GosiEmployeeInsuranceProfiles struct {
+	ID                        pgtype.UUID        `json:"id"`
+	LegalEntityID             pgtype.UUID        `json:"legal_entity_id"`
+	EmployeeID                pgtype.UUID        `json:"employee_id"`
+	GosiNumber                pgtype.Text        `json:"gosi_number"`
+	RegistrationDate          pgtype.Date        `json:"registration_date"`
+	DeregistrationDate        pgtype.Date        `json:"deregistration_date"`
+	NationalityScope          string             `json:"nationality_scope"`
+	IsActive                  bool               `json:"is_active"`
+	ContributionBasisOverride pgtype.Numeric     `json:"contribution_basis_override"`
+	Notes                     pgtype.Text        `json:"notes"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+}
+
+type GosiExportBatches struct {
+	ID                  pgtype.UUID        `json:"id"`
+	LegalEntityID       pgtype.UUID        `json:"legal_entity_id"`
+	BatchNumber         string             `json:"batch_number"`
+	ExportYear          int32              `json:"export_year"`
+	ExportMonth         int32              `json:"export_month"`
+	EmployeeCount       int32              `json:"employee_count"`
+	TotalEmployeeAmount pgtype.Numeric     `json:"total_employee_amount"`
+	TotalEmployerAmount pgtype.Numeric     `json:"total_employer_amount"`
+	TotalAmount         pgtype.Numeric     `json:"total_amount"`
+	FileContent         pgtype.Text        `json:"file_content"`
+	FileFormat          string             `json:"file_format"`
+	Status              string             `json:"status"`
+	SubmittedAt         pgtype.Timestamptz `json:"submitted_at"`
+	ConfirmedAt         pgtype.Timestamptz `json:"confirmed_at"`
+	CreatedBy           pgtype.UUID        `json:"created_by"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type GosiIntegrationAttempts struct {
+	ID              pgtype.UUID        `json:"id"`
+	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
+	BatchID         pgtype.UUID        `json:"batch_id"`
+	AttemptNumber   int32              `json:"attempt_number"`
+	AdapterType     string             `json:"adapter_type"`
+	RequestPayload  []byte             `json:"request_payload"`
+	ResponsePayload []byte             `json:"response_payload"`
+	Status          string             `json:"status"`
+	ErrorMessage    pgtype.Text        `json:"error_message"`
+	StartedAt       pgtype.Timestamptz `json:"started_at"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+}
+
 type HrBankAccounts struct {
 	ID            pgtype.UUID        `json:"id"`
 	EmployeeID    pgtype.UUID        `json:"employee_id"`

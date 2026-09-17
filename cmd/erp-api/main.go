@@ -29,6 +29,7 @@ import (
 	"erp/internal/attendance"
 	"erp/internal/leave"
 	"erp/internal/payroll"
+	"erp/internal/gosi"
 	"erp/internal/tax"
 	"erp/internal/treasury"
 	"erp/internal/workflow"
@@ -295,6 +296,18 @@ func main() {
 			}
 		}
 		logger.Info("Payroll module and deterministic calculation engine registered")
+
+		// T. GOSI Module (Versioned Social Insurance Engine, Annuity, OHRSI, SANED, Export Batches)
+		gosiModule := gosi.NewModule(cfg, db)
+		gosiModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := gosiModule.SeedDefaultGOSIData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default GOSI Data", "error", err)
+			} else {
+				logger.Info("Default Saudi GOSI Rules (Annuity, OHRSI, SANED) and Rule Versions verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("GOSI module and versioned social insurance engine registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

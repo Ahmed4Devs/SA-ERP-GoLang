@@ -24,6 +24,7 @@ sql:
       - "database/queries/attendance"
       - "database/queries/leave"
       - "database/queries/payroll"
+      - "database/queries/gosi"
     gen:
       go:
         package: "sqlc"
