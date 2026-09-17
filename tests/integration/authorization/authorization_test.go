@@ -92,7 +92,7 @@ func TestAuthorization_LegalEntityScopeEnforcement(t *testing.T) {
 	}
 
 	// 2. Create actual user in IAM
-	testUsername := fmt.Sprintf("acc_%d", time.Now().UnixNano()%1000000)
+	testUsername := fmt.Sprintf("acc_%s", uuid.New().String()[:8])
 	createdUser, err := iamMod.AuthService.SeedAdmin(ctx, testUsername, testUsername+"@erp.sa", "محاسب تجريبي", "AccountantPass123!")
 	if err != nil {
 		t.Fatalf("failed to create test user: %v", err)

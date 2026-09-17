@@ -2813,3 +2813,133 @@ type WorkflowSteps struct {
 	ApprovalType string      `json:"approval_type"`
 	TimeoutHours pgtype.Int4 `json:"timeout_hours"`
 }
+
+type ZatcaConfigurationVersions struct {
+	ID               pgtype.UUID        `json:"id"`
+	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
+	VersionTag       string             `json:"version_tag"`
+	Environment      string             `json:"environment"`
+	ClearanceApiUrl  string             `json:"clearance_api_url"`
+	ReportingApiUrl  string             `json:"reporting_api_url"`
+	ComplianceApiUrl string             `json:"compliance_api_url"`
+	IsActive         bool               `json:"is_active"`
+	EffectiveFrom    pgtype.Date        `json:"effective_from"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type ZatcaCsids struct {
+	ID                  pgtype.UUID        `json:"id"`
+	EgsUnitID           pgtype.UUID        `json:"egs_unit_id"`
+	CsidType            string             `json:"csid_type"`
+	BinarySecurityToken string             `json:"binary_security_token"`
+	Secret              string             `json:"secret"`
+	PrivateKeyPem       string             `json:"private_key_pem"`
+	PublicKeyPem        string             `json:"public_key_pem"`
+	CertificatePem      pgtype.Text        `json:"certificate_pem"`
+	RequestID           pgtype.Text        `json:"request_id"`
+	ComplianceRequestID pgtype.Text        `json:"compliance_request_id"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	Status              string             `json:"status"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type ZatcaDocumentHashes struct {
+	ID               pgtype.UUID        `json:"id"`
+	DocumentID       pgtype.UUID        `json:"document_id"`
+	HashType         string             `json:"hash_type"`
+	HashValue        string             `json:"hash_value"`
+	CanonicalXmlHash string             `json:"canonical_xml_hash"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type ZatcaDocuments struct {
+	ID               pgtype.UUID        `json:"id"`
+	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
+	EgsUnitID        pgtype.UUID        `json:"egs_unit_id"`
+	SalesInvoiceID   pgtype.UUID        `json:"sales_invoice_id"`
+	InvoiceUuid      pgtype.UUID        `json:"invoice_uuid"`
+	InvoiceNumber    string             `json:"invoice_number"`
+	InvoiceType      string             `json:"invoice_type"`
+	InvoiceSubtype   string             `json:"invoice_subtype"`
+	SubmissionMode   string             `json:"submission_mode"`
+	Icv              int64              `json:"icv"`
+	Pih              string             `json:"pih"`
+	IssueDate        pgtype.Date        `json:"issue_date"`
+	IssueTime        pgtype.Time        `json:"issue_time"`
+	UblXml           string             `json:"ubl_xml"`
+	SignedXml        pgtype.Text        `json:"signed_xml"`
+	InvoiceHash      string             `json:"invoice_hash"`
+	DigitalSignature pgtype.Text        `json:"digital_signature"`
+	PublicKeyHashing pgtype.Text        `json:"public_key_hashing"`
+	QrCodeData       string             `json:"qr_code_data"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ZatcaEgsUnits struct {
+	ID                   pgtype.UUID        `json:"id"`
+	LegalEntityID        pgtype.UUID        `json:"legal_entity_id"`
+	BranchID             pgtype.UUID        `json:"branch_id"`
+	Uuid                 pgtype.UUID        `json:"uuid"`
+	CustomID             string             `json:"custom_id"`
+	Model                string             `json:"model"`
+	SerialNumber         string             `json:"serial_number"`
+	SolutionName         string             `json:"solution_name"`
+	VatNumber            string             `json:"vat_number"`
+	OrganizationName     string             `json:"organization_name"`
+	OrganizationUnitName string             `json:"organization_unit_name"`
+	CountryCode          string             `json:"country_code"`
+	InvoiceTypeMask      string             `json:"invoice_type_mask"`
+	Status               string             `json:"status"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ZatcaInvoiceSequences struct {
+	ID              pgtype.UUID        `json:"id"`
+	EgsUnitID       pgtype.UUID        `json:"egs_unit_id"`
+	InvoiceType     string             `json:"invoice_type"`
+	LastIcv         int64              `json:"last_icv"`
+	LastInvoiceHash string             `json:"last_invoice_hash"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ZatcaSubmissionAttempts struct {
+	ID              pgtype.UUID        `json:"id"`
+	SubmissionID    pgtype.UUID        `json:"submission_id"`
+	AttemptNumber   int32              `json:"attempt_number"`
+	HttpStatus      int32              `json:"http_status"`
+	ResponsePayload []byte             `json:"response_payload"`
+	ErrorMessage    pgtype.Text        `json:"error_message"`
+	AttemptedAt     pgtype.Timestamptz `json:"attempted_at"`
+}
+
+type ZatcaSubmissions struct {
+	ID              pgtype.UUID        `json:"id"`
+	DocumentID      pgtype.UUID        `json:"document_id"`
+	SubmissionMode  string             `json:"submission_mode"`
+	ZatcaStatus     string             `json:"zatca_status"`
+	ZatcaRequestID  pgtype.Text        `json:"zatca_request_id"`
+	ClearanceStatus pgtype.Text        `json:"clearance_status"`
+	ReportingStatus pgtype.Text        `json:"reporting_status"`
+	SubmittedAt     pgtype.Timestamptz `json:"submitted_at"`
+}
+
+type ZatcaValidationMessages struct {
+	ID                 pgtype.UUID        `json:"id"`
+	ValidationResultID pgtype.UUID        `json:"validation_result_id"`
+	MessageType        string             `json:"message_type"`
+	Code               string             `json:"code"`
+	Category           string             `json:"category"`
+	MessageText        string             `json:"message_text"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type ZatcaValidationResults struct {
+	ID            pgtype.UUID        `json:"id"`
+	DocumentID    pgtype.UUID        `json:"document_id"`
+	OverallStatus string             `json:"overall_status"`
+	RuleVersion   string             `json:"rule_version"`
+	ValidatedAt   pgtype.Timestamptz `json:"validated_at"`
+}

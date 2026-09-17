@@ -117,8 +117,8 @@ DECLARE
     v_period_q1 UUID;
     v_period_q2 UUID;
 BEGIN
-    -- Check if budgets already exist for this legal entity
-    IF EXISTS (SELECT 1 FROM budgeting.budgets WHERE legal_entity_id = p_legal_entity_id) THEN
+    -- Check if default seeded budget already exists for this legal entity
+    IF EXISTS (SELECT 1 FROM budgeting.budgets WHERE legal_entity_id = p_legal_entity_id AND code = 'BUD-2026-OPEX') THEN
         RETURN;
     END IF;
 

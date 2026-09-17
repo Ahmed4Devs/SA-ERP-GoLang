@@ -32,6 +32,7 @@ import (
 	"erp/internal/gosi"
 	"erp/internal/fixedassets"
 	"erp/internal/budgeting"
+	"erp/internal/zatca"
 	"erp/internal/tax"
 	"erp/internal/treasury"
 	"erp/internal/workflow"
@@ -334,6 +335,18 @@ func main() {
 			}
 		}
 		logger.Info("Budgeting module and multi-dimensional variance engine registered")
+
+		// W. ZATCA Module (EGS Units, CSIDs, UBL 2.1 XML Generator, BR-KSA Validator, ECDSA Signer, TLV QR)
+		zatcaModule := zatca.NewModule(cfg, db)
+		zatcaModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := zatcaModule.SeedDefaultZATCAData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default ZATCA Data", "error", err)
+			} else {
+				logger.Info("Default ZATCA EGS Units, CSID, and Configuration verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("ZATCA electronic invoicing core engine registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

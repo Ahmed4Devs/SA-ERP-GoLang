@@ -132,7 +132,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { key: "gosi", href: "/gosi", icon: FileCheck2, label: t.nav.gosi, active: pathname === "/gosi" },
     { key: "fixed-assets", href: "/fixed-assets", icon: Layers, label: (t.nav as any)?.fixedAssets || "الأصول الثابتة وإهلاكها", active: pathname === "/fixed-assets" },
     { key: "budgets", href: "/budgets", icon: PieChart, label: (t.nav as any)?.budgets || "الميزانيات التقديرية", active: pathname === "/budgets" },
-    { key: "zatca", href: "#", icon: ReceiptText, label: t.nav.zatca },
+    { key: "zatca", href: "/zatca", icon: ReceiptText, label: t.nav.zatca, active: pathname === "/zatca" },
     { key: "reports", href: "#", icon: BarChart3, label: t.nav.reports },
     { key: "settings", href: "#", icon: Settings, label: t.nav.settings },
   ];

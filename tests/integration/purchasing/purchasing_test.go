@@ -3,6 +3,7 @@ package purchasing_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -61,7 +62,9 @@ func setupPurchasingTest(t *testing.T) (*purchasing.Module, *payables.Module, *d
 	_ = accMod.SeedDefaultCOA(ctx, le.ID)
 	_ = prodMod.SeedDefaultProductsData(ctx, le.ID)
 	_ = invMod.SeedDefaultInventoryData(ctx, le.ID)
-	_ = payMod.SeedDefaultPayablesData(ctx, le.ID)
+	if err := payMod.SeedDefaultPayablesData(ctx, le.ID); err != nil {
+		t.Fatalf("failed to seed payables: %v", err)
+	}
 	_ = purchMod.SeedDefaultPurchasingData(ctx, le.ID)
 
 	// 3. Admin user
@@ -207,7 +210,7 @@ func TestRFQ_And_SupplierQuoteAward(t *testing.T) {
 		LegalEntityID:          leID,
 		RFQID:                  &rfq.ID,
 		SupplierID:             suppID,
-		SupplierQuoteReference: "SQ-FOZAN-9988",
+		SupplierQuoteReference: fmt.Sprintf("SQ-FOZAN-%s", uuid.New().String()[:8]),
 		QuoteDate:              time.Now(),
 		ValidUntil:             time.Now().AddDate(0, 1, 0),
 		CurrencyCode:           "SAR",
@@ -238,7 +241,7 @@ func TestRFQ_And_SupplierQuoteAward(t *testing.T) {
 		LegalEntityID:          leID,
 		RFQID:                  &rfq.ID,
 		SupplierID:             supp2ID,
-		SupplierQuoteReference: "SQ-BINLADEN-1122",
+		SupplierQuoteReference: fmt.Sprintf("SQ-BINLADEN-%s", uuid.New().String()[:8]),
 		QuoteDate:              time.Now(),
 		ValidUntil:             time.Now().AddDate(0, 1, 0),
 		CurrencyCode:           "SAR",
@@ -502,7 +505,7 @@ func TestThreeWayMatching_Verification(t *testing.T) {
 	_, _ = svc.ApprovePurchaseOrder(ctx, po.ID, adminID)
 	_, _ = svc.IssuePurchaseOrder(ctx, po.ID)
 
-	grn, _ := svc.CreateGoodsReceipt(ctx, ports.CreateReceiptCmd{
+	grn, err := svc.CreateGoodsReceipt(ctx, ports.CreateReceiptCmd{
 		LegalEntityID:   leID,
 		PurchaseOrderID: po.ID,
 		SupplierID:      suppID,
@@ -520,6 +523,9 @@ func TestThreeWayMatching_Verification(t *testing.T) {
 			},
 		},
 	})
+	if err != nil {
+		t.Fatalf("failed to create GRN: %v", err)
+	}
 	acceptedGRN, err := svc.InspectAndAcceptGoodsReceipt(ctx, grn.ID, adminID)
 	if err != nil {
 		t.Fatalf("failed to accept GRN: %v", err)

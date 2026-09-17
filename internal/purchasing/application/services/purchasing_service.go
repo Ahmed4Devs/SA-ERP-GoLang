@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"erp/internal/platform/database"
@@ -33,7 +34,7 @@ func (s *purchasingService) CreatePurchaseRequest(ctx context.Context, cmd ports
 		return nil, domain.ErrEmptyLineItems
 	}
 
-	prNumber := fmt.Sprintf("PR-%s-%04d", time.Now().Format("2006"), time.Now().UnixNano()%10000)
+	prNumber := fmt.Sprintf("PR-%s-%s", time.Now().Format("2006"), strings.ToUpper(uuid.New().String()[:8]))
 	currency := cmd.CurrencyCode
 	if currency == "" {
 		currency = "SAR"
@@ -111,7 +112,7 @@ func (s *purchasingService) CreateRFQ(ctx context.Context, cmd ports.CreateRFQCm
 		return nil, domain.ErrEmptyLineItems
 	}
 
-	rfqNumber := fmt.Sprintf("RFQ-%s-%04d", time.Now().Format("2006"), time.Now().UnixNano()%10000)
+	rfqNumber := fmt.Sprintf("RFQ-%s-%s", time.Now().Format("2006"), strings.ToUpper(uuid.New().String()[:8]))
 
 	rfq := &domain.RFQ{
 		ID:                uuid.New(),
@@ -247,7 +248,7 @@ func (s *purchasingService) CreatePurchaseOrder(ctx context.Context, cmd ports.C
 		return nil, domain.ErrEmptyLineItems
 	}
 
-	poNumber := fmt.Sprintf("PO-%s-%04d", time.Now().Format("2006"), time.Now().UnixNano()%10000)
+	poNumber := fmt.Sprintf("PO-%s-%s", time.Now().Format("2006"), strings.ToUpper(uuid.New().String()[:8]))
 	currency := cmd.CurrencyCode
 	if currency == "" {
 		currency = "SAR"
@@ -378,7 +379,7 @@ func (s *purchasingService) CreateGoodsReceipt(ctx context.Context, cmd ports.Cr
 		return nil, domain.ErrPONotIssued
 	}
 
-	receiptNumber := fmt.Sprintf("GRN-%s-%04d", time.Now().Format("2006"), time.Now().UnixNano()%10000)
+	receiptNumber := fmt.Sprintf("GRN-%s-%s", time.Now().Format("2006"), strings.ToUpper(uuid.New().String()[:8]))
 
 	gr := &domain.GoodsReceipt{
 		ID:                 uuid.New(),

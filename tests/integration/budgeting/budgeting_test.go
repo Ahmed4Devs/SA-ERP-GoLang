@@ -317,7 +317,12 @@ func TestBudget_FundTransfers(t *testing.T) {
 }
 
 func TestBudget_SeedDefaultData(t *testing.T) {
-	bMod, _, _, leID, _, _, ctx := setupBudgetingTest(t)
+	bMod, _, db, leID, _, _, ctx := setupBudgetingTest(t)
+
+	// Clean up any test budgets so seed procedure runs cleanly
+	if _, err := db.Pool.Exec(ctx, "TRUNCATE budgeting.budget_transfers, budgeting.budget_lines, budgeting.budget_versions, budgeting.budgets CASCADE"); err != nil {
+		t.Fatalf("failed to truncate budgets: %v", err)
+	}
 
 	// Seed procedure
 	if err := bMod.SeedDefaultBudgetingData(ctx, leID); err != nil {
