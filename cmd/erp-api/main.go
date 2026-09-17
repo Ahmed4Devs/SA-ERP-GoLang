@@ -31,6 +31,7 @@ import (
 	"erp/internal/payroll"
 	"erp/internal/gosi"
 	"erp/internal/fixedassets"
+	"erp/internal/budgeting"
 	"erp/internal/tax"
 	"erp/internal/treasury"
 	"erp/internal/workflow"
@@ -321,6 +322,18 @@ func main() {
 			}
 		}
 		logger.Info("Fixed assets module and straight-line depreciation engine registered")
+
+		// V. Budgeting Module (Budgets, Versions, Multi-Dimensional Lines, Transfers, Budget vs Actual)
+		budgetingModule := budgeting.NewModule(cfg, db)
+		budgetingModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := budgetingModule.SeedDefaultBudgetingData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Budgeting Data", "error", err)
+			} else {
+				logger.Info("Default Annual Operating and CAPEX Budgets verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Budgeting module and multi-dimensional variance engine registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

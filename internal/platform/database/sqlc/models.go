@@ -395,6 +395,72 @@ type BankingStatements struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
+type BudgetingBudgetLines struct {
+	ID                pgtype.UUID        `json:"id"`
+	BudgetVersionID   pgtype.UUID        `json:"budget_version_id"`
+	AccountID         pgtype.UUID        `json:"account_id"`
+	DepartmentID      pgtype.UUID        `json:"department_id"`
+	CostCenterID      pgtype.UUID        `json:"cost_center_id"`
+	ProjectCode       pgtype.Text        `json:"project_code"`
+	FiscalPeriodID    pgtype.UUID        `json:"fiscal_period_id"`
+	Amount            pgtype.Numeric     `json:"amount"`
+	ActualAmount      pgtype.Numeric     `json:"actual_amount"`
+	CommittedAmount   pgtype.Numeric     `json:"committed_amount"`
+	LineDescriptionEn pgtype.Text        `json:"line_description_en"`
+	LineDescriptionAr pgtype.Text        `json:"line_description_ar"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BudgetingBudgetTransfers struct {
+	ID                  pgtype.UUID        `json:"id"`
+	LegalEntityID       pgtype.UUID        `json:"legal_entity_id"`
+	TransferNumber      string             `json:"transfer_number"`
+	SourceLineID        pgtype.UUID        `json:"source_line_id"`
+	TargetLineID        pgtype.UUID        `json:"target_line_id"`
+	Amount              pgtype.Numeric     `json:"amount"`
+	Reason              string             `json:"reason"`
+	Status              string             `json:"status"`
+	TransferredByUserID pgtype.UUID        `json:"transferred_by_user_id"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type BudgetingBudgetVersions struct {
+	ID               pgtype.UUID        `json:"id"`
+	BudgetID         pgtype.UUID        `json:"budget_id"`
+	VersionNumber    int32              `json:"version_number"`
+	VersionName      string             `json:"version_name"`
+	Status           string             `json:"status"`
+	Notes            pgtype.Text        `json:"notes"`
+	CreatedByUserID  pgtype.UUID        `json:"created_by_user_id"`
+	ApprovedByUserID pgtype.UUID        `json:"approved_by_user_id"`
+	ApprovedAt       pgtype.Timestamptz `json:"approved_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BudgetingBudgets struct {
+	ID                   pgtype.UUID        `json:"id"`
+	LegalEntityID        pgtype.UUID        `json:"legal_entity_id"`
+	Code                 string             `json:"code"`
+	NameEn               string             `json:"name_en"`
+	NameAr               string             `json:"name_ar"`
+	DescriptionEn        pgtype.Text        `json:"description_en"`
+	DescriptionAr        pgtype.Text        `json:"description_ar"`
+	FiscalYearID         pgtype.UUID        `json:"fiscal_year_id"`
+	CurrencyCode         string             `json:"currency_code"`
+	BudgetType           string             `json:"budget_type"`
+	Status               string             `json:"status"`
+	TotalBudgetedAmount  pgtype.Numeric     `json:"total_budgeted_amount"`
+	TotalActualAmount    pgtype.Numeric     `json:"total_actual_amount"`
+	TotalCommittedAmount pgtype.Numeric     `json:"total_committed_amount"`
+	CreatedByUserID      pgtype.UUID        `json:"created_by_user_id"`
+	ApprovedByUserID     pgtype.UUID        `json:"approved_by_user_id"`
+	ApprovedAt           pgtype.Timestamptz `json:"approved_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type FixedassetsAssetAssignments struct {
 	ID             pgtype.UUID        `json:"id"`
 	AssetID        pgtype.UUID        `json:"asset_id"`

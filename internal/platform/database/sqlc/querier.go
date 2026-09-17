@@ -44,6 +44,10 @@ type Querier interface {
 	CreateBarcode(ctx context.Context, arg CreateBarcodeParams) (ProductsBarcodes, error)
 	CreateBin(ctx context.Context, arg CreateBinParams) (WarehouseBinLocations, error)
 	CreateBranch(ctx context.Context, arg CreateBranchParams) (OrganizationBranches, error)
+	CreateBudget(ctx context.Context, arg CreateBudgetParams) (BudgetingBudgets, error)
+	CreateBudgetLine(ctx context.Context, arg CreateBudgetLineParams) (BudgetingBudgetLines, error)
+	CreateBudgetTransfer(ctx context.Context, arg CreateBudgetTransferParams) (BudgetingBudgetTransfers, error)
+	CreateBudgetVersion(ctx context.Context, arg CreateBudgetVersionParams) (BudgetingBudgetVersions, error)
 	CreateCalculationLine(ctx context.Context, arg CreateCalculationLineParams) (PayrollCalculationLines, error)
 	CreateCashAccount(ctx context.Context, arg CreateCashAccountParams) (TreasuryCashAccounts, error)
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (ProductsCategories, error)
@@ -180,6 +184,8 @@ type Querier interface {
 	CreateWorkflowStep(ctx context.Context, arg CreateWorkflowStepParams) (WorkflowSteps, error)
 	DeleteAllSessionsForUser(ctx context.Context, userID pgtype.UUID) error
 	DeleteBarcode(ctx context.Context, id pgtype.UUID) error
+	DeleteBudget(ctx context.Context, arg DeleteBudgetParams) error
+	DeleteBudgetLine(ctx context.Context, id pgtype.UUID) error
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteItemTaxProfile(ctx context.Context, itemID pgtype.UUID) error
 	DeleteItemUOM(ctx context.Context, id pgtype.UUID) error
@@ -193,6 +199,7 @@ type Querier interface {
 	FulfillStockReservation(ctx context.Context, id pgtype.UUID) (InventoryStockReservations, error)
 	GetAccountByCode(ctx context.Context, arg GetAccountByCodeParams) (AccountingAccounts, error)
 	GetAccountByID(ctx context.Context, id pgtype.UUID) (AccountingAccounts, error)
+	GetActiveBudgetVersion(ctx context.Context, budgetID pgtype.UUID) (BudgetingBudgetVersions, error)
 	GetActiveCostLayersForUpdate(ctx context.Context, arg GetActiveCostLayersForUpdateParams) ([]InventoryCostLayers, error)
 	GetActiveDelegation(ctx context.Context, arg GetActiveDelegationParams) (WorkflowDelegations, error)
 	GetActiveEmployeeSalaryAssignment(ctx context.Context, arg GetActiveEmployeeSalaryAssignmentParams) (PayrollEmployeeSalaryAssignments, error)
@@ -218,6 +225,11 @@ type Querier interface {
 	GetBinByID(ctx context.Context, id pgtype.UUID) (WarehouseBinLocations, error)
 	GetBranchByEntityAndCode(ctx context.Context, arg GetBranchByEntityAndCodeParams) (OrganizationBranches, error)
 	GetBranchByID(ctx context.Context, id pgtype.UUID) (OrganizationBranches, error)
+	GetBudgetByCode(ctx context.Context, arg GetBudgetByCodeParams) (BudgetingBudgets, error)
+	GetBudgetByID(ctx context.Context, arg GetBudgetByIDParams) (BudgetingBudgets, error)
+	GetBudgetLineByID(ctx context.Context, id pgtype.UUID) (BudgetingBudgetLines, error)
+	GetBudgetVersionByID(ctx context.Context, id pgtype.UUID) (BudgetingBudgetVersions, error)
+	GetBudgetVersions(ctx context.Context, budgetID pgtype.UUID) ([]BudgetingBudgetVersions, error)
 	GetCashAccountByCode(ctx context.Context, arg GetCashAccountByCodeParams) (TreasuryCashAccounts, error)
 	GetCashAccountByID(ctx context.Context, arg GetCashAccountByIDParams) (TreasuryCashAccounts, error)
 	GetCategoryByCode(ctx context.Context, arg GetCategoryByCodeParams) (ProductsCategories, error)
@@ -415,6 +427,9 @@ type Querier interface {
 	ListBarcodesByItem(ctx context.Context, itemID pgtype.UUID) ([]ListBarcodesByItemRow, error)
 	ListBinsByWarehouse(ctx context.Context, warehouseID pgtype.UUID) ([]WarehouseBinLocations, error)
 	ListBranchesByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationBranches, error)
+	ListBudgetLines(ctx context.Context, budgetVersionID pgtype.UUID) ([]ListBudgetLinesRow, error)
+	ListBudgetTransfers(ctx context.Context, legalEntityID pgtype.UUID) ([]ListBudgetTransfersRow, error)
+	ListBudgets(ctx context.Context, legalEntityID pgtype.UUID) ([]BudgetingBudgets, error)
 	ListCalculationLinesByRunEmployee(ctx context.Context, runEmployeeID pgtype.UUID) ([]PayrollCalculationLines, error)
 	ListCashAccounts(ctx context.Context, legalEntityID pgtype.UUID) ([]TreasuryCashAccounts, error)
 	ListCategoriesByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]ListCategoriesByEntityRow, error)
@@ -572,6 +587,7 @@ type Querier interface {
 	SetCreditHold(ctx context.Context, arg SetCreditHoldParams) (ReceivablesCustomerCreditLimits, error)
 	SetPassword(ctx context.Context, arg SetPasswordParams) error
 	SetSupplierStatus(ctx context.Context, arg SetSupplierStatusParams) error
+	SumBudgetLinesByVersion(ctx context.Context, budgetVersionID pgtype.UUID) (SumBudgetLinesByVersionRow, error)
 	UpdateAccount(ctx context.Context, arg UpdateAccountParams) (AccountingAccounts, error)
 	UpdateAdjustmentStatus(ctx context.Context, arg UpdateAdjustmentStatusParams) (AttendanceAdjustments, error)
 	UpdateApprovalRequestStatus(ctx context.Context, arg UpdateApprovalRequestStatusParams) (WorkflowApprovalRequests, error)
@@ -581,6 +597,10 @@ type Querier interface {
 	UpdateBankReconciliation(ctx context.Context, arg UpdateBankReconciliationParams) (BankingReconciliations, error)
 	UpdateBankStatementStatus(ctx context.Context, arg UpdateBankStatementStatusParams) (BankingStatements, error)
 	UpdateBranch(ctx context.Context, arg UpdateBranchParams) (OrganizationBranches, error)
+	UpdateBudgetLine(ctx context.Context, arg UpdateBudgetLineParams) (BudgetingBudgetLines, error)
+	UpdateBudgetStatus(ctx context.Context, arg UpdateBudgetStatusParams) (BudgetingBudgets, error)
+	UpdateBudgetTotals(ctx context.Context, arg UpdateBudgetTotalsParams) (BudgetingBudgets, error)
+	UpdateBudgetVersionStatus(ctx context.Context, arg UpdateBudgetVersionStatusParams) (BudgetingBudgetVersions, error)
 	UpdateCashAccountBalance(ctx context.Context, arg UpdateCashAccountBalanceParams) (TreasuryCashAccounts, error)
 	UpdateCashAccountStatus(ctx context.Context, arg UpdateCashAccountStatusParams) (TreasuryCashAccounts, error)
 	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (ProductsCategories, error)

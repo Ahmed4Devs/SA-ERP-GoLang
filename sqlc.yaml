@@ -26,6 +26,7 @@ sql:
       - "database/queries/payroll"
       - "database/queries/gosi"
       - "database/queries/fixedassets"
+      - "database/queries/budgeting"
     gen:
       go:
         package: "sqlc"
