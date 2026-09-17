@@ -395,6 +395,188 @@ type BankingStatements struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
+type FixedassetsAssetAssignments struct {
+	ID             pgtype.UUID        `json:"id"`
+	AssetID        pgtype.UUID        `json:"asset_id"`
+	AssignedToType string             `json:"assigned_to_type"`
+	EmployeeID     pgtype.UUID        `json:"employee_id"`
+	DepartmentID   pgtype.UUID        `json:"department_id"`
+	AssignedDate   pgtype.Date        `json:"assigned_date"`
+	ReturnDate     pgtype.Date        `json:"return_date"`
+	Notes          pgtype.Text        `json:"notes"`
+	IsCurrent      bool               `json:"is_current"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type FixedassetsAssetLocations struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	Building      pgtype.Text        `json:"building"`
+	Floor         pgtype.Text        `json:"floor"`
+	Room          pgtype.Text        `json:"room"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type FixedassetsAssets struct {
+	ID                      pgtype.UUID        `json:"id"`
+	LegalEntityID           pgtype.UUID        `json:"legal_entity_id"`
+	CategoryID              pgtype.UUID        `json:"category_id"`
+	LocationID              pgtype.UUID        `json:"location_id"`
+	AssetNumber             string             `json:"asset_number"`
+	SerialNumber            pgtype.Text        `json:"serial_number"`
+	Barcode                 pgtype.Text        `json:"barcode"`
+	NameEn                  string             `json:"name_en"`
+	NameAr                  string             `json:"name_ar"`
+	DescriptionEn           pgtype.Text        `json:"description_en"`
+	DescriptionAr           pgtype.Text        `json:"description_ar"`
+	AcquisitionDate         pgtype.Date        `json:"acquisition_date"`
+	InServiceDate           pgtype.Date        `json:"in_service_date"`
+	AcquisitionCost         pgtype.Numeric     `json:"acquisition_cost"`
+	SalvageValue            pgtype.Numeric     `json:"salvage_value"`
+	UsefulLifeMonths        int32              `json:"useful_life_months"`
+	DepreciationMethod      string             `json:"depreciation_method"`
+	Status                  string             `json:"status"`
+	CurrentNetBookValue     pgtype.Numeric     `json:"current_net_book_value"`
+	AccumulatedDepreciation pgtype.Numeric     `json:"accumulated_depreciation"`
+	ImpairmentTotal         pgtype.Numeric     `json:"impairment_total"`
+	SupplierID              pgtype.UUID        `json:"supplier_id"`
+	PurchaseInvoiceID       pgtype.UUID        `json:"purchase_invoice_id"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
+type FixedassetsCategories struct {
+	ID                               pgtype.UUID        `json:"id"`
+	LegalEntityID                    pgtype.UUID        `json:"legal_entity_id"`
+	Code                             string             `json:"code"`
+	NameEn                           string             `json:"name_en"`
+	NameAr                           string             `json:"name_ar"`
+	DescriptionEn                    pgtype.Text        `json:"description_en"`
+	DescriptionAr                    pgtype.Text        `json:"description_ar"`
+	DepreciationMethod               string             `json:"depreciation_method"`
+	UsefulLifeMonths                 int32              `json:"useful_life_months"`
+	SalvageValueRate                 pgtype.Numeric     `json:"salvage_value_rate"`
+	AssetAccountID                   pgtype.UUID        `json:"asset_account_id"`
+	AccumulatedDepreciationAccountID pgtype.UUID        `json:"accumulated_depreciation_account_id"`
+	DepreciationExpenseAccountID     pgtype.UUID        `json:"depreciation_expense_account_id"`
+	IsActive                         bool               `json:"is_active"`
+	CreatedAt                        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type FixedassetsDepreciationBooks struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	IsPrimary     bool               `json:"is_primary"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type FixedassetsDepreciationLines struct {
+	ID                   pgtype.UUID        `json:"id"`
+	RunID                pgtype.UUID        `json:"run_id"`
+	AssetID              pgtype.UUID        `json:"asset_id"`
+	AssetNumber          string             `json:"asset_number"`
+	CostBasis            pgtype.Numeric     `json:"cost_basis"`
+	DepreciationAmount   pgtype.Numeric     `json:"depreciation_amount"`
+	AccumulatedBefore    pgtype.Numeric     `json:"accumulated_before"`
+	AccumulatedAfter     pgtype.Numeric     `json:"accumulated_after"`
+	NetBookValueAfter    pgtype.Numeric     `json:"net_book_value_after"`
+	ExpenseAccountID     pgtype.UUID        `json:"expense_account_id"`
+	AccumulatedAccountID pgtype.UUID        `json:"accumulated_account_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type FixedassetsDepreciationRuns struct {
+	ID                      pgtype.UUID        `json:"id"`
+	LegalEntityID           pgtype.UUID        `json:"legal_entity_id"`
+	BookID                  pgtype.UUID        `json:"book_id"`
+	RunNumber               string             `json:"run_number"`
+	PeriodYear              int32              `json:"period_year"`
+	PeriodMonth             int32              `json:"period_month"`
+	RunDate                 pgtype.Date        `json:"run_date"`
+	TotalAssetsProcessed    int32              `json:"total_assets_processed"`
+	TotalDepreciationAmount pgtype.Numeric     `json:"total_depreciation_amount"`
+	Status                  string             `json:"status"`
+	JournalEntryID          pgtype.UUID        `json:"journal_entry_id"`
+	CreatedBy               pgtype.UUID        `json:"created_by"`
+	ApprovedBy              pgtype.UUID        `json:"approved_by"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
+type FixedassetsDepreciationSchedules struct {
+	ID                      pgtype.UUID        `json:"id"`
+	AssetID                 pgtype.UUID        `json:"asset_id"`
+	BookID                  pgtype.UUID        `json:"book_id"`
+	PeriodYear              int32              `json:"period_year"`
+	PeriodMonth             int32              `json:"period_month"`
+	OpeningNetBookValue     pgtype.Numeric     `json:"opening_net_book_value"`
+	DepreciationAmount      pgtype.Numeric     `json:"depreciation_amount"`
+	ClosingNetBookValue     pgtype.Numeric     `json:"closing_net_book_value"`
+	AccumulatedDepreciation pgtype.Numeric     `json:"accumulated_depreciation"`
+	IsPosted                bool               `json:"is_posted"`
+	DepreciationRunID       pgtype.UUID        `json:"depreciation_run_id"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+}
+
+type FixedassetsDisposals struct {
+	ID                                pgtype.UUID        `json:"id"`
+	LegalEntityID                     pgtype.UUID        `json:"legal_entity_id"`
+	AssetID                           pgtype.UUID        `json:"asset_id"`
+	DisposalNumber                    string             `json:"disposal_number"`
+	DisposalDate                      pgtype.Date        `json:"disposal_date"`
+	DisposalType                      string             `json:"disposal_type"`
+	ProceedsAmount                    pgtype.Numeric     `json:"proceeds_amount"`
+	CostAtDisposal                    pgtype.Numeric     `json:"cost_at_disposal"`
+	AccumulatedDepreciationAtDisposal pgtype.Numeric     `json:"accumulated_depreciation_at_disposal"`
+	NetBookValueAtDisposal            pgtype.Numeric     `json:"net_book_value_at_disposal"`
+	GainOrLossAmount                  pgtype.Numeric     `json:"gain_or_loss_amount"`
+	JournalEntryID                    pgtype.UUID        `json:"journal_entry_id"`
+	CustomerID                        pgtype.UUID        `json:"customer_id"`
+	Reason                            pgtype.Text        `json:"reason"`
+	Status                            string             `json:"status"`
+	CreatedBy                         pgtype.UUID        `json:"created_by"`
+	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
+}
+
+type FixedassetsImpairments struct {
+	ID                   pgtype.UUID        `json:"id"`
+	LegalEntityID        pgtype.UUID        `json:"legal_entity_id"`
+	AssetID              pgtype.UUID        `json:"asset_id"`
+	ImpairmentNumber     string             `json:"impairment_number"`
+	ImpairmentDate       pgtype.Date        `json:"impairment_date"`
+	CarryingAmountBefore pgtype.Numeric     `json:"carrying_amount_before"`
+	RecoverableAmount    pgtype.Numeric     `json:"recoverable_amount"`
+	ImpairmentLoss       pgtype.Numeric     `json:"impairment_loss"`
+	Reason               string             `json:"reason"`
+	JournalEntryID       pgtype.UUID        `json:"journal_entry_id"`
+	CreatedBy            pgtype.UUID        `json:"created_by"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type FixedassetsTransfers struct {
+	ID             pgtype.UUID        `json:"id"`
+	LegalEntityID  pgtype.UUID        `json:"legal_entity_id"`
+	AssetID        pgtype.UUID        `json:"asset_id"`
+	TransferNumber string             `json:"transfer_number"`
+	TransferDate   pgtype.Date        `json:"transfer_date"`
+	FromLocationID pgtype.UUID        `json:"from_location_id"`
+	ToLocationID   pgtype.UUID        `json:"to_location_id"`
+	FromEmployeeID pgtype.UUID        `json:"from_employee_id"`
+	ToEmployeeID   pgtype.UUID        `json:"to_employee_id"`
+	Reason         pgtype.Text        `json:"reason"`
+	Status         string             `json:"status"`
+	TransferredBy  pgtype.UUID        `json:"transferred_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type GosiContributionCalculationLines struct {
 	ID             pgtype.UUID        `json:"id"`
 	CalculationID  pgtype.UUID        `json:"calculation_id"`

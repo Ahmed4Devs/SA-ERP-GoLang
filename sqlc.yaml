@@ -25,6 +25,7 @@ sql:
       - "database/queries/leave"
       - "database/queries/payroll"
       - "database/queries/gosi"
+      - "database/queries/fixedassets"
     gen:
       go:
         package: "sqlc"

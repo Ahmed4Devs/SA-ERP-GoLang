@@ -30,6 +30,7 @@ import (
 	"erp/internal/leave"
 	"erp/internal/payroll"
 	"erp/internal/gosi"
+	"erp/internal/fixedassets"
 	"erp/internal/tax"
 	"erp/internal/treasury"
 	"erp/internal/workflow"
@@ -308,6 +309,18 @@ func main() {
 			}
 		}
 		logger.Info("GOSI module and versioned social insurance engine registered")
+
+		// U. Fixed Assets Module (Asset Lifecycle, Locations, Assignments, Straight-Line Depreciation, Transfers, Disposals)
+		fixedAssetsModule := fixedassets.NewModule(cfg, db)
+		fixedAssetsModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := fixedAssetsModule.SeedDefaultFixedAssetsData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Fixed Assets Data", "error", err)
+			} else {
+				logger.Info("Default Saudi Fixed Asset Categories, Locations, Depreciation Books, and Sample Assets verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Fixed assets module and straight-line depreciation engine registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown
