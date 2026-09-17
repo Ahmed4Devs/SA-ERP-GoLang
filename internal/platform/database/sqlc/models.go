@@ -461,6 +461,44 @@ type BudgetingBudgets struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
+type DocumentsEntityAttachments struct {
+	ID         pgtype.UUID        `json:"id"`
+	FileID     pgtype.UUID        `json:"file_id"`
+	EntityType string             `json:"entity_type"`
+	EntityID   pgtype.UUID        `json:"entity_id"`
+	AttachedBy pgtype.UUID        `json:"attached_by"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type DocumentsFileVersions struct {
+	ID               pgtype.UUID        `json:"id"`
+	FileID           pgtype.UUID        `json:"file_id"`
+	VersionNumber    int32              `json:"version_number"`
+	StorageProvider  string             `json:"storage_provider"`
+	StorageKey       string             `json:"storage_key"`
+	OriginalFilename string             `json:"original_filename"`
+	MimeType         string             `json:"mime_type"`
+	ByteSize         int64              `json:"byte_size"`
+	Sha256Hash       string             `json:"sha256_hash"`
+	Metadata         []byte             `json:"metadata"`
+	UploadedBy       pgtype.UUID        `json:"uploaded_by"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type DocumentsFiles struct {
+	ID               pgtype.UUID        `json:"id"`
+	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
+	Title            string             `json:"title"`
+	Description      pgtype.Text        `json:"description"`
+	Category         string             `json:"category"`
+	FolderPath       string             `json:"folder_path"`
+	CurrentVersionID pgtype.UUID        `json:"current_version_id"`
+	IsArchived       bool               `json:"is_archived"`
+	CreatedByUserID  pgtype.UUID        `json:"created_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type FixedassetsAssetAssignments struct {
 	ID             pgtype.UUID        `json:"id"`
 	AssetID        pgtype.UUID        `json:"asset_id"`
@@ -1302,6 +1340,41 @@ type LeaveTypes struct {
 	IsActive           bool               `json:"is_active"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type NotificationsNotifications struct {
+	ID              pgtype.UUID        `json:"id"`
+	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
+	RecipientUserID pgtype.UUID        `json:"recipient_user_id"`
+	RecipientEmail  pgtype.Text        `json:"recipient_email"`
+	Channel         string             `json:"channel"`
+	TitleAr         string             `json:"title_ar"`
+	TitleEn         string             `json:"title_en"`
+	BodyAr          string             `json:"body_ar"`
+	BodyEn          string             `json:"body_en"`
+	Category        string             `json:"category"`
+	Priority        string             `json:"priority"`
+	ActionUrl       pgtype.Text        `json:"action_url"`
+	EntityType      pgtype.Text        `json:"entity_type"`
+	EntityID        pgtype.UUID        `json:"entity_id"`
+	Status          string             `json:"status"`
+	ErrorMessage    pgtype.Text        `json:"error_message"`
+	SentAt          pgtype.Timestamptz `json:"sent_at"`
+	ReadAt          pgtype.Timestamptz `json:"read_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
+type NotificationsTemplates struct {
+	ID        pgtype.UUID        `json:"id"`
+	Code      string             `json:"code"`
+	TitleAr   string             `json:"title_ar"`
+	TitleEn   string             `json:"title_en"`
+	BodyAr    string             `json:"body_ar"`
+	BodyEn    string             `json:"body_en"`
+	Category  string             `json:"category"`
+	Channel   string             `json:"channel"`
+	IsActive  bool               `json:"is_active"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type OrganizationAddresses struct {
@@ -2252,6 +2325,125 @@ type RefCurrencies struct {
 	NameAr        pgtype.Text `json:"name_ar"`
 	DecimalPlaces int16       `json:"decimal_places"`
 	IsActive      bool        `json:"is_active"`
+}
+
+type ReportingCustomerAging struct {
+	LegalEntityID   pgtype.UUID    `json:"legal_entity_id"`
+	CustomerID      pgtype.UUID    `json:"customer_id"`
+	CustomerNumber  string         `json:"customer_number"`
+	CustomerNameEn  string         `json:"customer_name_en"`
+	CustomerNameAr  string         `json:"customer_name_ar"`
+	OpenItemID      pgtype.UUID    `json:"open_item_id"`
+	DocumentNumber  string         `json:"document_number"`
+	DocumentDate    pgtype.Date    `json:"document_date"`
+	DueDate         pgtype.Date    `json:"due_date"`
+	OriginalAmount  pgtype.Numeric `json:"original_amount"`
+	RemainingAmount pgtype.Numeric `json:"remaining_amount"`
+	DaysOverdue     int32          `json:"days_overdue"`
+	CurrentAmount   pgtype.Numeric `json:"current_amount"`
+	Aging130        pgtype.Numeric `json:"aging_1_30"`
+	Aging3160       pgtype.Numeric `json:"aging_31_60"`
+	Aging6190       pgtype.Numeric `json:"aging_61_90"`
+	Aging91120      pgtype.Numeric `json:"aging_91_120"`
+	AgingOver120    pgtype.Numeric `json:"aging_over_120"`
+}
+
+type ReportingGeneralLedger struct {
+	LegalEntityID  pgtype.UUID    `json:"legal_entity_id"`
+	EntryID        pgtype.UUID    `json:"entry_id"`
+	EntryNumber    string         `json:"entry_number"`
+	AccountingDate pgtype.Date    `json:"accounting_date"`
+	SourceModule   string         `json:"source_module"`
+	Reference      pgtype.Text    `json:"reference"`
+	LineID         pgtype.UUID    `json:"line_id"`
+	LineNumber     int16          `json:"line_number"`
+	AccountID      pgtype.UUID    `json:"account_id"`
+	AccountCode    string         `json:"account_code"`
+	AccountNameEn  string         `json:"account_name_en"`
+	AccountNameAr  string         `json:"account_name_ar"`
+	AccountType    string         `json:"account_type"`
+	BaseDebit      pgtype.Numeric `json:"base_debit"`
+	BaseCredit     pgtype.Numeric `json:"base_credit"`
+	Description    pgtype.Text    `json:"description"`
+}
+
+type ReportingInventoryValuation struct {
+	LegalEntityID     pgtype.UUID    `json:"legal_entity_id"`
+	ItemID            pgtype.UUID    `json:"item_id"`
+	ItemCode          string         `json:"item_code"`
+	ItemNameEn        string         `json:"item_name_en"`
+	ItemNameAr        string         `json:"item_name_ar"`
+	WarehouseID       pgtype.UUID    `json:"warehouse_id"`
+	WarehouseCode     string         `json:"warehouse_code"`
+	WarehouseNameEn   string         `json:"warehouse_name_en"`
+	WarehouseNameAr   string         `json:"warehouse_name_ar"`
+	QuantityOnHand    pgtype.Numeric `json:"quantity_on_hand"`
+	QuantityReserved  pgtype.Numeric `json:"quantity_reserved"`
+	QuantityAvailable pgtype.Numeric `json:"quantity_available"`
+	AverageCost       pgtype.Numeric `json:"average_cost"`
+	TotalValue        pgtype.Numeric `json:"total_value"`
+}
+
+type ReportingPayrollSummary struct {
+	LegalEntityID   pgtype.UUID    `json:"legal_entity_id"`
+	RunID           pgtype.UUID    `json:"run_id"`
+	RunNumber       string         `json:"run_number"`
+	PeriodID        pgtype.UUID    `json:"period_id"`
+	PeriodNameEn    string         `json:"period_name_en"`
+	PeriodNameAr    string         `json:"period_name_ar"`
+	RunDate         pgtype.Date    `json:"run_date"`
+	Status          string         `json:"status"`
+	EmployeeCount   int32          `json:"employee_count"`
+	TotalBasic      pgtype.Numeric `json:"total_basic"`
+	TotalAllowances pgtype.Numeric `json:"total_allowances"`
+	TotalGross      pgtype.Numeric `json:"total_gross"`
+	TotalDeductions pgtype.Numeric `json:"total_deductions"`
+	TotalNet        pgtype.Numeric `json:"total_net"`
+}
+
+type ReportingSalesDaily struct {
+	LegalEntityID pgtype.UUID    `json:"legal_entity_id"`
+	SaleDate      pgtype.Date    `json:"sale_date"`
+	InvoiceCount  int32          `json:"invoice_count"`
+	TotalSubtotal pgtype.Numeric `json:"total_subtotal"`
+	TotalDiscount pgtype.Numeric `json:"total_discount"`
+	TotalTaxable  pgtype.Numeric `json:"total_taxable"`
+	TotalTax      pgtype.Numeric `json:"total_tax"`
+	TotalSales    pgtype.Numeric `json:"total_sales"`
+}
+
+type ReportingSupplierAging struct {
+	LegalEntityID   pgtype.UUID    `json:"legal_entity_id"`
+	SupplierID      pgtype.UUID    `json:"supplier_id"`
+	SupplierNumber  string         `json:"supplier_number"`
+	SupplierNameEn  string         `json:"supplier_name_en"`
+	SupplierNameAr  string         `json:"supplier_name_ar"`
+	OpenItemID      pgtype.UUID    `json:"open_item_id"`
+	DocumentNumber  string         `json:"document_number"`
+	DocumentDate    pgtype.Date    `json:"document_date"`
+	DueDate         pgtype.Date    `json:"due_date"`
+	OriginalAmount  pgtype.Numeric `json:"original_amount"`
+	RemainingAmount pgtype.Numeric `json:"remaining_amount"`
+	DaysOverdue     int32          `json:"days_overdue"`
+	CurrentAmount   pgtype.Numeric `json:"current_amount"`
+	Aging130        pgtype.Numeric `json:"aging_1_30"`
+	Aging3160       pgtype.Numeric `json:"aging_31_60"`
+	Aging6190       pgtype.Numeric `json:"aging_61_90"`
+	Aging91120      pgtype.Numeric `json:"aging_91_120"`
+	AgingOver120    pgtype.Numeric `json:"aging_over_120"`
+}
+
+type ReportingTrialBalance struct {
+	LegalEntityID pgtype.UUID    `json:"legal_entity_id"`
+	AccountID     pgtype.UUID    `json:"account_id"`
+	AccountCode   string         `json:"account_code"`
+	AccountNameEn string         `json:"account_name_en"`
+	AccountNameAr string         `json:"account_name_ar"`
+	AccountType   string         `json:"account_type"`
+	NormalBalance string         `json:"normal_balance"`
+	TotalDebit    pgtype.Numeric `json:"total_debit"`
+	TotalCredit   pgtype.Numeric `json:"total_credit"`
+	NetBalance    pgtype.Numeric `json:"net_balance"`
 }
 
 type SalesCreditNoteLines struct {

@@ -28,6 +28,7 @@ sql:
       - "database/queries/fixedassets"
       - "database/queries/budgeting"
       - "database/queries/zatca"
+      - "database/queries/reporting"
     gen:
       go:
         package: "sqlc"

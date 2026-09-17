@@ -35,6 +35,7 @@ import (
 	"erp/internal/products"
 	"erp/internal/purchasing"
 	"erp/internal/receivables"
+	"erp/internal/reporting"
 	"erp/internal/sales"
 	"erp/internal/tax"
 	"erp/internal/treasury"
@@ -381,6 +382,18 @@ func main() {
 			}
 		}
 		logger.Info("Notifications module and platform mailer registered")
+
+		// Z. Reporting Module (Platform Financial, Commercial, Inventory & Statutory BI)
+		reportingModule := reporting.NewModule(cfg, db)
+		reportingModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := reportingModule.SeedDefaultReportingData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Reporting Data", "error", err)
+			} else {
+				logger.Info("Default Reporting Views and Analytic Configurations verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Reporting module and business intelligence engine registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown

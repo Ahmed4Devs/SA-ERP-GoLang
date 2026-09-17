@@ -137,7 +137,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { key: "zatca", href: "/zatca", icon: ReceiptText, label: t.nav.zatca, active: pathname === "/zatca" },
     { key: "documents", href: "/documents", icon: FolderArchive, label: (t.nav as any)?.documents || "إدارة المستندات والوثائق", active: pathname === "/documents" },
     { key: "notifications", href: "/notifications", icon: Bell, label: (t.nav as any)?.notifications || "مركز التنبيهات والإشعارات", active: pathname === "/notifications" },
-    { key: "reports", href: "#", icon: BarChart3, label: t.nav.reports },
+    { key: "reports", href: "/reports", icon: BarChart3, label: t.nav.reports, active: pathname === "/reports" },
     { key: "settings", href: "#", icon: Settings, label: t.nav.settings },
   ];
 
