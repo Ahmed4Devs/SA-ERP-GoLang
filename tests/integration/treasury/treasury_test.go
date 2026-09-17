@@ -286,13 +286,14 @@ func TestTreasuryTransfer_CashToBank(t *testing.T) {
 	}
 
 	// 2. Create Destination Bank Account
+	randSuffix := uuid.New().String()[:8]
 	bankAcc, err := bSvc.CreateBankAccount(ctx, &bankDomain.BankAccount{
 		LegalEntityID:  leID,
-		AccountCode:    "BANK-TRF-" + uuid.New().String()[:8],
+		AccountCode:    "BANK-TRF-" + randSuffix,
 		BankNameEn:     "Riyad Bank",
 		BankNameAr:     "بنك الرياض",
-		AccountNumber:  "99008811223344",
-		IBAN:           "SA552000099008811223344",
+		AccountNumber:  "9900" + randSuffix,
+		IBAN:           "SA55200009900" + randSuffix,
 		SwiftBIC:       "RIBLSARI",
 		CurrencyCode:   "SAR",
 		OpeningBalance: decimal.NewFromInt(10000),

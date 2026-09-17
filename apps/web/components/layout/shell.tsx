@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
@@ -135,6 +136,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { key: "budgets", href: "/budgets", icon: PieChart, label: (t.nav as any)?.budgets || "الميزانيات التقديرية", active: pathname === "/budgets" },
     { key: "zatca", href: "/zatca", icon: ReceiptText, label: t.nav.zatca, active: pathname === "/zatca" },
     { key: "documents", href: "/documents", icon: FolderArchive, label: (t.nav as any)?.documents || "إدارة المستندات والوثائق", active: pathname === "/documents" },
+    { key: "notifications", href: "/notifications", icon: Bell, label: (t.nav as any)?.notifications || "مركز التنبيهات والإشعارات", active: pathname === "/notifications" },
     { key: "reports", href: "#", icon: BarChart3, label: t.nav.reports },
     { key: "settings", href: "#", icon: Settings, label: t.nav.settings },
   ];
@@ -219,13 +221,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
             )}
 
             {/* Notifications */}
-            <button
+            <Link
+              href="/notifications"
               className="relative p-2 rounded-md hover:bg-muted transition-colors text-foreground"
               aria-label={t.topbar.notifications}
             >
               <Bell className="h-4 w-4" />
-              <span className="absolute top-1.5 inset-inline-end-1.5 h-2 w-2 rounded-full bg-destructive" />
-            </button>
+              <span className="absolute top-1.5 inset-inline-end-1.5 h-2 w-2 rounded-full bg-destructive animate-pulse" />
+            </Link>
 
             {/* User Profile */}
             <div className="flex items-center gap-2 ps-2 border-s">

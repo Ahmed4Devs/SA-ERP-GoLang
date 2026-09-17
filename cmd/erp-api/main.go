@@ -21,12 +21,14 @@ import (
 	"erp/internal/iam"
 	"erp/internal/inventory"
 	"erp/internal/leave"
+	"erp/internal/notifications"
 	"erp/internal/organization"
 	"erp/internal/payables"
 	"erp/internal/payroll"
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
 	platformhttp "erp/internal/platform/http"
+	"erp/internal/platform/mail"
 	"erp/internal/platform/observability"
 	"erp/internal/platform/storage"
 	"erp/internal/platform/transaction"
@@ -366,6 +368,19 @@ func main() {
 			}
 			logger.Info("Documents module and secure blob storage registered")
 		}
+
+		// Y. Notifications Module (In-App Alerts, Multi-Channel Dispatch & Mail Platform)
+		mailer := mail.NewMockMailer()
+		notificationsModule := notifications.NewModule(cfg, db, mailer)
+		notificationsModule.RegisterRoutes(server.Router, iamModule.AuthMiddleware())
+		if seededLE != nil {
+			if err := notificationsModule.SeedDefaultNotificationsData(ctx, seededLE.ID); err != nil {
+				logger.Warn("Failed to seed default Notifications Data", "error", err)
+			} else {
+				logger.Info("Default Notification Templates and Baseline System Alerts verified", "legal_entity_id", seededLE.ID.String())
+			}
+		}
+		logger.Info("Notifications module and platform mailer registered")
 	}
 
 	// 7. Start HTTP Server with Graceful Shutdown
