@@ -7,7 +7,11 @@
 #>
 
 [CmdletBinding()]
-param()
+param(
+    [string]$ApiBaseUrl = "http://localhost:8080"
+)
+
+Set-StrictMode -Version Latest
 
 $Passed = 0
 $Warnings = 0
@@ -31,7 +35,7 @@ function Write-Fail {
     $script:Failures++
 }
 
-$WorkspaceRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 Write-Host "====================================================================" -ForegroundColor Cyan
 Write-Host "        SAUDI ENTERPRISE ERP - SYSTEM DOCTOR DIAGNOSTIC TOOL        " -ForegroundColor Cyan
@@ -44,7 +48,13 @@ Write-Host ""
 Write-Host "==> 1. Checking Tooling & Runtimes..." -ForegroundColor Cyan
 if (Get-Command go -ErrorAction SilentlyContinue) {
     $GoVer = (go version).Split(" ")[2]
-    Write-Pass "Go runtime found: $GoVer"
+    $RequiredGo = (Select-String -Path (Join-Path $WorkspaceRoot "go.mod") -Pattern '^go\s+([0-9.]+)$').Matches.Groups[1].Value
+    $InstalledGo = $GoVer.TrimStart("go")
+    if ([version]$InstalledGo -lt [version]$RequiredGo) {
+        Write-Fail "Go $RequiredGo or newer is required; found $InstalledGo"
+    } else {
+        Write-Pass "Go runtime satisfies go.mod ($InstalledGo >= $RequiredGo)"
+    }
 } else {
     Write-Fail "Go runtime not found in PATH"
 }
@@ -58,7 +68,12 @@ if (Get-Command node -ErrorAction SilentlyContinue) {
 
 if (Get-Command docker -ErrorAction SilentlyContinue) {
     $DockerVer = (docker --version)
-    Write-Pass "Docker found: $DockerVer"
+    docker info *> $null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Pass "Docker engine is reachable: $DockerVer"
+    } else {
+        Write-Warn "Docker CLI is installed but the engine is not reachable"
+    }
 } else {
     Write-Warn "Docker engine not found in PATH"
 }
@@ -82,6 +97,15 @@ if (Test-Path $MigrationDir) {
     $MigCount = (Get-ChildItem -Path $MigrationDir -Filter "*.sql").Count
     if ($MigCount -gt 0) {
         Write-Pass "Found $MigCount SQL migration scripts in database/migrations"
+        $MigrationVersions = Get-ChildItem -Path $MigrationDir -Filter "*.sql" | ForEach-Object {
+            if ($_.Name -match '^(\d{6})_') { $Matches[1] } else { Write-Fail "Invalid migration filename: $($_.Name)" }
+        }
+        $Duplicates = $MigrationVersions | Group-Object | Where-Object Count -gt 1
+        if ($Duplicates) {
+            Write-Fail "Duplicate migration versions: $($Duplicates.Name -join ', ')"
+        } else {
+            Write-Pass "Migration versions are unique; latest is $($MigrationVersions | Sort-Object | Select-Object -Last 1)"
+        }
     } else {
         Write-Fail "Migration directory database/migrations exists but contains no .sql files"
     }
@@ -105,6 +129,11 @@ if (Test-Path $WebDir) {
     } else {
         Write-Warn "node_modules missing in apps/web. Run 'npm install' in apps/web."
     }
+    if (Test-Path (Join-Path $WebDir "package-lock.json")) {
+        Write-Pass "Frontend dependency lockfile is present"
+    } else {
+        Write-Fail "apps/web/package-lock.json is required for reproducible npm ci builds"
+    }
 } else {
     Write-Fail "Frontend directory apps/web not found"
 }
@@ -119,25 +148,65 @@ if (Test-Path $ComposeFile) {
     Write-Fail "Production compose file missing: $ComposeFile"
 }
 
-$EnvExample = Join-Path $WorkspaceRoot "deployments/compose/.env.production.example"
+$DevCompose = Join-Path $WorkspaceRoot "docker-compose.yml"
+if (Get-Command docker -ErrorAction SilentlyContinue) {
+    docker compose -f $DevCompose config --quiet
+    if ($LASTEXITCODE -eq 0) {
+        Write-Pass "Development Compose renders successfully"
+    } else {
+        Write-Fail "Development Compose configuration is invalid"
+    }
+}
+
+$EnvExample = Join-Path $WorkspaceRoot ".env.production.example"
 if (Test-Path $EnvExample) {
-    Write-Pass "Production environment example template found (.env.production.example)"
+    $RequiredVariables = @(
+        "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB", "DATABASE_URL", "APP_URL",
+        "TLS_CERT_PATH", "TLS_KEY_PATH", "MFA_ENCRYPTION_KEY", "METRICS_BEARER_TOKEN",
+        "SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM"
+    )
+    $ExampleContent = Get-Content -Raw $EnvExample
+    $MissingVariables = $RequiredVariables | Where-Object { $ExampleContent -notmatch "(?m)^$([regex]::Escape($_))=" }
+    if ($MissingVariables) {
+        Write-Fail "Production environment template misses: $($MissingVariables -join ', ')"
+    } else {
+        Write-Pass "Production environment template contains all required variables"
+    }
 } else {
-    Write-Fail ".env.production.example template missing in deployments/compose"
+    Write-Fail ".env.production.example template missing at repository root"
+}
+
+$ProductionEnv = Join-Path $WorkspaceRoot ".env.production"
+if (Test-Path $ProductionEnv) {
+    if (Get-Command docker -ErrorAction SilentlyContinue) {
+        docker compose --env-file $ProductionEnv -f $ComposeFile config --quiet
+        if ($LASTEXITCODE -eq 0) {
+            Write-Pass "Production Compose renders with .env.production"
+        } else {
+            Write-Fail "Production Compose or .env.production is invalid"
+        }
+    }
+    if (Select-String -Path $ProductionEnv -Quiet -Pattern 'replace-with|changeme|example\.(com|sa)|Generate64Byte') {
+        Write-Fail ".env.production still contains placeholder values"
+    }
+} else {
+    Write-Warn "No active .env.production found; production Compose secret values were not validated"
 }
 
 # 6. Service Health Check (if API is running locally)
 Write-Host ""
 Write-Host "==> 6. Probing Running Endpoints (Local)..." -ForegroundColor Cyan
 try {
-    $Response = Invoke-WebRequest -Uri "http://localhost:8080/healthz" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
+    $Response = Invoke-WebRequest -Uri "$ApiBaseUrl/healthz" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
     if ($Response.StatusCode -eq 200) {
-        Write-Pass "Local API server responded healthy (HTTP 200 at :8080/healthz)"
+        Write-Pass "API liveness probe passed at $ApiBaseUrl/healthz"
+        $Ready = Invoke-WebRequest -Uri "$ApiBaseUrl/readyz" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
+        if ($Ready.StatusCode -eq 200) { Write-Pass "API readiness probe passed" } else { Write-Fail "API readiness probe returned $($Ready.StatusCode)" }
     } else {
         Write-Warn "Local API responded with status $($Response.StatusCode)"
     }
 } catch {
-    Write-Warn "Local API server not currently listening on :8080/healthz (Service offline)"
+    Write-Warn "API is not currently reachable at $ApiBaseUrl (offline checks still completed)"
 }
 
 # Final Summary

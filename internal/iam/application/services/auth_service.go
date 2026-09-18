@@ -21,7 +21,12 @@ type AuthService struct {
 	hasher       ports.PasswordHasher
 	tokens       ports.TokenGenerator
 	txManager    transaction.Manager
+	mfa          *MFAService
 	sessionTTL   time.Duration
+}
+
+func (s *AuthService) SetMFAService(mfa *MFAService) {
+	s.mfa = mfa
 }
 
 func NewAuthService(
@@ -81,6 +86,16 @@ func (s *AuthService) Login(ctx context.Context, identifier, password, ip, userA
 		return nil, "", nil, domain.ErrInvalidCredentials
 	}
 
+	if s.mfa != nil {
+		mfaEnabled, err := s.mfa.IsEnabled(ctx, user.ID)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("failed to determine MFA status: %w", err)
+		}
+		if mfaEnabled {
+			return nil, "", user, domain.ErrMFARequired
+		}
+	}
+
 	// 5. Record Success & Update Last Login
 	_ = s.attemptRepo.Record(ctx, identifier, ip, true)
 	_ = s.userRepo.UpdateLastLogin(ctx, user.ID)
@@ -105,6 +120,28 @@ func (s *AuthService) Login(ctx context.Context, identifier, password, ip, userA
 		return nil, "", nil, fmt.Errorf("failed to persist session: %w", err)
 	}
 
+	return createdSession, rawToken, user, nil
+}
+
+func (s *AuthService) CreateSessionForUser(ctx context.Context, userID uuid.UUID, ip, userAgent string) (*domain.Session, string, *domain.User, error) {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	if !user.CanLogin() {
+		return nil, "", nil, domain.ErrUserDisabled
+	}
+	_ = s.userRepo.UpdateLastLogin(ctx, user.ID)
+	rawToken, tokenHash, err := s.tokens.GenerateSessionToken()
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("failed to generate session token: %w", err)
+	}
+	createdSession, err := s.sessionRepo.Create(ctx, &domain.Session{
+		UserID: user.ID, TokenHash: tokenHash, IPAddress: ip, UserAgent: userAgent, ExpiresAt: time.Now().Add(s.sessionTTL),
+	})
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("failed to persist session: %w", err)
+	}
 	return createdSession, rawToken, user, nil
 }
 

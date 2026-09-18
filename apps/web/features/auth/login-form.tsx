@@ -1,20 +1,33 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLocale } from "@/components/layout/shell";
 import { Lock, User, Eye, EyeOff, AlertCircle, CheckCircle2, Shield } from "lucide-react";
+import { apiFetch, APIError } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
+import { getMFAChallenge, getSafeReturnPath } from "@/lib/auth-flow";
 
 export function LoginForm() {
   const { t, dir } = useLocale();
   const router = useRouter();
+  const { user, loading: sessionLoading, refresh } = useAuth();
 
-  const [identifier, setIdentifier] = useState("admin");
-  const [password, setPassword] = useState("Admin@ERP123!");
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
+  const [challengeExpiresAt, setChallengeExpiresAt] = useState<string | null>(null);
+  const [mfaCode, setMFACode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!sessionLoading && user && !success) {
+      router.replace(getSafeReturnPath(window.location.search));
+    }
+  }, [router, sessionLoading, success, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,34 +35,36 @@ export function LoginForm() {
     setLoading(true);
 
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-      const res = await fetch(`${apiBase}/api/v1/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({ identifier, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        if (data.error?.code === "INVALID_CREDENTIALS") {
-          setError(t.auth.invalid_credentials);
-        } else {
-          setError(data.error?.message || "Login failed");
+      if (!challengeToken) {
+        const response = await apiFetch<unknown>("/api/v1/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ identifier: identifier.trim(), password }),
+        });
+        const challenge = getMFAChallenge(response);
+        if (challenge) {
+          setChallengeToken(challenge.challengeToken);
+          setChallengeExpiresAt(challenge.expiresAt);
+          setMFACode("");
+          return;
         }
-        setLoading(false);
-        return;
+      } else {
+        await apiFetch("/api/v1/auth/login/mfa", {
+          method: "POST",
+          body: JSON.stringify({ challenge_token: challengeToken, code: mfaCode.trim() }),
+        });
       }
 
+      await refresh();
       setSuccess(true);
-      setTimeout(() => {
-        router.push("/");
-      }, 1000);
-    } catch (err: any) {
-      setError(err.message || "Failed to connect to authentication server");
+      router.replace(getSafeReturnPath(window.location.search));
+    } catch (err: unknown) {
+      if (err instanceof APIError && err.code === "INVALID_CREDENTIALS") {
+        setError(t.auth.invalid_credentials);
+      } else if (err instanceof APIError && err.code === "INVALID_MFA_CODE") {
+        setError("رمز التحقق غير صحيح أو منتهي الصلاحية / Invalid or expired verification code");
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to connect to authentication server");
+      }
     } finally {
       setLoading(false);
     }
@@ -89,7 +104,9 @@ export function LoginForm() {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Identifier field */}
+          {!challengeToken ? (
+            <>
+              {/* Identifier field */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground block">
               {t.auth.identifier}
@@ -99,6 +116,7 @@ export function LoginForm() {
               <input
                 id="login-identifier"
                 type="text"
+                autoComplete="username"
                 required
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
@@ -118,6 +136,7 @@ export function LoginForm() {
               <input
                 id="login-password"
                 type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -134,6 +153,51 @@ export function LoginForm() {
               </button>
             </div>
           </div>
+            </>
+          ) : (
+            <div className="space-y-3">
+              <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+                أدخل رمز تطبيق المصادقة المكوّن من 6 أرقام أو أحد رموز الاسترداد.
+                <br />
+                Enter the 6-digit authenticator code or a recovery code.
+                {challengeExpiresAt && (
+                  <span className="mt-1 block" data-testid="mfa-expiry">
+                    {`Valid until ${new Date(challengeExpiresAt).toLocaleTimeString()}`}
+                  </span>
+                )}
+              </div>
+              <label className="text-xs font-semibold text-foreground block" htmlFor="login-mfa-code">
+                رمز التحقق / Verification code
+              </label>
+              <div className="relative">
+                <Shield className="absolute inset-inline-start-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <input
+                  id="login-mfa-code"
+                  type="text"
+                  autoComplete="one-time-code"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  required
+                  autoFocus
+                  value={mfaCode}
+                  onChange={(event) => setMFACode(event.target.value)}
+                  className="w-full rounded-md border bg-background ps-9 pe-3 py-2 text-sm tracking-widest text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setChallengeToken(null);
+                  setChallengeExpiresAt(null);
+                  setMFACode("");
+                  setError(null);
+                }}
+                className="text-xs text-primary hover:underline"
+              >
+                العودة لتسجيل الدخول / Back to sign in
+              </button>
+            </div>
+          )}
 
           {/* Submit Button */}
           <button
@@ -142,16 +206,10 @@ export function LoginForm() {
             disabled={loading || success}
             className="w-full mt-2 inline-flex items-center justify-center rounded-md bg-primary py-2.5 px-4 text-sm font-semibold text-primary-foreground shadow hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 transition-colors"
           >
-            {loading ? t.auth.signing_in : t.auth.sign_in}
+            {loading ? t.auth.signing_in : challengeToken ? "تحقق / Verify" : t.auth.sign_in}
           </button>
         </form>
 
-        {/* Demo Hint */}
-        <div className="pt-2 border-t text-center">
-          <p className="text-[11px] text-muted-foreground bg-muted/50 py-1.5 px-2 rounded border">
-            {t.auth.demo_hint}
-          </p>
-        </div>
       </div>
     </div>
   );

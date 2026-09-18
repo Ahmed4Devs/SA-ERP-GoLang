@@ -70,6 +70,24 @@ func TestServerPipeline(t *testing.T) {
 		}
 	})
 
+	t.Run("protects metrics when token is configured", func(t *testing.T) {
+		cfg.Security.MetricsToken = "test-metrics-token-with-32-characters"
+		protectedServer := platformhttp.NewServer(cfg, logger, nil)
+		unauthorized := httptest.NewRecorder()
+		protectedServer.Router.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+		if unauthorized.Code != http.StatusUnauthorized {
+			t.Fatalf("expected metrics status 401, got %d", unauthorized.Code)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		req.Header.Set("Authorization", "Bearer "+cfg.Security.MetricsToken)
+		authorized := httptest.NewRecorder()
+		protectedServer.Router.ServeHTTP(authorized, req)
+		if authorized.Code != http.StatusOK {
+			t.Fatalf("expected authorized metrics status 200, got %d", authorized.Code)
+		}
+	})
+
 	t.Run("recovers from panic gracefully", func(t *testing.T) {
 		server.Router.Get("/test-panic", func(w http.ResponseWriter, r *http.Request) {
 			panic("unexpected handler explosion")

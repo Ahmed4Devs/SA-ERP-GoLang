@@ -1,4 +1,5 @@
-import { SalesView } from "@/features/sales/sales-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function SalesPage() {
-  return <SalesView />;
+  return <ModuleAPIView titleAr="المبيعات والفوترة" titleEn="Sales" descriptionAr="الفواتير والأوامر والعروض والتسليمات الفعلية." descriptionEn="Live invoices, orders, quotations, deliveries, and credit notes." resources={moduleResources.sales} />;
 }

@@ -2,12 +2,13 @@ package services
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
 
 	"erp/internal/platform/database"
+	"erp/internal/platform/identifiers"
+	"erp/internal/platform/transaction"
 	"erp/internal/sales/domain"
 	"erp/internal/sales/ports"
 	"github.com/google/uuid"
@@ -17,12 +18,14 @@ import (
 type salesService struct {
 	repo ports.Repository
 	db   *database.DB
+	tx   transaction.Manager
 }
 
 func NewSalesService(repo ports.Repository, db *database.DB) ports.SalesService {
 	return &salesService{
 		repo: repo,
 		db:   db,
+		tx:   transaction.NewManager(db.Pool),
 	}
 }
 
@@ -35,7 +38,7 @@ func (s *salesService) CreateQuotation(ctx context.Context, cmd ports.CreateQuot
 		return nil, domain.ErrEmptyLineItems
 	}
 
-	quoteNumber := fmt.Sprintf("QT-%s-%04d", time.Now().Format("2006"), time.Now().UnixNano()%10000)
+	quoteNumber := identifiers.NewDocumentNumber("QT", time.Now())
 	currency := cmd.CurrencyCode
 	if currency == "" {
 		currency = "SAR"
@@ -165,7 +168,7 @@ func (s *salesService) CreateOrder(ctx context.Context, cmd ports.CreateOrderCom
 		return nil, domain.ErrEmptyLineItems
 	}
 
-	orderNumber := fmt.Sprintf("SO-%s-%04d", time.Now().Format("2006"), time.Now().UnixNano()%10000)
+	orderNumber := identifiers.NewDocumentNumber("SO", time.Now())
 	currency := cmd.CurrencyCode
 	if currency == "" {
 		currency = "SAR"
@@ -282,7 +285,7 @@ func (s *salesService) CreateDelivery(ctx context.Context, cmd ports.CreateDeliv
 		return nil, domain.ErrEmptyLineItems
 	}
 
-	deliveryNumber := fmt.Sprintf("DN-%s-%04d", time.Now().Format("2006"), time.Now().UnixNano()%10000)
+	deliveryNumber := identifiers.NewDocumentNumber("DN", time.Now())
 
 	delivery := &domain.Delivery{
 		ID:                uuid.New(),
@@ -315,6 +318,20 @@ func (s *salesService) CreateDelivery(ctx context.Context, cmd ports.CreateDeliv
 }
 
 func (s *salesService) DispatchDelivery(ctx context.Context, deliveryID uuid.UUID) (*domain.Delivery, error) {
+	var delivery *domain.Delivery
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		delivery, err = s.dispatchDelivery(txCtx, deliveryID)
+		return err
+	})
+	return delivery, err
+}
+
+func (s *salesService) dispatchDelivery(ctx context.Context, deliveryID uuid.UUID) (*domain.Delivery, error) {
+	dbtx := s.db.DBTX(ctx)
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM sales.deliveries WHERE id = $1 FOR UPDATE", deliveryID).Scan(&deliveryID); err != nil {
+		return nil, fmt.Errorf("failed to lock delivery: %w", err)
+	}
 	delivery, err := s.repo.GetDelivery(ctx, deliveryID)
 	if err != nil {
 		return nil, err
@@ -329,7 +346,7 @@ func (s *salesService) DispatchDelivery(ctx context.Context, deliveryID uuid.UUI
 		binID := line.BinID
 		if binID == nil {
 			var defBin uuid.UUID
-			err := s.db.Pool.QueryRow(ctx, "SELECT id FROM warehouse.bin_locations WHERE warehouse_id = $1 LIMIT 1", line.WarehouseID).Scan(&defBin)
+			err := dbtx.QueryRow(ctx, "SELECT id FROM warehouse.bin_locations WHERE warehouse_id = $1 LIMIT 1", line.WarehouseID).Scan(&defBin)
 			if err == nil {
 				binID = &defBin
 			}
@@ -337,29 +354,37 @@ func (s *salesService) DispatchDelivery(ctx context.Context, deliveryID uuid.UUI
 
 		// 2. Get UOM ID
 		var uomID uuid.UUID
-		_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM products.units_of_measure LIMIT 1").Scan(&uomID)
+		if err := dbtx.QueryRow(ctx, "SELECT id FROM products.units_of_measure LIMIT 1").Scan(&uomID); err != nil {
+			return nil, fmt.Errorf("failed to resolve inventory unit of measure: %w", err)
+		}
 
 		// 3. Insert into inventory.stock_movements (Negative quantity for SALES_ISSUE)
-		movementNumber := fmt.Sprintf("SM-OUT-%d", time.Now().UnixNano()%1000000)
+		movementNumber := identifiers.NewDocumentNumber("SM-OUT", time.Now())
 		negQty := line.Quantity.Neg()
 		creatorID := delivery.CreatedByUserID
 		if creatorID == nil {
 			var adminID uuid.UUID
-			_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM iam.users LIMIT 1").Scan(&adminID)
+			if err := dbtx.QueryRow(ctx, "SELECT id FROM iam.users LIMIT 1").Scan(&adminID); err != nil {
+				return nil, fmt.Errorf("failed to resolve delivery creator: %w", err)
+			}
 			creatorID = &adminID
 		}
 
-		_, _ = s.db.Pool.Exec(ctx, `
+		if _, err := dbtx.Exec(ctx, `
 			INSERT INTO inventory.stock_movements (
 				legal_entity_id, movement_number, movement_type, item_id,
 				warehouse_id, bin_id, quantity, uom_id, unit_cost, total_cost,
 				source_doc_type, source_doc_id, created_by
 			) VALUES ($1, $2, 'SALES_ISSUE', $3, $4, $5, $6, $7, $8, $9, 'DELIVERY', $10, $11)
-		`, delivery.LegalEntityID, movementNumber, line.ItemID, line.WarehouseID, binID, negQty, uomID, line.UnitCost, line.TotalCost, delivery.ID, creatorID)
+		`, delivery.LegalEntityID, movementNumber, line.ItemID, line.WarehouseID, binID, negQty, uomID, line.UnitCost, line.TotalCost, delivery.ID, creatorID); err != nil {
+			return nil, fmt.Errorf("failed to create sales stock movement: %w", err)
+		}
 
 		// 4. Update order line delivered quantity if linked
 		if line.OrderLineID != nil {
-			_ = s.repo.UpdateOrderLineDeliveredQty(ctx, *line.OrderLineID, line.Quantity)
+			if err := s.repo.UpdateOrderLineDeliveredQty(ctx, *line.OrderLineID, line.Quantity); err != nil {
+				return nil, fmt.Errorf("failed to update delivered quantity: %w", err)
+			}
 		}
 	}
 
@@ -393,7 +418,7 @@ func (s *salesService) CreateInvoice(ctx context.Context, cmd ports.CreateInvoic
 		}
 	}
 
-	invNumber := fmt.Sprintf("INV-%s-%06d-%s", time.Now().Format("2006"), time.Now().UnixNano()%1000000, uuid.New().String()[:6])
+	invNumber := identifiers.NewDocumentNumber("INV", time.Now())
 	currency := cmd.CurrencyCode
 	if currency == "" {
 		currency = "SAR"
@@ -516,6 +541,20 @@ func (s *salesService) CreateInvoiceFromOrder(ctx context.Context, orderID uuid.
 }
 
 func (s *salesService) PostInvoice(ctx context.Context, invoiceID uuid.UUID) (*domain.SalesInvoice, error) {
+	var invoice *domain.SalesInvoice
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		invoice, err = s.postInvoice(txCtx, invoiceID)
+		return err
+	})
+	return invoice, err
+}
+
+func (s *salesService) postInvoice(ctx context.Context, invoiceID uuid.UUID) (*domain.SalesInvoice, error) {
+	dbtx := s.db.DBTX(ctx)
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM sales.invoices WHERE id = $1 FOR UPDATE", invoiceID).Scan(&invoiceID); err != nil {
+		return nil, fmt.Errorf("failed to lock sales invoice: %w", err)
+	}
 	inv, err := s.repo.GetInvoice(ctx, invoiceID)
 	if err != nil {
 		return nil, err
@@ -526,7 +565,7 @@ func (s *salesService) PostInvoice(ctx context.Context, invoiceID uuid.UUID) (*d
 
 	// 1. Create AR Open Item in receivables.open_items
 	openItemID := uuid.New()
-	_, err = s.db.Pool.Exec(ctx, `
+	_, err = dbtx.Exec(ctx, `
 		INSERT INTO receivables.open_items (
 			id, legal_entity_id, customer_id, document_type, document_number,
 			document_id, document_date, due_date, currency_code, original_amount,
@@ -538,105 +577,114 @@ func (s *salesService) PostInvoice(ctx context.Context, invoiceID uuid.UUID) (*d
 	}
 
 	// 2. Update Customer Balance in receivables.customer_credit_limits
-	_, _ = s.db.Pool.Exec(ctx, `
+	if _, err = dbtx.Exec(ctx, `
 		UPDATE receivables.customer_credit_limits
 		SET current_balance = current_balance + $2, updated_at = now()
 		WHERE customer_id = $1
-	`, inv.CustomerID, inv.TotalAmount)
+	`, inv.CustomerID, inv.TotalAmount); err != nil {
+		return nil, fmt.Errorf("failed to update customer balance: %w", err)
+	}
 
 	// 3. Create Double-Entry GL Journal Entry in accounting.journal_entries
 	var journalEntryID uuid.UUID
 	var jeIDPtr *uuid.UUID
 	var journalID, periodID, arAccountID, revAccountID, vatAccountID uuid.UUID
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.journals WHERE legal_entity_id = $1 AND code = 'SALES' LIMIT 1", inv.LegalEntityID).Scan(&journalID)
-	if journalID == uuid.Nil {
-		_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.journals WHERE legal_entity_id = $1 LIMIT 1", inv.LegalEntityID).Scan(&journalID)
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.journals WHERE legal_entity_id = $1 ORDER BY (code = 'SALES') DESC LIMIT 1", inv.LegalEntityID).Scan(&journalID); err != nil {
+		return nil, fmt.Errorf("sales journal is not configured: %w", err)
 	}
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.fiscal_periods WHERE legal_entity_id = $1 AND status = 'OPEN' LIMIT 1", inv.LegalEntityID).Scan(&periodID)
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '112000' LIMIT 1", inv.LegalEntityID).Scan(&arAccountID)
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '410000' LIMIT 1", inv.LegalEntityID).Scan(&revAccountID)
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '213000' LIMIT 1", inv.LegalEntityID).Scan(&vatAccountID)
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.fiscal_periods WHERE legal_entity_id = $1 AND status = 'OPEN' LIMIT 1", inv.LegalEntityID).Scan(&periodID); err != nil {
+		return nil, fmt.Errorf("open fiscal period is not configured: %w", err)
+	}
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '112000' LIMIT 1", inv.LegalEntityID).Scan(&arAccountID); err != nil {
+		return nil, fmt.Errorf("accounts receivable account 112000 is not configured: %w", err)
+	}
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '410000' LIMIT 1", inv.LegalEntityID).Scan(&revAccountID); err != nil {
+		return nil, fmt.Errorf("sales revenue account 410000 is not configured: %w", err)
+	}
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '213000' LIMIT 1", inv.LegalEntityID).Scan(&vatAccountID); err != nil {
+		return nil, fmt.Errorf("output VAT account 213000 is not configured: %w", err)
+	}
 
 	creatorID := inv.CreatedByUserID
 	if creatorID == nil {
 		var adminID uuid.UUID
-		_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM iam.users LIMIT 1").Scan(&adminID)
+		if err := dbtx.QueryRow(ctx, "SELECT id FROM iam.users LIMIT 1").Scan(&adminID); err != nil {
+			return nil, fmt.Errorf("failed to resolve invoice creator: %w", err)
+		}
 		creatorID = &adminID
 	}
 
-	if journalID != uuid.Nil && periodID != uuid.Nil && arAccountID != uuid.Nil && revAccountID != uuid.Nil && vatAccountID != uuid.Nil {
-		journalEntryID = uuid.New()
-		entryNumber := fmt.Sprintf("JE-INV-%d", time.Now().UnixNano()%1000000)
-		_, err = s.db.Pool.Exec(ctx, `
+	journalEntryID = uuid.New()
+	entryNumber := identifiers.NewDocumentNumber("JE-INV", time.Now())
+	_, err = dbtx.Exec(ctx, `
 			INSERT INTO accounting.journal_entries (
 				id, legal_entity_id, journal_id, fiscal_period_id, entry_number,
 				accounting_date, status, source_module, source_type, source_id,
 				reference, description, currency_code, exchange_rate,
 				total_debit, total_credit, created_by, posted_by, posted_at
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, 'POSTED', 'SALES', 'INVOICE', $7,
+				$1, $2, $3, $4, $5, $6, 'DRAFT', 'SALES', 'INVOICE', $7,
 				$8, $9, $10, 1.0, $11, $11, $12, $12, now()
 			)
-		`, journalEntryID, inv.LegalEntityID, journalID, periodID, entryNumber, inv.IssueDate, inv.ID,
-			inv.InvoiceNumber, "إثبات فاتورة مبيعات - "+inv.InvoiceNumber, inv.CurrencyCode, inv.TotalAmount, creatorID)
+	`, journalEntryID, inv.LegalEntityID, journalID, periodID, entryNumber, inv.IssueDate, inv.ID,
+		inv.InvoiceNumber, "إثبات فاتورة مبيعات - "+inv.InvoiceNumber, inv.CurrencyCode, inv.TotalAmount, creatorID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create sales journal entry: %w", err)
+	}
+	jeIDPtr = &journalEntryID
 
-		if err == nil {
-			jeIDPtr = &journalEntryID
-			// Line 1: Debit AR (112000)
-			_, _ = s.db.Pool.Exec(ctx, `
+	if _, err = dbtx.Exec(ctx, `
 				INSERT INTO accounting.journal_lines (
 					journal_entry_id, legal_entity_id, line_number, account_id,
 					description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
 				) VALUES ($1, $2, 1, $3, $4, $5, $6, 0, $6, 0)
-			`, journalEntryID, inv.LegalEntityID, arAccountID, "العملاء والمدينون - "+inv.CustomerNameAr, inv.CurrencyCode, inv.TotalAmount)
+	`, journalEntryID, inv.LegalEntityID, arAccountID, "العملاء والمدينون - "+inv.CustomerNameAr, inv.CurrencyCode, inv.TotalAmount); err != nil {
+		return nil, fmt.Errorf("failed to create accounts receivable journal line: %w", err)
+	}
 
-			// Line 2: Credit Sales Revenue (410000)
-			_, _ = s.db.Pool.Exec(ctx, `
+	if _, err = dbtx.Exec(ctx, `
 				INSERT INTO accounting.journal_lines (
 					journal_entry_id, legal_entity_id, line_number, account_id,
 					description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
 				) VALUES ($1, $2, 2, $3, 'إيرادات المبيعات', $4, 0, $5, 0, $5)
-			`, journalEntryID, inv.LegalEntityID, revAccountID, inv.CurrencyCode, inv.TaxableAmount)
+	`, journalEntryID, inv.LegalEntityID, revAccountID, inv.CurrencyCode, inv.TaxableAmount); err != nil {
+		return nil, fmt.Errorf("failed to create sales revenue journal line: %w", err)
+	}
 
-			// Line 3: Credit Output VAT (213000)
-			if inv.TaxAmount.GreaterThan(decimal.Zero) {
-				_, _ = s.db.Pool.Exec(ctx, `
+	if inv.TaxAmount.GreaterThan(decimal.Zero) {
+		if _, err = dbtx.Exec(ctx, `
 					INSERT INTO accounting.journal_lines (
 						journal_entry_id, legal_entity_id, line_number, account_id,
 						description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
 					) VALUES ($1, $2, 3, $3, 'ضريبة القيمة المضافة المستحقة (15%)', $4, 0, $5, 0, $5)
-				`, journalEntryID, inv.LegalEntityID, vatAccountID, inv.CurrencyCode, inv.TaxAmount)
-			}
+		`, journalEntryID, inv.LegalEntityID, vatAccountID, inv.CurrencyCode, inv.TaxAmount); err != nil {
+			return nil, fmt.Errorf("failed to create output VAT journal line: %w", err)
 		}
+	}
+	if _, err = dbtx.Exec(ctx, `
+		UPDATE accounting.journal_entries
+		SET status = 'POSTED', posted_by = $1, posted_at = now()
+		WHERE id = $2
+	`, creatorID, journalEntryID); err != nil {
+		return nil, fmt.Errorf("failed to post sales journal entry: %w", err)
 	}
 
 	// 4. Update Order Invoiced Quantities if linked
 	if inv.OrderID != nil {
 		for _, l := range inv.Lines {
-			_, _ = s.db.Pool.Exec(ctx, `
+			if _, err = dbtx.Exec(ctx, `
 				UPDATE sales.order_lines
 				SET invoiced_quantity = invoiced_quantity + $2
 				WHERE order_id = $1 AND item_id = $3
-			`, inv.OrderID, l.Quantity, l.ItemID)
+			`, inv.OrderID, l.Quantity, l.ItemID); err != nil {
+				return nil, fmt.Errorf("failed to update invoiced quantity: %w", err)
+			}
 		}
 	}
 
-	// 5. Generate Mock ZATCA Phase 2 QR code string (Base64 TLV format)
-	mockQR := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf(
-		"ZATCA|Seller:%s|VAT:%s|Date:%s|Total:%s|Tax:%s",
-		inv.CustomerNameAr,
-		func() string {
-			if inv.CustomerTaxID != nil {
-				return *inv.CustomerTaxID
-			}
-			return "310123456700003"
-		}(),
-		inv.IssueDate.Format("2006-01-02T15:04:05Z"),
-		inv.TotalAmount.StringFixed(2),
-		inv.TaxAmount.StringFixed(2),
-	)))
-
-	return s.repo.PostInvoice(ctx, inv.ID, jeIDPtr, &openItemID, &mockQR)
+	// A QR is attached only by the real ZATCA signing/clearance flow. Creating a
+	// locally fabricated value would misrepresent the invoice's compliance state.
+	return s.repo.PostInvoice(ctx, inv.ID, jeIDPtr, &openItemID, nil)
 }
 
 func (s *salesService) GetInvoice(ctx context.Context, id uuid.UUID) (*domain.SalesInvoice, error) {
@@ -667,7 +715,7 @@ func (s *salesService) CreateCreditNote(ctx context.Context, cmd ports.CreateCre
 		return nil, domain.ErrOriginalInvoiceNotPosted
 	}
 
-	cnNumber := fmt.Sprintf("CN-%s-%04d", time.Now().Format("2006"), time.Now().UnixNano()%10000)
+	cnNumber := identifiers.NewDocumentNumber("CN", time.Now())
 	currency := cmd.CurrencyCode
 	if currency == "" {
 		currency = "SAR"
@@ -722,6 +770,20 @@ func (s *salesService) CreateCreditNote(ctx context.Context, cmd ports.CreateCre
 }
 
 func (s *salesService) PostCreditNote(ctx context.Context, creditNoteID uuid.UUID) (*domain.CreditNote, error) {
+	var creditNote *domain.CreditNote
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		creditNote, err = s.postCreditNote(txCtx, creditNoteID)
+		return err
+	})
+	return creditNote, err
+}
+
+func (s *salesService) postCreditNote(ctx context.Context, creditNoteID uuid.UUID) (*domain.CreditNote, error) {
+	dbtx := s.db.DBTX(ctx)
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM sales.credit_notes WHERE id = $1 FOR UPDATE", creditNoteID).Scan(&creditNoteID); err != nil {
+		return nil, fmt.Errorf("failed to lock sales credit note: %w", err)
+	}
 	cn, err := s.repo.GetCreditNote(ctx, creditNoteID)
 	if err != nil {
 		return nil, err
@@ -732,7 +794,7 @@ func (s *salesService) PostCreditNote(ctx context.Context, creditNoteID uuid.UUI
 
 	// 1. Create AR Open Item in receivables.open_items
 	openItemID := uuid.New()
-	_, err = s.db.Pool.Exec(ctx, `
+	_, err = dbtx.Exec(ctx, `
 		INSERT INTO receivables.open_items (
 			id, legal_entity_id, customer_id, document_type, document_number,
 			document_id, document_date, due_date, currency_code, original_amount,
@@ -744,76 +806,100 @@ func (s *salesService) PostCreditNote(ctx context.Context, creditNoteID uuid.UUI
 	}
 
 	// 2. Reduce Customer Balance in receivables.customer_credit_limits
-	_, _ = s.db.Pool.Exec(ctx, `
+	if _, err = dbtx.Exec(ctx, `
 		UPDATE receivables.customer_credit_limits
 		SET current_balance = current_balance - $2, updated_at = now()
 		WHERE customer_id = $1
-	`, cn.CustomerID, cn.TotalAmount)
+	`, cn.CustomerID, cn.TotalAmount); err != nil {
+		return nil, fmt.Errorf("failed to reduce customer balance: %w", err)
+	}
 
 	// 3. Post Reverse Journal Entry
 	var journalEntryID uuid.UUID
 	var jeIDPtr *uuid.UUID
 	var journalID, periodID, arAccountID, revAccountID, vatAccountID uuid.UUID
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.journals WHERE legal_entity_id = $1 AND code = 'SALES' LIMIT 1", cn.LegalEntityID).Scan(&journalID)
-	if journalID == uuid.Nil {
-		_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.journals WHERE legal_entity_id = $1 LIMIT 1", cn.LegalEntityID).Scan(&journalID)
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.journals WHERE legal_entity_id = $1 ORDER BY (code = 'SALES') DESC LIMIT 1", cn.LegalEntityID).Scan(&journalID); err != nil {
+		return nil, fmt.Errorf("sales journal is not configured: %w", err)
 	}
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.fiscal_periods WHERE legal_entity_id = $1 AND status = 'OPEN' LIMIT 1", cn.LegalEntityID).Scan(&periodID)
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '112000' LIMIT 1", cn.LegalEntityID).Scan(&arAccountID)
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '410000' LIMIT 1", cn.LegalEntityID).Scan(&revAccountID)
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '213000' LIMIT 1", cn.LegalEntityID).Scan(&vatAccountID)
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.fiscal_periods WHERE legal_entity_id = $1 AND status = 'OPEN' LIMIT 1", cn.LegalEntityID).Scan(&periodID); err != nil {
+		return nil, fmt.Errorf("open fiscal period is not configured: %w", err)
+	}
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '112000' LIMIT 1", cn.LegalEntityID).Scan(&arAccountID); err != nil {
+		return nil, fmt.Errorf("accounts receivable account 112000 is not configured: %w", err)
+	}
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '410000' LIMIT 1", cn.LegalEntityID).Scan(&revAccountID); err != nil {
+		return nil, fmt.Errorf("sales revenue account 410000 is not configured: %w", err)
+	}
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '213000' LIMIT 1", cn.LegalEntityID).Scan(&vatAccountID); err != nil {
+		return nil, fmt.Errorf("output VAT account 213000 is not configured: %w", err)
+	}
 
 	creatorID := cn.CreatedByUserID
 	if creatorID == nil {
 		var adminID uuid.UUID
-		_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM iam.users LIMIT 1").Scan(&adminID)
+		if err := dbtx.QueryRow(ctx, "SELECT id FROM iam.users LIMIT 1").Scan(&adminID); err != nil {
+			return nil, fmt.Errorf("failed to resolve credit-note creator: %w", err)
+		}
 		creatorID = &adminID
 	}
 
-	if journalID != uuid.Nil && periodID != uuid.Nil && arAccountID != uuid.Nil && revAccountID != uuid.Nil && vatAccountID != uuid.Nil {
-		journalEntryID = uuid.New()
-		entryNumber := fmt.Sprintf("JE-CN-%d", time.Now().UnixNano()%1000000)
-		_, err = s.db.Pool.Exec(ctx, `
+	journalEntryID = uuid.New()
+	entryNumber := identifiers.NewDocumentNumber("JE-CN", time.Now())
+	_, err = dbtx.Exec(ctx, `
 			INSERT INTO accounting.journal_entries (
 				id, legal_entity_id, journal_id, fiscal_period_id, entry_number,
 				accounting_date, status, source_module, source_type, source_id,
 				reference, description, currency_code, exchange_rate,
 				total_debit, total_credit, created_by, posted_by, posted_at
 			) VALUES (
-				$1, $2, $3, $4, $5, $6, 'POSTED', 'SALES', 'CREDIT_NOTE', $7,
+				$1, $2, $3, $4, $5, $6, 'DRAFT', 'SALES', 'CREDIT_NOTE', $7,
 				$8, $9, $10, 1.0, $11, $11, $12, $12, now()
 			)
-		`, journalEntryID, cn.LegalEntityID, journalID, periodID, entryNumber, cn.IssueDate, cn.ID,
-			cn.CreditNoteNumber, "إثبات إشعار دائن - "+cn.CreditNoteNumber, cn.CurrencyCode, cn.TotalAmount, creatorID)
+	`, journalEntryID, cn.LegalEntityID, journalID, periodID, entryNumber, cn.IssueDate, cn.ID,
+		cn.CreditNoteNumber, "إثبات إشعار دائن - "+cn.CreditNoteNumber, cn.CurrencyCode, cn.TotalAmount, creatorID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create credit-note journal entry: %w", err)
+	}
 
-		if err == nil {
-			jeIDPtr = &journalEntryID
-			// Line 1: Debit Sales Revenue (410000)
-			_, _ = s.db.Pool.Exec(ctx, `
+	jeIDPtr = &journalEntryID
+	_, err = dbtx.Exec(ctx, `
 				INSERT INTO accounting.journal_lines (
 					journal_entry_id, legal_entity_id, line_number, account_id,
 					description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
 				) VALUES ($1, $2, 1, $3, 'تسوية مردودات ومسموحات مبيعات', $4, $5, 0, $5, 0)
-			`, journalEntryID, cn.LegalEntityID, revAccountID, cn.CurrencyCode, cn.Subtotal)
+	`, journalEntryID, cn.LegalEntityID, revAccountID, cn.CurrencyCode, cn.Subtotal)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create revenue reversal journal line: %w", err)
+	}
 
-			// Line 2: Debit Output VAT (213000)
-			if cn.TaxAmount.GreaterThan(decimal.Zero) {
-				_, _ = s.db.Pool.Exec(ctx, `
+	if cn.TaxAmount.GreaterThan(decimal.Zero) {
+		_, err = dbtx.Exec(ctx, `
 					INSERT INTO accounting.journal_lines (
 						journal_entry_id, legal_entity_id, line_number, account_id,
 						description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
 					) VALUES ($1, $2, 2, $3, 'تسوية ضريبة القيمة المضافة', $4, $5, 0, $5, 0)
-				`, journalEntryID, cn.LegalEntityID, vatAccountID, cn.CurrencyCode, cn.TaxAmount)
-			}
+		`, journalEntryID, cn.LegalEntityID, vatAccountID, cn.CurrencyCode, cn.TaxAmount)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create VAT reversal journal line: %w", err)
+		}
+	}
 
-			// Line 3: Credit AR (112000)
-			_, _ = s.db.Pool.Exec(ctx, `
+	// Line 3: Credit AR (112000)
+	_, err = dbtx.Exec(ctx, `
 				INSERT INTO accounting.journal_lines (
 					journal_entry_id, legal_entity_id, line_number, account_id,
 					description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
 				) VALUES ($1, $2, 3, $3, 'تخفيض حساب العميل', $4, 0, $5, 0, $5)
-			`, journalEntryID, cn.LegalEntityID, arAccountID, cn.CurrencyCode, cn.TotalAmount)
-		}
+	`, journalEntryID, cn.LegalEntityID, arAccountID, cn.CurrencyCode, cn.TotalAmount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create receivable reversal journal line: %w", err)
+	}
+	if _, err = dbtx.Exec(ctx, `
+		UPDATE accounting.journal_entries
+		SET status = 'POSTED', posted_by = $1, posted_at = now()
+		WHERE id = $2
+	`, creatorID, journalEntryID); err != nil {
+		return nil, fmt.Errorf("failed to post credit-note journal entry: %w", err)
 	}
 
 	return s.repo.PostCreditNote(ctx, cn.ID, jeIDPtr, &openItemID)

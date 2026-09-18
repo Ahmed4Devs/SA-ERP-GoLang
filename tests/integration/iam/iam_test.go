@@ -3,6 +3,7 @@ package iam_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	"erp/internal/platform/database"
 	"erp/internal/platform/transaction"
 	"github.com/google/uuid"
+	"github.com/pquerna/otp/totp"
 )
 
 func setupIAMTest(t *testing.T) (*iam.Module, *database.DB) {
@@ -31,6 +33,7 @@ func setupIAMTest(t *testing.T) (*iam.Module, *database.DB) {
 	if testDBURL != "" {
 		cfg.Database.URL = testDBURL
 	}
+	cfg.Security.MFAKey = base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -49,6 +52,155 @@ func setupIAMTest(t *testing.T) (*iam.Module, *database.DB) {
 	iamMod := iam.NewModule(cfg, db, txManager)
 
 	return iamMod, db
+}
+
+func TestIAMMFAAuthenticationLifecycle(t *testing.T) {
+	iamMod, db := setupIAMTest(t)
+	defer db.Close()
+
+	ctx := context.Background()
+	username := "mfa_" + uuid.NewString()[:8]
+	password := "MFA-ComplexPass123!"
+	_, err := iamMod.AuthService.SeedAdmin(ctx, username, username+"@erp.sa", "MFA User", password)
+	if err != nil {
+		t.Fatalf("failed to create MFA test user: %v", err)
+	}
+
+	handler := iamMod.Handler.Routes()
+	initialLogin := performJSONRequest(t, handler, http.MethodPost, "/login", map[string]string{
+		"identifier": username,
+		"password":   password,
+	}, nil)
+	if initialLogin.Code != http.StatusOK {
+		t.Fatalf("initial login status = %d: %s", initialLogin.Code, initialLogin.Body.String())
+	}
+	sessionCookie := findSessionCookie(t, initialLogin)
+
+	enroll := performJSONRequest(t, handler, http.MethodPost, "/mfa/enroll", map[string]string{}, sessionCookie)
+	if enroll.Code != http.StatusCreated {
+		t.Fatalf("MFA enrollment status = %d: %s", enroll.Code, enroll.Body.String())
+	}
+	if enroll.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("MFA enrollment response must not be cached")
+	}
+	var enrollment struct {
+		Secret string   `json:"secret"`
+		Codes  []string `json:"recovery_codes"`
+	}
+	if err := json.NewDecoder(enroll.Body).Decode(&enrollment); err != nil {
+		t.Fatalf("failed to decode enrollment: %v", err)
+	}
+	if enrollment.Secret == "" || len(enrollment.Codes) != 10 {
+		t.Fatalf("invalid enrollment response: %+v", enrollment)
+	}
+
+	confirmationCode, err := totp.GenerateCode(enrollment.Secret, time.Now())
+	if err != nil {
+		t.Fatalf("failed to generate enrollment TOTP: %v", err)
+	}
+	confirm := performJSONRequest(t, handler, http.MethodPost, "/mfa/confirm", map[string]string{"code": confirmationCode}, sessionCookie)
+	if confirm.Code != http.StatusOK {
+		t.Fatalf("MFA confirmation status = %d: %s", confirm.Code, confirm.Body.String())
+	}
+
+	reEnroll := performJSONRequest(t, handler, http.MethodPost, "/mfa/enroll", map[string]string{}, sessionCookie)
+	if reEnroll.Code != http.StatusConflict {
+		t.Fatalf("re-enrollment status = %d, want 409: %s", reEnroll.Code, reEnroll.Body.String())
+	}
+
+	challengeResponse := performJSONRequest(t, handler, http.MethodPost, "/login", map[string]string{
+		"identifier": username,
+		"password":   password,
+	}, nil)
+	if challengeResponse.Code != http.StatusAccepted {
+		t.Fatalf("MFA password login status = %d: %s", challengeResponse.Code, challengeResponse.Body.String())
+	}
+	if len(challengeResponse.Result().Cookies()) != 0 {
+		t.Fatal("password-only MFA login unexpectedly set a session cookie")
+	}
+	challengeToken := decodeChallengeToken(t, challengeResponse)
+
+	complete := performJSONRequest(t, handler, http.MethodPost, "/login/mfa", map[string]string{
+		"challenge_token": challengeToken,
+		"code":            enrollment.Codes[0],
+	}, nil)
+	if complete.Code != http.StatusOK {
+		t.Fatalf("MFA completion status = %d: %s", complete.Code, complete.Body.String())
+	}
+	findSessionCookie(t, complete)
+
+	replayedChallenge := performJSONRequest(t, handler, http.MethodPost, "/login/mfa", map[string]string{
+		"challenge_token": challengeToken,
+		"code":            enrollment.Codes[0],
+	}, nil)
+	if replayedChallenge.Code != http.StatusUnauthorized {
+		t.Fatalf("replayed MFA challenge status = %d, want 401", replayedChallenge.Code)
+	}
+
+	secondChallengeResponse := performJSONRequest(t, handler, http.MethodPost, "/login", map[string]string{
+		"identifier": username,
+		"password":   password,
+	}, nil)
+	secondChallenge := decodeChallengeToken(t, secondChallengeResponse)
+	replayedRecovery := performJSONRequest(t, handler, http.MethodPost, "/login/mfa", map[string]string{
+		"challenge_token": secondChallenge,
+		"code":            enrollment.Codes[0],
+	}, nil)
+	if replayedRecovery.Code != http.StatusUnauthorized {
+		t.Fatalf("replayed recovery code status = %d, want 401", replayedRecovery.Code)
+	}
+	validRecovery := performJSONRequest(t, handler, http.MethodPost, "/login/mfa", map[string]string{
+		"challenge_token": secondChallenge,
+		"code":            enrollment.Codes[1],
+	}, nil)
+	if validRecovery.Code != http.StatusOK {
+		t.Fatalf("second recovery code status = %d: %s", validRecovery.Code, validRecovery.Body.String())
+	}
+}
+
+func performJSONRequest(t *testing.T, handler http.Handler, method, path string, payload any, cookie *http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal request: %v", err)
+	}
+	req := httptest.NewRequest(method, path, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if cookie != nil {
+		req.AddCookie(cookie)
+	}
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	return recorder
+}
+
+func findSessionCookie(t *testing.T, recorder *httptest.ResponseRecorder) *http.Cookie {
+	t.Helper()
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == iamhttp.SessionCookieName && cookie.Value != "" {
+			return cookie
+		}
+	}
+	t.Fatal("response does not contain a session cookie")
+	return nil
+}
+
+func decodeChallengeToken(t *testing.T, recorder *httptest.ResponseRecorder) string {
+	t.Helper()
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("challenge status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		MFARequired    bool   `json:"mfa_required"`
+		ChallengeToken string `json:"challenge_token"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("failed to decode challenge response: %v", err)
+	}
+	if !response.MFARequired || response.ChallengeToken == "" {
+		t.Fatalf("invalid challenge response: %+v", response)
+	}
+	return response.ChallengeToken
 }
 
 func TestIAMAuthenticationLifecycle(t *testing.T) {

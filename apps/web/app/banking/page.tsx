@@ -1,4 +1,5 @@
-import { BankingView } from "@/features/banking/banking-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function BankingPage() {
-  return <BankingView />;
+  return <ModuleAPIView titleAr="البنوك والمطابقة" titleEn="Banking" descriptionAr="الحسابات البنكية والكشوف والمطابقات الفعلية." descriptionEn="Live bank accounts, statements, and reconciliations." resources={moduleResources.banking} />;
 }

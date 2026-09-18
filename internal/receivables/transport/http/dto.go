@@ -34,24 +34,24 @@ type CreateCustomerRequest struct {
 }
 
 type UpdateCustomerRequest struct {
-	NameEn           string              `json:"name_en"`
-	NameAr           string              `json:"name_ar"`
-	TaxID            *string             `json:"tax_id,omitempty"`
-	CRNumber         *string             `json:"cr_number,omitempty"`
-	NationalID       *string             `json:"national_id,omitempty"`
-	BuildingNo       string              `json:"building_no,omitempty"`
-	StreetName       string              `json:"street_name,omitempty"`
-	District         string              `json:"district,omitempty"`
-	City             string              `json:"city"`
-	PostalCode       string              `json:"postal_code,omitempty"`
-	AdditionalNo     string              `json:"additional_no,omitempty"`
-	CountryCode      string              `json:"country_code,omitempty"`
-	Email            *string             `json:"email,omitempty"`
-	Phone            *string             `json:"phone,omitempty"`
-	ContactPerson    *string             `json:"contact_person,omitempty"`
-	PaymentTermsID   *uuid.UUID          `json:"payment_terms_id,omitempty"`
-	CurrencyCode     string              `json:"currency_code,omitempty"`
-	DefaultAccountID *uuid.UUID          `json:"default_account_id,omitempty"`
+	NameEn           string     `json:"name_en"`
+	NameAr           string     `json:"name_ar"`
+	TaxID            *string    `json:"tax_id,omitempty"`
+	CRNumber         *string    `json:"cr_number,omitempty"`
+	NationalID       *string    `json:"national_id,omitempty"`
+	BuildingNo       string     `json:"building_no,omitempty"`
+	StreetName       string     `json:"street_name,omitempty"`
+	District         string     `json:"district,omitempty"`
+	City             string     `json:"city"`
+	PostalCode       string     `json:"postal_code,omitempty"`
+	AdditionalNo     string     `json:"additional_no,omitempty"`
+	CountryCode      string     `json:"country_code,omitempty"`
+	Email            *string    `json:"email,omitempty"`
+	Phone            *string    `json:"phone,omitempty"`
+	ContactPerson    *string    `json:"contact_person,omitempty"`
+	PaymentTermsID   *uuid.UUID `json:"payment_terms_id,omitempty"`
+	CurrencyCode     string     `json:"currency_code,omitempty"`
+	DefaultAccountID *uuid.UUID `json:"default_account_id,omitempty"`
 }
 
 type SetCustomerStatusRequest struct {

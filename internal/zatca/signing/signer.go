@@ -10,12 +10,13 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
-	"math/big"
 	"strings"
 
 	"erp/internal/zatca/domain"
 	"erp/internal/zatca/ports"
 
+	"github.com/beevik/etree"
+	dsig "github.com/russellhaering/goxmldsig"
 	"github.com/shopspring/decimal"
 )
 
@@ -27,10 +28,50 @@ func NewInvoiceSigner() *InvoiceSigner {
 
 // Hash computes the canonical SHA-256 digest of the XML document.
 func (s *InvoiceSigner) Hash(xmlBytes []byte) (string, error) {
-	// Canonical XML hashing: exclude signature extension if present
-	xmlStr := string(xmlBytes)
-	hash := sha256.Sum256([]byte(xmlStr))
+	document := etree.NewDocument()
+	if err := document.ReadFromBytes(xmlBytes); err != nil {
+		return "", fmt.Errorf("invalid XML for canonical hashing: %w", err)
+	}
+	root := document.Root()
+	if root == nil {
+		return "", fmt.Errorf("XML document has no root element")
+	}
+
+	// ZATCA's invoice digest excludes the UBL extensions (which hold the
+	// signature), the QR reference, and the invoice signature node before
+	// applying inclusive C14N 1.1 and SHA-256.
+	removeElementsByNamespace(root, "urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2", "UBLExtensions")
+	removeQRDocumentReferences(root)
+	removeElementsByNamespace(root, "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2", "Signature")
+
+	canonical, err := dsig.MakeC14N11Canonicalizer().Canonicalize(root)
+	if err != nil {
+		return "", fmt.Errorf("failed to canonicalize XML: %w", err)
+	}
+	hash := sha256.Sum256(canonical)
 	return base64.StdEncoding.EncodeToString(hash[:]), nil
+}
+
+func removeElementsByNamespace(root *etree.Element, namespaceURI, localName string) {
+	for _, element := range root.FindElements("//*") {
+		if element.Tag == localName && element.NamespaceURI() == namespaceURI && element.Parent() != nil {
+			element.Parent().RemoveChild(element)
+		}
+	}
+}
+
+func removeQRDocumentReferences(root *etree.Element) {
+	for _, reference := range root.FindElements("//*") {
+		if reference.Tag != "AdditionalDocumentReference" || reference.Parent() == nil {
+			continue
+		}
+		for _, child := range reference.ChildElements() {
+			if child.Tag == "ID" && strings.TrimSpace(child.Text()) == "QR" {
+				reference.Parent().RemoveChild(reference)
+				break
+			}
+		}
+	}
 }
 
 // GenerateECDSAKeyPair produces a secp256k1 (or P-256 standard) key pair for CSID generation.
@@ -64,29 +105,33 @@ func GenerateECDSAKeyPair() (privateKeyPEM string, publicKeyPEM string, err erro
 
 // Sign hashes and signs the document, injecting the XAdES signature block.
 func (s *InvoiceSigner) Sign(ctx context.Context, xmlBytes []byte, csid *domain.CSID, invoiceHash string) (signedXML string, digitalSig string, pubKeyHash string, err error) {
-	// 1. Decode or generate ECDSA signature
-	var r, sigS *big.Int
+	if csid == nil {
+		return "", "", "", fmt.Errorf("CSID is required for signing")
+	}
+
+	// 1. Decode and validate the ECDSA private key. Signing must fail closed:
+	// fabricated signatures are never acceptable for tax invoices.
 	block, _ := pem.Decode([]byte(csid.PrivateKeyPEM))
-	if block != nil {
-		priv, parseErr := x509.ParseECPrivateKey(block.Bytes)
-		if parseErr == nil {
-			digest, _ := base64.StdEncoding.DecodeString(invoiceHash)
-			r, sigS, err = ecdsa.Sign(rand.Reader, priv, digest)
-		}
+	if block == nil {
+		return "", "", "", fmt.Errorf("invalid CSID private key PEM")
 	}
-
-	// Fallback mock deterministic signature if key is simulated
-	if r == nil || sigS == nil {
-		r = big.NewInt(123456789)
-		sigS = big.NewInt(987654321)
+	priv, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		return "", "", "", fmt.Errorf("invalid CSID EC private key: %w", err)
 	}
-
-	sigBytes := append(r.Bytes(), sigS.Bytes()...)
+	digest, err := base64.StdEncoding.DecodeString(invoiceHash)
+	if err != nil || len(digest) != sha256.Size {
+		return "", "", "", fmt.Errorf("invalid invoice hash")
+	}
+	sigBytes, err := ecdsa.SignASN1(rand.Reader, priv, digest)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to sign invoice hash: %w", err)
+	}
 	digitalSig = base64.StdEncoding.EncodeToString(sigBytes)
 
 	pubKeyHash = csid.BinarySecurityToken
 	if pubKeyHash == "" {
-		pubKeyHash = "MIIB...mockToken"
+		return "", "", "", fmt.Errorf("CSID certificate token is required for signing")
 	}
 
 	// 2. Inject XAdES signature block into XML

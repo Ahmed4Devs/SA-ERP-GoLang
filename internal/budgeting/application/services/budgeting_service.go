@@ -8,6 +8,7 @@ import (
 	"erp/internal/budgeting/domain"
 	"erp/internal/budgeting/ports"
 	"erp/internal/platform/database"
+	"erp/internal/platform/identifiers"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -239,7 +240,7 @@ func (s *BudgetingService) TransferBudget(ctx context.Context, req ports.Transfe
 		return nil, err
 	}
 
-	trfNumber := fmt.Sprintf("TRF-%s-%s", time.Now().Format("20060102"), uuid.New().String()[:6])
+	trfNumber := identifiers.NewDocumentNumber("TRF", time.Now())
 	transfer := &domain.BudgetTransfer{
 		ID:                  uuid.New(),
 		LegalEntityID:       req.LegalEntityID,

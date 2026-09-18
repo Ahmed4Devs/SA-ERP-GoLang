@@ -60,14 +60,14 @@ type TaxCode struct {
 }
 
 type TaxRateVersion struct {
-	ID           uuid.UUID       `json:"id"`
-	TaxCodeID    uuid.UUID       `json:"tax_code_id"`
-	RatePercent  decimal.Decimal `json:"rate_percent"`
+	ID            uuid.UUID       `json:"id"`
+	TaxCodeID     uuid.UUID       `json:"tax_code_id"`
+	RatePercent   decimal.Decimal `json:"rate_percent"`
 	EffectiveFrom time.Time       `json:"effective_from"`
 	EffectiveTo   *time.Time      `json:"effective_to,omitempty"`
-	Description  string          `json:"description"`
-	CreatedBy    *uuid.UUID      `json:"created_by,omitempty"`
-	CreatedAt    time.Time       `json:"created_at"`
+	Description   string          `json:"description"`
+	CreatedBy     *uuid.UUID      `json:"created_by,omitempty"`
+	CreatedAt     time.Time       `json:"created_at"`
 }
 
 type TaxPeriodStatus string
@@ -143,12 +143,12 @@ type DeclarationBoxItem struct {
 
 type DeclarationBoxes struct {
 	// Sales (Output VAT)
-	Box1StandardRatedSales  DeclarationBoxItem `json:"box_1_standard_rated_sales"`
+	Box1StandardRatedSales   DeclarationBoxItem `json:"box_1_standard_rated_sales"`
 	Box2PrivateHealthcareEdu DeclarationBoxItem `json:"box_2_private_healthcare_edu"`
-	Box3ZeroRatedDomestic   DeclarationBoxItem `json:"box_3_zero_rated_domestic"`
-	Box4Exports             DeclarationBoxItem `json:"box_4_exports"`
-	Box5ExemptSales         DeclarationBoxItem `json:"box_5_exempt_sales"`
-	Box6TotalSales          DeclarationBoxItem `json:"box_6_total_sales"`
+	Box3ZeroRatedDomestic    DeclarationBoxItem `json:"box_3_zero_rated_domestic"`
+	Box4Exports              DeclarationBoxItem `json:"box_4_exports"`
+	Box5ExemptSales          DeclarationBoxItem `json:"box_5_exempt_sales"`
+	Box6TotalSales           DeclarationBoxItem `json:"box_6_total_sales"`
 
 	// Purchases (Input VAT)
 	Box7StandardRatedPurchases DeclarationBoxItem `json:"box_7_standard_rated_purchases"`

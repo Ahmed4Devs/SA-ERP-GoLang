@@ -513,8 +513,8 @@ func TestSales_StandardInvoicePosting(t *testing.T) {
 	if postedInv.PostedAt == nil {
 		t.Errorf("expected posted_at timestamp to be set")
 	}
-	if postedInv.QRCodeData == nil || *postedInv.QRCodeData == "" {
-		t.Errorf("expected ZATCA Phase 2 QR Code data to be generated")
+	if postedInv.QRCodeData != nil {
+		t.Errorf("expected QR code to remain unset until the invoice is signed by the ZATCA flow")
 	}
 	if postedInv.OpenItemID == nil {
 		t.Errorf("expected open_item_id to be populated")

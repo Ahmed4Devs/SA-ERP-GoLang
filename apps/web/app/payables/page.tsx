@@ -1,4 +1,5 @@
-import { PayablesView } from "@/features/payables/payables-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function PayablesPage() {
-  return <PayablesView />;
+  return <ModuleAPIView titleAr="حسابات الدائنين" titleEn="Payables" descriptionAr="فواتير الموردين والمدفوعات والإشعارات الدائنة الفعلية." descriptionEn="Live supplier invoices, payments, and credit notes." resources={moduleResources.payables} />;
 }

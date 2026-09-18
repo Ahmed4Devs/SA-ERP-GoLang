@@ -1,4 +1,5 @@
-import { WorkflowView } from "@/features/workflow/workflow-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function WorkflowPage() {
-  return <WorkflowView />;
+  return <ModuleAPIView titleAr="مسارات الموافقة" titleEn="Workflow" descriptionAr="صندوق الموافقات وتعريفات المسارات والتفويضات الفعلية." descriptionEn="Live approval inbox, definitions, and delegations." resources={moduleResources.workflow} />;
 }

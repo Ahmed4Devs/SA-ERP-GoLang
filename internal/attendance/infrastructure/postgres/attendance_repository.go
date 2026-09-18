@@ -41,19 +41,19 @@ func (r *attendanceRepository) CreateShift(ctx context.Context, s *domain.Shift)
 	}
 
 	row, err := r.q.CreateShift(ctx, sqlc.CreateShiftParams{
-		ID:                     toPgUUID(s.ID),
-		LegalEntityID:          toPgUUID(s.LegalEntityID),
-		Code:                   s.Code,
-		NameEn:                 s.NameEn,
-		NameAr:                 s.NameAr,
-		StartTime:              toPgTime(s.StartTime),
-		EndTime:                toPgTime(s.EndTime),
-		GracePeriodMinutes:     s.GracePeriodMinutes,
-		BreakDurationMinutes:   s.BreakDurationMinutes,
+		ID:                      toPgUUID(s.ID),
+		LegalEntityID:           toPgUUID(s.LegalEntityID),
+		Code:                    s.Code,
+		NameEn:                  s.NameEn,
+		NameAr:                  s.NameAr,
+		StartTime:               toPgTime(s.StartTime),
+		EndTime:                 toPgTime(s.EndTime),
+		GracePeriodMinutes:      s.GracePeriodMinutes,
+		BreakDurationMinutes:    s.BreakDurationMinutes,
 		HalfDayThresholdMinutes: s.HalfDayThresholdMinutes,
-		IsNightShift:           s.IsNightShift,
-		WorkDays:               workDaysJSON,
-		IsActive:               s.IsActive,
+		IsNightShift:            s.IsNightShift,
+		WorkDays:                workDaysJSON,
+		IsActive:                s.IsActive,
 	})
 	if err != nil {
 		return nil, err
@@ -325,15 +325,15 @@ func (r *attendanceRepository) CreateOvertimeRequest(ctx context.Context, o *dom
 		o.ID = uuid.New()
 	}
 	row, err := r.q.CreateOvertimeRequest(ctx, sqlc.CreateOvertimeRequestParams{
-		ID:              toPgUUID(o.ID),
-		LegalEntityID:   toPgUUID(o.LegalEntityID),
-		EmployeeID:      toPgUUID(o.EmployeeID),
-		RequestDate:     toPgDate(o.RequestDate),
-		OvertimeDate:    toPgDate(o.OvertimeDate),
-		OvertimeHours:   toPgNumeric(o.OvertimeHours),
-		RateMultiplier:  toPgNumeric(o.RateMultiplier),
-		Reason:          o.Reason,
-		Status:          string(o.Status),
+		ID:             toPgUUID(o.ID),
+		LegalEntityID:  toPgUUID(o.LegalEntityID),
+		EmployeeID:     toPgUUID(o.EmployeeID),
+		RequestDate:    toPgDate(o.RequestDate),
+		OvertimeDate:   toPgDate(o.OvertimeDate),
+		OvertimeHours:  toPgNumeric(o.OvertimeHours),
+		RateMultiplier: toPgNumeric(o.RateMultiplier),
+		Reason:         o.Reason,
+		Status:         string(o.Status),
 	})
 	if err != nil {
 		return nil, err
@@ -439,10 +439,10 @@ func (r *attendanceRepository) GetAttendanceAdjustmentByID(ctx context.Context, 
 
 func (r *attendanceRepository) UpdateAdjustmentStatus(ctx context.Context, id uuid.UUID, status domain.RequestStatus, reviewedBy uuid.UUID, reviewNotes string) (*domain.AttendanceAdjustment, error) {
 	row, err := r.q.UpdateAdjustmentStatus(ctx, sqlc.UpdateAdjustmentStatusParams{
-		ID:                 toPgUUID(id),
-		Status:             string(status),
-		ReviewedByUserID:   toPgUUIDPtr(&reviewedBy),
-		ReviewNotes:        toPgTextPtr(&reviewNotes),
+		ID:               toPgUUID(id),
+		Status:           string(status),
+		ReviewedByUserID: toPgUUIDPtr(&reviewedBy),
+		ReviewNotes:      toPgTextPtr(&reviewNotes),
 	})
 	if err != nil {
 		return nil, err
@@ -458,21 +458,21 @@ func mapShift(r sqlc.AttendanceShifts) *domain.Shift {
 	var workDays []string
 	_ = json.Unmarshal(r.WorkDays, &workDays)
 	return &domain.Shift{
-		ID:                     toUUID(r.ID),
-		LegalEntityID:          toUUID(r.LegalEntityID),
-		Code:                   r.Code,
-		NameEn:                 r.NameEn,
-		NameAr:                 r.NameAr,
-		StartTime:              fromPgTime(r.StartTime),
-		EndTime:                fromPgTime(r.EndTime),
-		GracePeriodMinutes:     r.GracePeriodMinutes,
-		BreakDurationMinutes:   r.BreakDurationMinutes,
+		ID:                      toUUID(r.ID),
+		LegalEntityID:           toUUID(r.LegalEntityID),
+		Code:                    r.Code,
+		NameEn:                  r.NameEn,
+		NameAr:                  r.NameAr,
+		StartTime:               fromPgTime(r.StartTime),
+		EndTime:                 fromPgTime(r.EndTime),
+		GracePeriodMinutes:      r.GracePeriodMinutes,
+		BreakDurationMinutes:    r.BreakDurationMinutes,
 		HalfDayThresholdMinutes: r.HalfDayThresholdMinutes,
-		IsNightShift:           r.IsNightShift,
-		WorkDays:               workDays,
-		IsActive:               r.IsActive,
-		CreatedAt:              fromPgTimestamptz(r.CreatedAt),
-		UpdatedAt:              fromPgTimestamptz(r.UpdatedAt),
+		IsNightShift:            r.IsNightShift,
+		WorkDays:                workDays,
+		IsActive:                r.IsActive,
+		CreatedAt:               fromPgTimestamptz(r.CreatedAt),
+		UpdatedAt:               fromPgTimestamptz(r.UpdatedAt),
 	}
 }
 

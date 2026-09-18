@@ -170,7 +170,9 @@ func (s *OnboardingService) StartOnboarding(ctx context.Context, legalEntityID, 
 	}
 
 	// 9. Update EGS Status
-	_, _ = s.repo.UpdateEGSUnitStatus(ctx, egs.ID, legalEntityID, "ONBOARDED")
+	if _, err := s.repo.UpdateEGSUnitStatus(ctx, egs.ID, legalEntityID, "ONBOARDED"); err != nil {
+		return nil, fmt.Errorf("failed to mark EGS unit onboarded: %w", err)
+	}
 
 	return &domain.OnboardingResult{
 		EGSUnitID:           egs.ID,

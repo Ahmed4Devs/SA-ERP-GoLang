@@ -9,6 +9,7 @@ import (
 	"erp/internal/inventory/application/costing"
 	"erp/internal/inventory/domain"
 	"erp/internal/inventory/ports"
+	"erp/internal/platform/identifiers"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -168,7 +169,7 @@ func (s *InventoryService) PostStockMovement(ctx context.Context, req ports.Post
 	}
 
 	// Generate Movement Number
-	movNum := fmt.Sprintf("MOV-%s-%d", strings.ToUpper(uuid.NewString()[:8]), time.Now().UnixNano()%1000000)
+	movNum := identifiers.NewDocumentNumber("MOV", time.Now())
 
 	m := domain.StockMovement{
 		LegalEntityID:   req.LegalEntityID,
@@ -258,7 +259,7 @@ func (s *InventoryService) CreateTransferOrder(ctx context.Context, req ports.Cr
 		return nil, fmt.Errorf("source and destination warehouses must be different")
 	}
 
-	orderNum := fmt.Sprintf("TRF-%s-%d", strings.ToUpper(uuid.NewString()[:8]), time.Now().UnixNano()%1000000)
+	orderNum := identifiers.NewDocumentNumber("TRF", time.Now())
 	order := domain.TransferOrder{
 		LegalEntityID:   req.LegalEntityID,
 		OrderNumber:     orderNum,
@@ -359,7 +360,7 @@ func (s *InventoryService) GetTransferOrder(ctx context.Context, id uuid.UUID) (
 
 // 6. Adjustments
 func (s *InventoryService) CreateAdjustment(ctx context.Context, req ports.CreateAdjustmentRequest) (*domain.StockAdjustment, error) {
-	adjNum := fmt.Sprintf("ADJ-%s-%d", strings.ToUpper(uuid.NewString()[:8]), time.Now().UnixNano()%1000000)
+	adjNum := identifiers.NewDocumentNumber("ADJ", time.Now())
 	adj := domain.StockAdjustment{
 		LegalEntityID:    req.LegalEntityID,
 		AdjustmentNumber: adjNum,
@@ -435,7 +436,7 @@ func (s *InventoryService) ListAdjustments(ctx context.Context, legalEntityID uu
 
 // 7. Counts
 func (s *InventoryService) CreateStockCount(ctx context.Context, req ports.CreateCountRequest) (*domain.StockCount, error) {
-	cntNum := fmt.Sprintf("CNT-%s-%d", strings.ToUpper(uuid.NewString()[:8]), time.Now().UnixNano()%1000000)
+	cntNum := identifiers.NewDocumentNumber("CNT", time.Now())
 	count := domain.StockCount{
 		LegalEntityID: req.LegalEntityID,
 		CountNumber:   cntNum,

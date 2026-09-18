@@ -81,11 +81,11 @@ const (
 type MatchedEntityType string
 
 const (
-	MatchedEntityJournalEntry       MatchedEntityType = "JOURNAL_ENTRY"
-	MatchedEntityReceipt            MatchedEntityType = "RECEIPT"
-	MatchedEntityPayment            MatchedEntityType = "PAYMENT"
-	MatchedEntityTransfer           MatchedEntityType = "TRANSFER"
-	MatchedEntityBankFeeAdjustment  MatchedEntityType = "BANK_FEE_ADJUSTMENT"
+	MatchedEntityJournalEntry      MatchedEntityType = "JOURNAL_ENTRY"
+	MatchedEntityReceipt           MatchedEntityType = "RECEIPT"
+	MatchedEntityPayment           MatchedEntityType = "PAYMENT"
+	MatchedEntityTransfer          MatchedEntityType = "TRANSFER"
+	MatchedEntityBankFeeAdjustment MatchedEntityType = "BANK_FEE_ADJUSTMENT"
 )
 
 type BankAccount struct {

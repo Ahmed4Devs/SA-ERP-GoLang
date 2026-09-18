@@ -76,16 +76,16 @@ type RecordQuoteCmd struct {
 }
 
 type CreatePOLineCmd struct {
-	PRLineID        *uuid.UUID      `json:"pr_line_id,omitempty"`
-	ItemID          uuid.UUID       `json:"item_id"`
-	Description     string          `json:"description"`
-	UOM             string          `json:"uom"`
-	Quantity        decimal.Decimal `json:"quantity"`
-	UnitPrice       decimal.Decimal `json:"unit_price"`
-	DiscountPercent decimal.Decimal `json:"discount_percent"`
-	TaxCode         string          `json:"tax_code"`
-	TaxRatePercent  decimal.Decimal `json:"tax_rate_percent"`
-	ExpenseAccountID *uuid.UUID     `json:"expense_account_id,omitempty"`
+	PRLineID         *uuid.UUID      `json:"pr_line_id,omitempty"`
+	ItemID           uuid.UUID       `json:"item_id"`
+	Description      string          `json:"description"`
+	UOM              string          `json:"uom"`
+	Quantity         decimal.Decimal `json:"quantity"`
+	UnitPrice        decimal.Decimal `json:"unit_price"`
+	DiscountPercent  decimal.Decimal `json:"discount_percent"`
+	TaxCode          string          `json:"tax_code"`
+	TaxRatePercent   decimal.Decimal `json:"tax_rate_percent"`
+	ExpenseAccountID *uuid.UUID      `json:"expense_account_id,omitempty"`
 }
 
 type CreatePOCmd struct {

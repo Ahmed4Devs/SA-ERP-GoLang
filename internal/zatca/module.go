@@ -3,12 +3,14 @@ package zatca
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
 	"erp/internal/zatca/application/onboarding"
 	"erp/internal/zatca/application/services"
 	"erp/internal/zatca/application/submission"
+	"erp/internal/zatca/domain"
 	"erp/internal/zatca/infrastructure/client"
 	"erp/internal/zatca/infrastructure/postgres"
 	"erp/internal/zatca/jobs"
@@ -43,12 +45,31 @@ func NewModule(cfg *config.Config, db *database.DB) *Module {
 	validator := validation.NewInvoiceValidator()
 	signer := signing.NewInvoiceSigner()
 
-	// Default to SimulatorClient for sandbox/offline reliability
-	simClient := client.NewSimulatorClient()
+	var zatcaClient ports.ZATCAClient
+	var onboardingClient ports.ZATCAOnboardingClient
+	if strings.EqualFold(cfg.ZATCA.Environment, "simulation") {
+		simClient := client.NewSimulatorClient()
+		zatcaClient = simClient
+		onboardingClient = simClient
+	} else {
+		environment := domain.EnvironmentSandbox
+		if strings.EqualFold(cfg.ZATCA.Environment, "production") {
+			environment = domain.EnvironmentProduction
+		}
+		httpConfig := client.DefaultConfig(environment)
+		if cfg.ZATCA.BaseURL != "" {
+			httpConfig.BaseURL = strings.TrimRight(cfg.ZATCA.BaseURL, "/")
+		}
+		httpConfig.Timeout = cfg.ZATCA.Timeout
+		httpClient := client.NewHTTPClient(httpConfig)
+		zatcaClient = httpClient
+		onboardingClient = httpClient
+	}
 
-	svc := services.NewZATCAService(repo, xmlGen, validator, signer, db)
-	onboardingSvc := onboarding.NewOnboardingService(repo, simClient, xmlGen, signer)
-	submissionSvc := submission.NewSubmissionService(repo, subRepo, simClient)
+	allowSimulatedCredentials := strings.EqualFold(cfg.ZATCA.Environment, "simulation")
+	svc := services.NewZATCAService(repo, xmlGen, validator, signer, db, allowSimulatedCredentials)
+	onboardingSvc := onboarding.NewOnboardingService(repo, onboardingClient, xmlGen, signer)
+	submissionSvc := submission.NewSubmissionService(repo, subRepo, zatcaClient)
 	retryWorker := jobs.NewRetryWorker(jobs.DefaultWorkerConfig(), subRepo, repo, submissionSvc)
 
 	handler := zhttp.NewZATCAHandler(svc, onboardingSvc, submissionSvc)
@@ -60,8 +81,8 @@ func NewModule(cfg *config.Config, db *database.DB) *Module {
 		SubmissionService: submissionSvc,
 		Repo:              repo,
 		SubRepo:           subRepo,
-		ZATCAClient:       simClient,
-		OnboardingClient:  simClient,
+		ZATCAClient:       zatcaClient,
+		OnboardingClient:  onboardingClient,
 		RetryWorker:       retryWorker,
 		Handler:           handler,
 	}

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"erp/internal/platform/database"
 	"erp/internal/platform/database/sqlc"
@@ -138,38 +139,38 @@ func (r *Repository) CreateCSID(ctx context.Context, csid *domain.CSID) (*domain
 	return mapCSIDToDomain(row), nil
 }
 
-func (r *Repository) GetNextSequence(ctx context.Context, egsUnitID uuid.UUID, invoiceType string, currentHash string) (int64, string, error) {
-	seq, err := r.q.GetInvoiceSequence(ctx, sqlc.GetInvoiceSequenceParams{
-		EgsUnitID:   toPgUUID(egsUnitID),
-		InvoiceType: invoiceType,
-	})
+func (r *Repository) ReserveNextSequence(ctx context.Context, egsUnitID uuid.UUID, invoiceType string) (int64, string, error) {
+	const initialPIH = "NWZlY2ViNjAxNWM4OTQyYzhkNTJhN2RlZWZmODM4NDFlZWY3YjFmMzBkYzYxOWQ5MTUzZGFhYTEzYTI3MWEz"
+	var icv int64
+	var pih string
+	err := r.db.DBTX(ctx).QueryRow(ctx, `
+		INSERT INTO zatca.invoice_sequences (
+			id, egs_unit_id, invoice_type, last_icv, last_invoice_hash, updated_at
+		) VALUES ($1, $2, $3, 1, $4, CURRENT_TIMESTAMP)
+		ON CONFLICT (egs_unit_id, invoice_type) DO UPDATE
+		SET last_icv = zatca.invoice_sequences.last_icv + 1,
+			updated_at = CURRENT_TIMESTAMP
+		RETURNING last_icv, last_invoice_hash
+	`, uuid.New(), egsUnitID, invoiceType, initialPIH).Scan(&icv, &pih)
 	if err != nil {
-		// Initialize sequence
-		initialPIH := "NWZlY2ViNjAxNWM4OTQyYzhkNTJhN2RlZWZmODM4NDFlZWY3YjFmMzBkYzYxOWQ5MTUzZGFhYTEzYTI3MWEz"
-		created, initErr := r.q.CreateInvoiceSequence(ctx, sqlc.CreateInvoiceSequenceParams{
-			ID:              toPgUUID(uuid.New()),
-			EgsUnitID:       toPgUUID(egsUnitID),
-			InvoiceType:     invoiceType,
-			LastIcv:         1,
-			LastInvoiceHash: currentHash,
-		})
-		if initErr != nil {
-			return 1, initialPIH, nil
-		}
-		return created.LastIcv, initialPIH, nil
+		return 0, "", fmt.Errorf("failed to reserve ZATCA invoice sequence: %w", err)
 	}
+	return icv, pih, nil
+}
 
-	pih := seq.LastInvoiceHash
-	updated, err := r.q.IncrementInvoiceSequence(ctx, sqlc.IncrementInvoiceSequenceParams{
-		EgsUnitID:       toPgUUID(egsUnitID),
-		InvoiceType:     invoiceType,
-		LastInvoiceHash: currentHash,
-	})
+func (r *Repository) SetSequenceHash(ctx context.Context, egsUnitID uuid.UUID, invoiceType string, icv int64, currentHash string) error {
+	command, err := r.db.DBTX(ctx).Exec(ctx, `
+		UPDATE zatca.invoice_sequences
+		SET last_invoice_hash = $4, updated_at = CURRENT_TIMESTAMP
+		WHERE egs_unit_id = $1 AND invoice_type = $2 AND last_icv = $3
+	`, egsUnitID, invoiceType, icv, currentHash)
 	if err != nil {
-		return seq.LastIcv + 1, pih, nil
+		return fmt.Errorf("failed to update ZATCA invoice hash chain: %w", err)
 	}
-
-	return updated.LastIcv, pih, nil
+	if command.RowsAffected() != 1 {
+		return fmt.Errorf("ZATCA invoice sequence changed while generating ICV %d", icv)
+	}
+	return nil
 }
 
 func (r *Repository) GetDocumentByID(ctx context.Context, id, legalEntityID uuid.UUID) (*domain.ZATCADocument, error) {
@@ -204,27 +205,27 @@ func (r *Repository) ListDocuments(ctx context.Context, legalEntityID uuid.UUID)
 }
 
 func (r *Repository) CreateDocument(ctx context.Context, doc *domain.ZATCADocument) (*domain.ZATCADocument, error) {
-	row, err := r.q.CreateDocument(ctx, sqlc.CreateDocumentParams{
-		ID:                toPgUUID(doc.ID),
-		LegalEntityID:     toPgUUID(doc.LegalEntityID),
-		EgsUnitID:         toPgUUID(doc.EGSUnitID),
-		SalesInvoiceID:    toPgUUIDPtr(doc.SalesInvoiceID),
-		InvoiceUuid:       toPgUUID(doc.InvoiceUUID),
-		InvoiceNumber:     doc.InvoiceNumber,
-		InvoiceType:       string(doc.InvoiceType),
-		InvoiceSubtype:    string(doc.InvoiceSubtype),
-		SubmissionMode:    string(doc.SubmissionMode),
-		Icv:               doc.ICV,
-		Pih:               doc.PIH,
-		IssueDate:         toPgDate(doc.IssueDate),
-		IssueTime:         toPgTime(doc.IssueTime),
-		UblXml:            doc.UBLXML,
-		SignedXml:         toPgText(doc.SignedXML),
-		InvoiceHash:       doc.InvoiceHash,
-		DigitalSignature:  toPgText(doc.DigitalSignature),
-		PublicKeyHashing:  toPgText(doc.PublicKeyHashing),
-		QrCodeData:        doc.QRCodeData,
-		Status:            string(doc.Status),
+	row, err := sqlc.New(r.db.DBTX(ctx)).CreateDocument(ctx, sqlc.CreateDocumentParams{
+		ID:               toPgUUID(doc.ID),
+		LegalEntityID:    toPgUUID(doc.LegalEntityID),
+		EgsUnitID:        toPgUUID(doc.EGSUnitID),
+		SalesInvoiceID:   toPgUUIDPtr(doc.SalesInvoiceID),
+		InvoiceUuid:      toPgUUID(doc.InvoiceUUID),
+		InvoiceNumber:    doc.InvoiceNumber,
+		InvoiceType:      string(doc.InvoiceType),
+		InvoiceSubtype:   string(doc.InvoiceSubtype),
+		SubmissionMode:   string(doc.SubmissionMode),
+		Icv:              doc.ICV,
+		Pih:              doc.PIH,
+		IssueDate:        toPgDate(doc.IssueDate),
+		IssueTime:        toPgTime(doc.IssueTime),
+		UblXml:           doc.UBLXML,
+		SignedXml:        toPgText(doc.SignedXML),
+		InvoiceHash:      doc.InvoiceHash,
+		DigitalSignature: toPgText(doc.DigitalSignature),
+		PublicKeyHashing: toPgText(doc.PublicKeyHashing),
+		QrCodeData:       doc.QRCodeData,
+		Status:           string(doc.Status),
 	})
 	if err != nil {
 		return nil, err
@@ -298,18 +299,19 @@ func (r *Repository) GetValidationResults(ctx context.Context, documentID uuid.U
 	res := make([]*domain.ValidationResult, len(rows))
 	for i, row := range rows {
 		msgs, errMsgs := r.q.GetValidationMessagesByResult(ctx, row.ID)
+		if errMsgs != nil {
+			return nil, fmt.Errorf("failed to get validation messages: %w", errMsgs)
+		}
 		msgList := []domain.ValidationMessage{}
-		if errMsgs == nil {
-			for _, m := range msgs {
-				msgList = append(msgList, domain.ValidationMessage{
-					ID:          toUUID(m.ID),
-					MessageType: m.MessageType,
-					Code:        m.Code,
-					Category:    m.Category,
-					MessageText: m.MessageText,
-					CreatedAt:   fromPgTimestamptz(m.CreatedAt),
-				})
-			}
+		for _, m := range msgs {
+			msgList = append(msgList, domain.ValidationMessage{
+				ID:          toUUID(m.ID),
+				MessageType: m.MessageType,
+				Code:        m.Code,
+				Category:    m.Category,
+				MessageText: m.MessageText,
+				CreatedAt:   fromPgTimestamptz(m.CreatedAt),
+			})
 		}
 
 		res[i] = &domain.ValidationResult{
@@ -331,7 +333,10 @@ func (r *Repository) GetSummary(ctx context.Context, legalEntityID uuid.UUID) (*
 		return nil, err
 	}
 
-	egsList, _ := r.q.ListEGSUnits(ctx, toPgUUID(legalEntityID))
+	egsList, err := r.q.ListEGSUnits(ctx, toPgUUID(legalEntityID))
+	if err != nil {
+		return nil, err
+	}
 
 	return &domain.ZATCASummary{
 		TotalDocuments: counts.TotalDocuments,

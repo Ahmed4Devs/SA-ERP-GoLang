@@ -35,7 +35,6 @@ func setupFixedAssetsTest(t *testing.T) (*fixedassets.Module, *hr.Module, *datab
 	}
 
 	txManager := transaction.NewManager(db.Pool)
-	_ = database.MigrateDown(ctx, cfg.Database.URL, "../../../database/migrations")
 	if err := database.MigrateUp(ctx, cfg.Database.URL, "../../../database/migrations"); err != nil {
 		t.Fatalf("failed to run migrations: %v", err)
 	}

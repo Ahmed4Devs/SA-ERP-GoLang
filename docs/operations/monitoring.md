@@ -3,7 +3,7 @@
 ## 1. Overview
 The Saudi Enterprise ERP observability stack is built around Prometheus metrics collection, Grafana dashboard visualization, and Alertmanager incident routing.
 
-All critical components (Nginx, Go API, Worker, PostgreSQL, Redis) export telemetry in OpenMetrics / Prometheus standard format.
+The API exports Prometheus metrics. PostgreSQL, Nginx, container, and worker telemetry require the separately deployed exporters/collector described below; they are not bundled in the production Compose file.
 
 ---
 
@@ -32,7 +32,6 @@ All critical components (Nginx, Go API, Worker, PostgreSQL, Redis) export teleme
 | :--- | :--- | :--- |
 | **Nginx** | `nginx-prometheus-exporter` | Active connections, request rate, upstream latency |
 | **PostgreSQL** | `postgres_exporter` | Active transactions, cache hit ratio, deadlocks, disk usage |
-| **Redis** | `redis_exporter` | Memory usage, connected clients, eviction rate |
 | **Containers** | `cAdvisor` | CPU % utilization, memory RSS, container restart counts |
 
 ---
@@ -109,10 +108,6 @@ scrape_configs:
   - job_name: 'erp-postgres'
     static_configs:
       - targets: ['postgres-exporter:9187']
-
-  - job_name: 'erp-redis'
-    static_configs:
-      - targets: ['redis-exporter:9121']
 
   - job_name: 'erp-nginx'
     static_configs:

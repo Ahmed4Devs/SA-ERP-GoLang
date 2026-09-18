@@ -7,6 +7,7 @@ import (
 	"erp/internal/authorization/domain"
 	"erp/internal/authorization/ports"
 	iamhttp "erp/internal/iam/transport/http"
+	platformmiddleware "erp/internal/platform/middleware"
 	"github.com/google/uuid"
 )
 
@@ -40,6 +41,45 @@ func RequirePermission(
 				return
 			}
 
+			if !decision.Allowed {
+				writeForbidden(w, decision.Reason)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequireModuleAccess selects read or manage permission from the HTTP method
+// and evaluates it in the legal-entity scope established by the tenant guard.
+func RequireModuleAccess(authzService ports.AuthorizationService, viewPermission, managePermission string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user := iamhttp.UserFromContext(r.Context())
+			if user == nil {
+				writeForbidden(w, "User authentication required for permission check")
+				return
+			}
+
+			permission := managePermission
+			switch r.Method {
+			case http.MethodGet, http.MethodHead, http.MethodOptions:
+				permission = viewPermission
+			}
+
+			var scope *uuid.UUID
+			if tenantID, ok := platformmiddleware.TenantFromContext(r.Context()); ok {
+				scope = &tenantID
+			}
+
+			decision, err := authzService.Authorize(r.Context(), domain.AuthorizationRequest{
+				UserID: user.ID, Permission: permission, LegalEntityID: scope,
+			})
+			if err != nil {
+				writeForbidden(w, "Failed to evaluate authorization")
+				return
+			}
 			if !decision.Allowed {
 				writeForbidden(w, decision.Reason)
 				return

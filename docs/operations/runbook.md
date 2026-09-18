@@ -4,14 +4,13 @@
 This document provides standard operating procedures (SOP) for the 24/7 operations, maintenance, and incident response of the Saudi Enterprise ERP production system.
 
 ### Container Topology
-The production deployment orchestrates 7 primary containers via Docker Compose or Kubernetes:
+The production deployment orchestrates 6 primary containers via Docker Compose or Kubernetes:
 - **`erp-nginx`**: Edge reverse proxy handling TLS termination, rate limiting, and HTTP/2 routing.
-- **`erp-web`**: Next.js 15 standalone frontend web server (Port 3000).
-- **`erp-api`**: Go core backend API service with GORM connection pooling (Port 8080).
-- **`erp-worker`**: Go background processing worker for ZATCA clearance, PDF generation, and notifications.
+- **`erp-web`**: Next.js 16 standalone frontend web server (Port 3000).
+- **`erp-api`**: Go core backend API service with pgx connection pooling (Port 8080).
+- **`erp-worker`**: Go background worker that retries pending/failed ZATCA submissions from PostgreSQL.
 - **`erp-migrate`**: Ephemeral schema migration runner executing Goose database migrations before API launch.
 - **`erp-postgres`**: PostgreSQL 18 relational database with Saudi localized schema (`Asia/Riyadh` TZ).
-- **`erp-redis`**: Redis 7 cache and high-throughput task queue broker.
 
 ---
 
@@ -23,7 +22,7 @@ The production deployment orchestrates 7 primary containers via Docker Compose o
 cd deployments/compose
 
 # Validate environment configuration
-cp .env.production.example .env.production
+cp ../../.env.production.example .env.production
 # Ensure secrets and credentials are fully set
 
 # Pull & build containers with zero cache
@@ -68,7 +67,6 @@ docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
 | **API Core** | `GET https://erp.example.sa/healthz` | `HTTP 200 {"status":"ok"}` | Check `erp-api` logs for DB connection failure or OOM panic. |
 | **Edge Nginx** | Port 80/443 | `HTTP 200 / 301` | Verify certificate validity and Nginx syntax: `nginx -t`. |
 | **PostgreSQL** | `pg_isready -U erp_user -d erp_db` | `accepting connections` | Inspect storage capacity (`df -h`) and connection count. |
-| **Redis** | `redis-cli ping` | `PONG` | Check memory utilization and appendonly file corruption. |
 | **Web Frontend** | `GET https://erp.example.sa/` | `HTTP 200` | Restart `erp-web` container; check Node SSR memory. |
 
 ---
@@ -80,7 +78,7 @@ docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
   ```bash
   docker compose -f docker-compose.prod.yml up -d --scale erp-api=4
   ```
-- **`erp-worker`**: Workers process tasks off Redis queues. Can be scaled dynamically during high ZATCA clearance loads or payroll runs:
+- **`erp-worker`**: Workers scan PostgreSQL for retryable ZATCA submissions. Scale only after verifying database connection limits and row-locking behavior:
   ```bash
   docker compose -f docker-compose.prod.yml up -d --scale erp-worker=3
   ```
@@ -114,12 +112,9 @@ Ensure `postgresql.conf` parameters match host hardware:
    ```
 4. Verify `DATABASE_URL` pool size (`pool_max_conns=50`).
 
-### Scenario B: ZATCA Phase 2 Clearance Queue Backlog
-1. Inspect Redis queue length:
-   ```bash
-   docker compose -f docker-compose.prod.yml exec redis redis-cli -a $REDIS_PASSWORD LLEN zatca_submission_queue
-   ```
-2. Verify ZATCA endpoint connectivity:
+### Scenario B: ZATCA Submission Retry Backlog
+1. Inspect failed and pending submissions in PostgreSQL and correlate them with worker logs.
+2. Verify ZATCA endpoint connectivity from an approved diagnostic environment:
    ```bash
    docker compose -f docker-compose.prod.yml exec erp-api curl -I https://gw-fatoora.zatca.gov.sa/e-invoicing/simulation/invoices/clearance/single
    ```

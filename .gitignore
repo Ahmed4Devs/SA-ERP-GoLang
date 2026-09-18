@@ -13,6 +13,10 @@
 *.out
 coverage.txt
 coverage.html
+test-results/
+playwright-report/
+blob-report/
+.tmp-backup-drill/
 
 # Go workspace & vendor
 /vendor/

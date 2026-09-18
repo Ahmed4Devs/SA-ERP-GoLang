@@ -47,7 +47,8 @@ type Repository interface {
 	ListCSIDs(ctx context.Context, egsUnitID uuid.UUID) ([]*domain.CSID, error)
 	CreateCSID(ctx context.Context, csid *domain.CSID) (*domain.CSID, error)
 
-	GetNextSequence(ctx context.Context, egsUnitID uuid.UUID, invoiceType string, currentHash string) (nextICV int64, pih string, err error)
+	ReserveNextSequence(ctx context.Context, egsUnitID uuid.UUID, invoiceType string) (nextICV int64, pih string, err error)
+	SetSequenceHash(ctx context.Context, egsUnitID uuid.UUID, invoiceType string, icv int64, currentHash string) error
 
 	GetDocumentByID(ctx context.Context, id, legalEntityID uuid.UUID) (*domain.ZATCADocument, error)
 	GetDocumentByUUID(ctx context.Context, u uuid.UUID) (*domain.ZATCADocument, error)
@@ -123,4 +124,3 @@ type SubmissionService interface {
 	ListSubmissions(ctx context.Context, filter domain.SubmissionFilter) ([]*domain.ZATCASubmission, error)
 	GetSubmission(ctx context.Context, id, legalEntityID uuid.UUID) (*domain.ZATCASubmission, error)
 }
-

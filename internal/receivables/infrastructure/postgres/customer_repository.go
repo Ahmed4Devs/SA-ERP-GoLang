@@ -4,30 +4,30 @@ import (
 	"context"
 	"errors"
 
+	"erp/internal/platform/database"
 	"erp/internal/platform/database/sqlc"
 	"erp/internal/receivables/domain"
 	"erp/internal/receivables/ports"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 )
 
 type customerRepository struct {
-	pool    *pgxpool.Pool
-	queries *sqlc.Queries
+	db *database.DB
 }
 
-func NewCustomerRepository(pool *pgxpool.Pool) ports.CustomerRepository {
-	return &customerRepository{
-		pool:    pool,
-		queries: sqlc.New(pool),
-	}
+func NewCustomerRepository(db *database.DB) ports.CustomerRepository {
+	return &customerRepository{db: db}
+}
+
+func (r *customerRepository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 func (r *customerRepository) CreateCustomer(ctx context.Context, c *domain.Customer) (*domain.Customer, error) {
-	row, err := r.queries.CreateCustomer(ctx, sqlc.CreateCustomerParams{
+	row, err := r.queries(ctx).CreateCustomer(ctx, sqlc.CreateCustomerParams{
 		LegalEntityID:    toPgUUID(c.LegalEntityID),
 		CustomerNumber:   c.CustomerNumber,
 		CustomerType:     string(c.CustomerType),
@@ -61,7 +61,7 @@ func (r *customerRepository) CreateCustomer(ctx context.Context, c *domain.Custo
 }
 
 func (r *customerRepository) GetCustomerByID(ctx context.Context, id uuid.UUID) (*domain.Customer, error) {
-	row, err := r.queries.GetCustomerByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetCustomerByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrCustomerNotFound
@@ -105,7 +105,7 @@ func (r *customerRepository) GetCustomerByID(ctx context.Context, id uuid.UUID) 
 }
 
 func (r *customerRepository) GetCustomerByNumber(ctx context.Context, legalEntityID uuid.UUID, number string) (*domain.Customer, error) {
-	row, err := r.queries.GetCustomerByNumber(ctx, sqlc.GetCustomerByNumberParams{
+	row, err := r.queries(ctx).GetCustomerByNumber(ctx, sqlc.GetCustomerByNumberParams{
 		LegalEntityID:  toPgUUID(legalEntityID),
 		CustomerNumber: number,
 	})
@@ -147,7 +147,7 @@ func (r *customerRepository) GetCustomerByNumber(ctx context.Context, legalEntit
 }
 
 func (r *customerRepository) ListCustomers(ctx context.Context, filter ports.CustomerFilter) ([]*domain.Customer, int64, error) {
-	total, err := r.queries.CountCustomers(ctx, sqlc.CountCustomersParams{
+	total, err := r.queries(ctx).CountCustomers(ctx, sqlc.CountCustomersParams{
 		LegalEntityID: toPgUUID(filter.LegalEntityID),
 		Column2:       filter.Search,
 		Column3:       filter.CustomerType,
@@ -157,7 +157,7 @@ func (r *customerRepository) ListCustomers(ctx context.Context, filter ports.Cus
 		return nil, 0, err
 	}
 
-	rows, err := r.queries.ListCustomers(ctx, sqlc.ListCustomersParams{
+	rows, err := r.queries(ctx).ListCustomers(ctx, sqlc.ListCustomersParams{
 		LegalEntityID: toPgUUID(filter.LegalEntityID),
 		Column2:       filter.Search,
 		Column3:       filter.CustomerType,
@@ -210,7 +210,7 @@ func (r *customerRepository) ListCustomers(ctx context.Context, filter ports.Cus
 }
 
 func (r *customerRepository) UpdateCustomer(ctx context.Context, c *domain.Customer) (*domain.Customer, error) {
-	row, err := r.queries.UpdateCustomer(ctx, sqlc.UpdateCustomerParams{
+	row, err := r.queries(ctx).UpdateCustomer(ctx, sqlc.UpdateCustomerParams{
 		ID:               toPgUUID(c.ID),
 		NameEn:           c.NameEn,
 		NameAr:           c.NameAr,
@@ -239,7 +239,7 @@ func (r *customerRepository) UpdateCustomer(ctx context.Context, c *domain.Custo
 }
 
 func (r *customerRepository) UpdateCustomerStatus(ctx context.Context, id uuid.UUID, status domain.CustomerStatus) error {
-	_, err := r.queries.UpdateCustomerStatus(ctx, sqlc.UpdateCustomerStatusParams{
+	_, err := r.queries(ctx).UpdateCustomerStatus(ctx, sqlc.UpdateCustomerStatusParams{
 		ID:     toPgUUID(id),
 		Status: string(status),
 	})
@@ -247,7 +247,7 @@ func (r *customerRepository) UpdateCustomerStatus(ctx context.Context, id uuid.U
 }
 
 func (r *customerRepository) CreatePaymentTerm(ctx context.Context, term *domain.PaymentTerm) (*domain.PaymentTerm, error) {
-	row, err := r.queries.CreatePaymentTerm(ctx, sqlc.CreatePaymentTermParams{
+	row, err := r.queries(ctx).CreatePaymentTerm(ctx, sqlc.CreatePaymentTermParams{
 		LegalEntityID:   toPgUUID(term.LegalEntityID),
 		Code:            term.Code,
 		NameEn:          term.NameEn,
@@ -266,7 +266,7 @@ func (r *customerRepository) CreatePaymentTerm(ctx context.Context, term *domain
 }
 
 func (r *customerRepository) GetPaymentTermByID(ctx context.Context, id uuid.UUID) (*domain.PaymentTerm, error) {
-	row, err := r.queries.GetPaymentTermByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetPaymentTermByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrPaymentTermNotFound
@@ -288,7 +288,7 @@ func (r *customerRepository) GetPaymentTermByID(ctx context.Context, id uuid.UUI
 }
 
 func (r *customerRepository) ListPaymentTerms(ctx context.Context, legalEntityID uuid.UUID, includeInactive bool) ([]*domain.PaymentTerm, error) {
-	rows, err := r.queries.ListPaymentTerms(ctx, sqlc.ListPaymentTermsParams{
+	rows, err := r.queries(ctx).ListPaymentTerms(ctx, sqlc.ListPaymentTermsParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Column2:       includeInactive,
 	})
@@ -314,7 +314,7 @@ func (r *customerRepository) ListPaymentTerms(ctx context.Context, legalEntityID
 }
 
 func (r *customerRepository) UpsertCustomerAccount(ctx context.Context, account *domain.CustomerAccount) (*domain.CustomerAccount, error) {
-	row, err := r.queries.UpsertCustomerAccount(ctx, sqlc.UpsertCustomerAccountParams{
+	row, err := r.queries(ctx).UpsertCustomerAccount(ctx, sqlc.UpsertCustomerAccountParams{
 		CustomerID:   toPgUUID(account.CustomerID),
 		GlAccountID:  toPgUUID(account.GLAccountID),
 		CurrencyCode: account.CurrencyCode,
@@ -329,7 +329,7 @@ func (r *customerRepository) UpsertCustomerAccount(ctx context.Context, account 
 }
 
 func (r *customerRepository) GetCustomerAccounts(ctx context.Context, customerID uuid.UUID) ([]*domain.CustomerAccount, error) {
-	rows, err := r.queries.GetCustomerAccounts(ctx, toPgUUID(customerID))
+	rows, err := r.queries(ctx).GetCustomerAccounts(ctx, toPgUUID(customerID))
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +351,7 @@ func (r *customerRepository) GetCustomerAccounts(ctx context.Context, customerID
 }
 
 func (r *customerRepository) UpsertCreditLimit(ctx context.Context, limit *domain.CreditLimit) (*domain.CreditLimit, error) {
-	row, err := r.queries.UpsertCreditLimit(ctx, sqlc.UpsertCreditLimitParams{
+	row, err := r.queries(ctx).UpsertCreditLimit(ctx, sqlc.UpsertCreditLimitParams{
 		CustomerID:     toPgUUID(limit.CustomerID),
 		CreditLimit:    toPgNumeric(limit.CreditLimit),
 		CurrentBalance: toPgNumeric(limit.CurrentBalance),
@@ -369,7 +369,7 @@ func (r *customerRepository) UpsertCreditLimit(ctx context.Context, limit *domai
 }
 
 func (r *customerRepository) GetCreditLimit(ctx context.Context, customerID uuid.UUID) (*domain.CreditLimit, error) {
-	row, err := r.queries.GetCreditLimitByCustomerID(ctx, toPgUUID(customerID))
+	row, err := r.queries(ctx).GetCreditLimitByCustomerID(ctx, toPgUUID(customerID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -390,7 +390,7 @@ func (r *customerRepository) GetCreditLimit(ctx context.Context, customerID uuid
 }
 
 func (r *customerRepository) UpdateCustomerBalance(ctx context.Context, customerID uuid.UUID, delta decimal.Decimal) (*domain.CreditLimit, error) {
-	row, err := r.queries.UpdateCustomerBalance(ctx, sqlc.UpdateCustomerBalanceParams{
+	row, err := r.queries(ctx).UpdateCustomerBalance(ctx, sqlc.UpdateCustomerBalanceParams{
 		CustomerID:     toPgUUID(customerID),
 		CurrentBalance: toPgNumeric(delta),
 	})
@@ -411,7 +411,7 @@ func (r *customerRepository) UpdateCustomerBalance(ctx context.Context, customer
 }
 
 func (r *customerRepository) SetCreditHold(ctx context.Context, customerID uuid.UUID, isHold bool, reason *string) error {
-	_, err := r.queries.SetCreditHold(ctx, sqlc.SetCreditHoldParams{
+	_, err := r.queries(ctx).SetCreditHold(ctx, sqlc.SetCreditHoldParams{
 		CustomerID:   toPgUUID(customerID),
 		IsCreditHold: isHold,
 		HoldReason:   toPgTextPtr(reason),

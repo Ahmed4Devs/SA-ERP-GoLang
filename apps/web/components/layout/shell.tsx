@@ -38,10 +38,12 @@ import {
   FolderArchive,
   ChevronRight,
   Sparkles,
+  LogOut,
 } from "lucide-react";
 
 import arDict from "@/messages/ar.json";
 import enDict from "@/messages/en.json";
+import { useAuth } from "@/lib/auth-context";
 
 type Locale = "ar" | "en";
 
@@ -105,12 +107,40 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const { theme, setTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const { user, assignments, legalEntityId, loading, authError, scopeError, refresh, selectLegalEntity, logout } = useAuth();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   const pathname = usePathname();
+
+  if (pathname === "/login") {
+    return <>{children}</>;
+  }
+
+  if (loading) {
+    return <div className="min-h-screen grid place-items-center text-sm text-muted-foreground">جاري التحقق من الجلسة…</div>;
+  }
+
+  if (authError && !user) {
+    return (
+      <div className="min-h-screen grid place-items-center p-6" dir={dir}>
+        <div role="alert" className="max-w-lg rounded-xl border border-destructive/40 bg-destructive/10 p-5 text-sm text-destructive">
+          <p className="font-semibold">{isAr ? "تعذر التحقق من الجلسة" : "Unable to verify your session"}</p>
+          <p className="mt-2">{authError}</p>
+          <button type="button" onClick={() => void refresh()} className="mt-4 rounded-lg bg-primary px-4 py-2 text-primary-foreground">
+            {isAr ? "إعادة المحاولة" : "Try again"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
+  const entityOptions = assignments.filter((assignment) => assignment.legal_entity_id);
+  const activeEntity = entityOptions.find((assignment) => assignment.legal_entity_id === legalEntityId);
 
   const navItems = [
     { key: "dashboard", href: "/", icon: LayoutDashboard, label: t.nav.dashboard, active: pathname === "/" },
@@ -178,9 +208,22 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className="hidden lg:flex items-center gap-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground border">
               <Building2 className="h-3.5 w-3.5 text-primary" />
-              <span>{t.topbar.legal_entity}</span>
-              <span className="text-muted-foreground">|</span>
-              <span>{t.topbar.branch}</span>
+              {entityOptions.length > 0 ? (
+                <select
+                  aria-label={t.topbar.legal_entity}
+                  value={legalEntityId ?? ""}
+                  onChange={(event) => selectLegalEntity(event.target.value)}
+                  className="bg-transparent outline-none max-w-64"
+                >
+                  {entityOptions.map((assignment) => (
+                    <option key={assignment.legal_entity_id} value={assignment.legal_entity_id}>
+                      {(isAr ? assignment.legal_entity_name_ar : assignment.legal_entity_name_en) || assignment.legal_entity_id}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span>{activeEntity?.legal_entity_name_ar ?? t.topbar.legal_entity}</span>
+              )}
             </div>
           </div>
 
@@ -239,12 +282,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
             {/* User Profile */}
             <div className="flex items-center gap-2 ps-2 border-s">
               <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs border border-primary/20">
-                SA
+                {user.display_name.slice(0, 2).toUpperCase()}
               </div>
               <div className="hidden xl:block text-start">
-                <p className="text-xs font-semibold leading-none">{t.topbar.user_role}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">admin@erp.local</p>
+                <p className="text-xs font-semibold leading-none">{user.display_name}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{user.email || user.username}</p>
               </div>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="p-2 rounded-lg hover:bg-muted"
+                aria-label={isAr ? "تسجيل الخروج" : "Sign out"}
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>
@@ -291,8 +342,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
             {/* Footer / System Info */}
             <div className="pt-4 border-t px-3 text-[11px] text-muted-foreground">
-              <p className="font-semibold text-foreground">ERP Platform v0.1.0</p>
-              <p className="mt-0.5">ZATCA Phase 2 & GOSI Ready</p>
+              <p className="font-semibold text-foreground">ERP Platform v1.0.0</p>
+              <p className="mt-0.5">Saudi ERP Core</p>
             </div>
           </div>
         </aside>
@@ -308,6 +359,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
         {/* Content Workspace */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto space-y-4">
+            {scopeError && (
+              <div role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
+                {isAr ? "تم تسجيل الدخول، لكن تعذر تحميل نطاقات الوصول: " : "Signed in, but access scopes could not be loaded: "}
+                {scopeError}
+              </div>
+            )}
             {/* Breadcrumb strip */}
             {pathname !== "/" && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground pb-2">

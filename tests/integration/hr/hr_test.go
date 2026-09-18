@@ -506,4 +506,3 @@ func TestHR_SeedDefaultHRData(t *testing.T) {
 		t.Fatalf("expected positive total count")
 	}
 }
-

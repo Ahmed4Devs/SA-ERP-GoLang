@@ -3,6 +3,7 @@ import { Inter, Cairo } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ShellProvider, Shell } from "@/components/layout/shell";
+import { AuthProvider } from "@/lib/auth-context";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -19,7 +20,7 @@ const cairo = Cairo({
 export const metadata: Metadata = {
   title: "Saudi ERP Platform | منصة تخطيط الموارد للمنشآت السعودية",
   description:
-    "Commercial Production-Grade ERP Platform for Saudi Arabia, fully compliant with ZATCA Phase 2 E-Invoicing and GOSI rules.",
+    "Enterprise ERP platform for Saudi organizations with configurable finance, operations, payroll, and electronic invoicing integrations.",
 };
 
 export default function RootLayout({
@@ -36,9 +37,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <ShellProvider>
-            <Shell>{children}</Shell>
-          </ShellProvider>
+          <AuthProvider>
+            <ShellProvider>
+              <Shell>{children}</Shell>
+            </ShellProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

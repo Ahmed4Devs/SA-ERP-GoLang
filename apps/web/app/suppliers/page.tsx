@@ -1,4 +1,5 @@
-import { SuppliersView } from "@/features/suppliers/suppliers-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function SuppliersPage() {
-  return <SuppliersView />;
+  return <ModuleAPIView titleAr="الموردون" titleEn="Suppliers" descriptionAr="الموردون وشروط الدفع الفعلية للكيان المختار." descriptionEn="Live suppliers and payment terms for the selected entity." resources={moduleResources.suppliers} />;
 }

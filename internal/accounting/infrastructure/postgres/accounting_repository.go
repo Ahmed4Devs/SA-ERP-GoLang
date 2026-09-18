@@ -38,7 +38,6 @@ func NewPostingRepository(pool *pgxpool.Pool) ports.PostingRepository {
 	}
 }
 
-
 // Chart of Accounts
 func (r *accountingRepository) ListChartOfAccounts(ctx context.Context, legalEntityID uuid.UUID) ([]domain.ChartOfAccounts, error) {
 	rows, err := r.queries.ListChartOfAccountsByLegalEntity(ctx, toPgUUID(legalEntityID))
@@ -884,4 +883,3 @@ func (r *accountingRepository) UpsertAccountBalance(ctx context.Context, balance
 		UpdatedAt:      row.UpdatedAt.Time,
 	}, nil
 }
-

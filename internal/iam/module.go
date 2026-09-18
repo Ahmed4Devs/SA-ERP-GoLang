@@ -15,6 +15,7 @@ import (
 
 type Module struct {
 	AuthService *services.AuthService
+	MFAService  *services.MFAService
 	Handler     *iamhttp.AuthHandler
 }
 
@@ -23,6 +24,7 @@ func NewModule(cfg *config.Config, db *database.DB, txManager transaction.Manage
 	passwordRepo := postgres.NewPasswordRepository(db)
 	sessionRepo := postgres.NewSessionRepository(db)
 	attemptRepo := postgres.NewLoginAttemptRepository(db)
+	mfaRepo := postgres.NewMFARepository(db)
 
 	hasher := crypto.NewArgon2idHasher()
 	tokenGen := crypto.NewSessionTokenGenerator()
@@ -36,12 +38,19 @@ func NewModule(cfg *config.Config, db *database.DB, txManager transaction.Manage
 		tokenGen,
 		txManager,
 	)
+	var secretBox *crypto.SecretBox
+	if cfg.Security.MFAKey != "" {
+		secretBox, _ = crypto.NewSecretBox(cfg.Security.MFAKey)
+	}
+	mfaService := services.NewMFAService(mfaRepo, tokenGen, secretBox, txManager, cfg.AppName)
+	authService.SetMFAService(mfaService)
 
 	isProd := cfg.Environment == config.EnvProduction
-	handler := iamhttp.NewAuthHandler(authService, isProd)
+	handler := iamhttp.NewAuthHandler(authService, mfaService, isProd)
 
 	return &Module{
 		AuthService: authService,
+		MFAService:  mfaService,
 		Handler:     handler,
 	}
 }

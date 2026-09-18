@@ -16,6 +16,7 @@ import (
 
 	"erp/internal/accounting/domain"
 	"erp/internal/accounting/ports"
+	"erp/internal/platform/identifiers"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -134,7 +135,7 @@ func (e *postingEngine) Post(ctx context.Context, request domain.PostingRequest)
 	}
 
 	// 8. Generate entry number
-	entryNumber := fmt.Sprintf("PE-%d-%06d", request.AccountingDate.Year(), time.Now().UnixNano()%1000000)
+	entryNumber := identifiers.NewDocumentNumber("PE", request.AccountingDate)
 
 	// 9. Build and persist journal entry
 	sourceType := request.SourceType

@@ -1,4 +1,5 @@
-import { FixedAssetsView } from "@/features/fixed-assets/fixed-assets-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function FixedAssetsPage() {
-  return <FixedAssetsView />;
+  return <ModuleAPIView titleAr="الأصول الثابتة" titleEn="Fixed Assets" descriptionAr="الأصول والفئات والمواقع والإهلاك والمناقلات الفعلية." descriptionEn="Live assets, categories, locations, depreciation, and transfers." resources={moduleResources.fixedassets} />;
 }

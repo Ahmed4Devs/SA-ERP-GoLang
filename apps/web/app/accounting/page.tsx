@@ -1,4 +1,5 @@
-import { AccountingView } from "@/features/accounting/accounting-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function AccountingPage() {
-  return <AccountingView />;
+  return <ModuleAPIView titleAr="المحاسبة العامة" titleEn="General Ledger" descriptionAr="عرض الحسابات والقيود والفترات من دفتر الأستاذ الفعلي." descriptionEn="Live accounts, journals, entries, and fiscal periods from the ledger API." resources={moduleResources.accounting} />;
 }

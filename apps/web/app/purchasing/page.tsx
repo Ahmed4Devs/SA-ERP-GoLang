@@ -1,4 +1,5 @@
-import { PurchasingView } from "@/features/purchasing/purchasing-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function PurchasingPage() {
-  return <PurchasingView />;
+  return <ModuleAPIView titleAr="المشتريات" titleEn="Purchasing" descriptionAr="طلبات وعروض وأوامر واستلامات الشراء الفعلية." descriptionEn="Live purchase requests, RFQs, quotes, orders, and receipts." resources={moduleResources.purchasing} />;
 }

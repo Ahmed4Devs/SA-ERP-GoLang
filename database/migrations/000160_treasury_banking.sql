@@ -375,7 +375,7 @@ BEGIN
         'SAR', v_rajhi_gl_id, 100000.0000, 185200.0000, 185200.0000,
         0.0000, 'ACTIVE', true, 'مدير علاقات الشركات', '+966112003000'
     ) ON CONFLICT (legal_entity_id, account_code) DO UPDATE
-        SET name_ar = EXCLUDED.name_ar
+        SET bank_name_ar = EXCLUDED.bank_name_ar
     RETURNING id INTO v_rajhi_bank_id;
 
     INSERT INTO banking.bank_accounts (

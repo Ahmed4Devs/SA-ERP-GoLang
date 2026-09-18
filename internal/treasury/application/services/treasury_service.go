@@ -3,10 +3,10 @@ package services
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"erp/internal/platform/database"
+	"erp/internal/platform/identifiers"
 	"erp/internal/treasury/domain"
 	"erp/internal/treasury/ports"
 
@@ -78,7 +78,7 @@ func (s *treasuryService) CreateReceipt(ctx context.Context, r *domain.Receipt) 
 		return nil, domain.ErrInvalidAmount
 	}
 	if r.ReceiptNumber == "" {
-		r.ReceiptNumber = fmt.Sprintf("REC-%d-%s", time.Now().Year(), strings.ToUpper(uuid.New().String()[:8]))
+		r.ReceiptNumber = identifiers.NewDocumentNumber("REC", time.Now())
 	}
 	if r.ReceiptDate.IsZero() {
 		r.ReceiptDate = time.Now()
@@ -147,7 +147,7 @@ func (s *treasuryService) CreatePayment(ctx context.Context, p *domain.Payment) 
 		return nil, domain.ErrInvalidAmount
 	}
 	if p.PaymentNumber == "" {
-		p.PaymentNumber = fmt.Sprintf("PMT-%d-%s", time.Now().Year(), strings.ToUpper(uuid.New().String()[:8]))
+		p.PaymentNumber = identifiers.NewDocumentNumber("PMT", time.Now())
 	}
 	if p.PaymentDate.IsZero() {
 		p.PaymentDate = time.Now()
@@ -222,7 +222,7 @@ func (s *treasuryService) CreateTransfer(ctx context.Context, t *domain.Transfer
 		return nil, domain.ErrInvalidAmount
 	}
 	if t.TransferNumber == "" {
-		t.TransferNumber = fmt.Sprintf("TRF-%d-%s", time.Now().Year(), strings.ToUpper(uuid.New().String()[:8]))
+		t.TransferNumber = identifiers.NewDocumentNumber("TRF", time.Now())
 	}
 	if t.TransferDate.IsZero() {
 		t.TransferDate = time.Now()

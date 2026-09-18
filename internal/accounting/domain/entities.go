@@ -182,15 +182,15 @@ type JournalLine struct {
 }
 
 type TrialBalanceRow struct {
-	AccountID      uuid.UUID       `json:"account_id"`
-	AccountCode    string          `json:"account_code"`
-	AccountNameEn  string          `json:"account_name_en"`
-	AccountNameAr  string          `json:"account_name_ar"`
-	AccountType    AccountType     `json:"account_type"`
-	NormalBalance  NormalBalance   `json:"normal_balance"`
-	TotalDebit     decimal.Decimal `json:"total_debit"`
-	TotalCredit    decimal.Decimal `json:"total_credit"`
-	NetBalance     decimal.Decimal `json:"net_balance"`
+	AccountID     uuid.UUID       `json:"account_id"`
+	AccountCode   string          `json:"account_code"`
+	AccountNameEn string          `json:"account_name_en"`
+	AccountNameAr string          `json:"account_name_ar"`
+	AccountType   AccountType     `json:"account_type"`
+	NormalBalance NormalBalance   `json:"normal_balance"`
+	TotalDebit    decimal.Decimal `json:"total_debit"`
+	TotalCredit   decimal.Decimal `json:"total_credit"`
+	NetBalance    decimal.Decimal `json:"net_balance"`
 }
 
 type TrialBalanceReport struct {

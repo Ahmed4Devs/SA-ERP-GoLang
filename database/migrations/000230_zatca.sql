@@ -245,21 +245,6 @@ BEGIN
         true, CURRENT_DATE, CURRENT_TIMESTAMP
     );
 
-    -- 4. Create Mock Production CSID for Seed Testing
-    INSERT INTO zatca.csids (
-        id, egs_unit_id, csid_type, binary_security_token, secret,
-        private_key_pem, public_key_pem, certificate_pem,
-        expires_at, status, created_at
-    ) VALUES (
-        uuidv7(), v_egs_id, 'PRODUCTION',
-        'MIIC/DCCAeSgAwIBAgITbwAAAAP0/r3p5Q7TCAAAAAAA8DANBgkqhkiG9w0BAQsFADARMQ8wDQYDVQQDEwZaQVRDQTIwHhcNMjYwMTAxMDAwMDAwWhcNMjgwMTAxMDAwMDAwWjARMQ8wDQYDVQQDEwZaQVRDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKxQ==',
-        'mock-zatca-api-secret-2026',
-        '-----BEGIN EC PRIVATE KEY-----\nMHQCAQEEIBmJ3w0F8v1qg3k1...==\n-----END EC PRIVATE KEY-----',
-        '-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...\n-----END PUBLIC KEY-----',
-        '-----BEGIN CERTIFICATE-----\nMIIC/DCCAeSgAwIBAgITbwAAAAP0/r3p5Q7TCAAAAAAA8DANBgkqhkiG9w0BAQsFADARMQ8wDQYDVQQDEwZaQVRDQTIwHhcNMjYwMTAxMDAwMDAwWhcNMjgwMTAxMDAwMDAwWjARMQ8wDQYDVQQDEwZaQVRDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKxQ==\n-----END CERTIFICATE-----',
-        CURRENT_TIMESTAMP + INTERVAL '2 years', 'ACTIVE', CURRENT_TIMESTAMP
-    );
-
 END;
 $$;
 -- +goose StatementEnd

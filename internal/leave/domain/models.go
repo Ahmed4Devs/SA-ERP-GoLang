@@ -9,13 +9,13 @@ import (
 )
 
 var (
-	ErrLeaveTypeNotFound      = errors.New("leave type not found")
-	ErrPolicyNotFound         = errors.New("leave policy not found")
-	ErrInsufficientBalance    = errors.New("insufficient leave balance")
-	ErrLeaveRequestNotFound   = errors.New("leave request not found")
-	ErrProbationRestricted    = errors.New("employee is still in probation period; leave request not permitted by policy")
-	ErrInvalidLeaveDates      = errors.New("end date must be after or equal to start date")
-	ErrAlreadyProcessed       = errors.New("leave request has already been processed")
+	ErrLeaveTypeNotFound    = errors.New("leave type not found")
+	ErrPolicyNotFound       = errors.New("leave policy not found")
+	ErrInsufficientBalance  = errors.New("insufficient leave balance")
+	ErrLeaveRequestNotFound = errors.New("leave request not found")
+	ErrProbationRestricted  = errors.New("employee is still in probation period; leave request not permitted by policy")
+	ErrInvalidLeaveDates    = errors.New("end date must be after or equal to start date")
+	ErrAlreadyProcessed     = errors.New("leave request has already been processed")
 )
 
 type LeaveStatusCode string
@@ -70,7 +70,7 @@ type LeavePolicy struct {
 	LeaveTypeNameAr        *string          `json:"leave_type_name_ar,omitempty"`
 	AccrualFrequency       AccrualFrequency `json:"accrual_frequency"`
 	AccrualRatePerPeriod   decimal.Decimal  `json:"accrual_rate_per_period"`
-	MaxCarryoverDays      decimal.Decimal  `json:"max_carryover_days"`
+	MaxCarryoverDays       decimal.Decimal  `json:"max_carryover_days"`
 	ProbationRestricted    bool             `json:"probation_restricted"`
 	EncashmentAllowed      bool             `json:"encashment_allowed"`
 	MinServiceDaysRequired int32            `json:"min_service_days_required"`

@@ -22,7 +22,7 @@ func main() {
 	case "version":
 		cfg, err := config.Load()
 		if err != nil {
-			fmt.Printf("Saudi ERP CLI v0.1.0\n")
+			fmt.Printf("Saudi ERP CLI v1.0.0\n")
 			return
 		}
 		fmt.Printf("Saudi ERP Platform v%s (%s)\n", cfg.AppVersion, cfg.Environment)

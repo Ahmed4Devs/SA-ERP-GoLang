@@ -7,6 +7,7 @@ import (
 
 	"erp/internal/accounting/domain"
 	"erp/internal/accounting/ports"
+	"erp/internal/platform/identifiers"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -93,7 +94,7 @@ func (s *ledgerService) CreateJournalEntry(ctx context.Context, entry domain.Jou
 
 	// 5. Default fields
 	if entry.EntryNumber == "" {
-		entry.EntryNumber = fmt.Sprintf("JE-%d-%06d", entry.AccountingDate.Year(), time.Now().UnixNano()%1000000)
+		entry.EntryNumber = identifiers.NewDocumentNumber("JE", entry.AccountingDate)
 	}
 	if entry.Status == "" {
 		entry.Status = domain.JournalEntryStatusDraft

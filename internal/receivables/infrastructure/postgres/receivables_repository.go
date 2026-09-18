@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"erp/internal/platform/database"
 	"erp/internal/platform/database/sqlc"
 	"erp/internal/receivables/domain"
 	"erp/internal/receivables/ports"
@@ -11,24 +12,23 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 )
 
 type receivablesRepository struct {
-	pool    *pgxpool.Pool
-	queries *sqlc.Queries
+	db *database.DB
 }
 
-func NewReceivablesRepository(pool *pgxpool.Pool) ports.ReceivablesRepository {
-	return &receivablesRepository{
-		pool:    pool,
-		queries: sqlc.New(pool),
-	}
+func NewReceivablesRepository(db *database.DB) ports.ReceivablesRepository {
+	return &receivablesRepository{db: db}
+}
+
+func (r *receivablesRepository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 func (r *receivablesRepository) CreateReceipt(ctx context.Context, receipt *domain.Receipt) (*domain.Receipt, error) {
-	row, err := r.queries.CreateReceipt(ctx, sqlc.CreateReceiptParams{
+	row, err := r.queries(ctx).CreateReceipt(ctx, sqlc.CreateReceiptParams{
 		LegalEntityID:     toPgUUID(receipt.LegalEntityID),
 		ReceiptNumber:     receipt.ReceiptNumber,
 		CustomerID:        toPgUUID(receipt.CustomerID),
@@ -54,7 +54,7 @@ func (r *receivablesRepository) CreateReceipt(ctx context.Context, receipt *doma
 }
 
 func (r *receivablesRepository) GetReceiptByID(ctx context.Context, id uuid.UUID) (*domain.Receipt, error) {
-	row, err := r.queries.GetReceiptByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetReceiptByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrReceiptNotFound
@@ -93,7 +93,7 @@ func (r *receivablesRepository) ListReceipts(ctx context.Context, filter ports.R
 		custID = toPgUUID(*filter.CustomerID)
 	}
 
-	total, err := r.queries.CountReceipts(ctx, sqlc.CountReceiptsParams{
+	total, err := r.queries(ctx).CountReceipts(ctx, sqlc.CountReceiptsParams{
 		LegalEntityID: toPgUUID(filter.LegalEntityID),
 		Column2:       custID,
 		Column3:       filter.Status,
@@ -104,7 +104,7 @@ func (r *receivablesRepository) ListReceipts(ctx context.Context, filter ports.R
 		return nil, 0, err
 	}
 
-	rows, err := r.queries.ListReceipts(ctx, sqlc.ListReceiptsParams{
+	rows, err := r.queries(ctx).ListReceipts(ctx, sqlc.ListReceiptsParams{
 		LegalEntityID: toPgUUID(filter.LegalEntityID),
 		Column2:       custID,
 		Column3:       filter.Status,
@@ -148,7 +148,7 @@ func (r *receivablesRepository) ListReceipts(ctx context.Context, filter ports.R
 }
 
 func (r *receivablesRepository) UpdateReceiptStatus(ctx context.Context, id uuid.UUID, status domain.ReceiptStatus) error {
-	_, err := r.queries.UpdateReceiptStatus(ctx, sqlc.UpdateReceiptStatusParams{
+	_, err := r.queries(ctx).UpdateReceiptStatus(ctx, sqlc.UpdateReceiptStatusParams{
 		ID:     toPgUUID(id),
 		Status: string(status),
 	})
@@ -156,7 +156,7 @@ func (r *receivablesRepository) UpdateReceiptStatus(ctx context.Context, id uuid
 }
 
 func (r *receivablesRepository) UpdateReceiptAllocationAmounts(ctx context.Context, id uuid.UUID, allocated, unallocated decimal.Decimal) error {
-	_, err := r.queries.UpdateReceiptAllocationAmounts(ctx, sqlc.UpdateReceiptAllocationAmountsParams{
+	_, err := r.queries(ctx).UpdateReceiptAllocationAmounts(ctx, sqlc.UpdateReceiptAllocationAmountsParams{
 		ID:                toPgUUID(id),
 		AllocatedAmount:   toPgNumeric(allocated),
 		UnallocatedAmount: toPgNumeric(unallocated),
@@ -165,7 +165,7 @@ func (r *receivablesRepository) UpdateReceiptAllocationAmounts(ctx context.Conte
 }
 
 func (r *receivablesRepository) CreateReceiptAllocation(ctx context.Context, allocation *domain.ReceiptAllocation) (*domain.ReceiptAllocation, error) {
-	row, err := r.queries.CreateReceiptAllocation(ctx, sqlc.CreateReceiptAllocationParams{
+	row, err := r.queries(ctx).CreateReceiptAllocation(ctx, sqlc.CreateReceiptAllocationParams{
 		ReceiptID:       toPgUUID(allocation.ReceiptID),
 		OpenItemID:      toPgUUID(allocation.OpenItemID),
 		AllocatedAmount: toPgNumeric(allocation.AllocatedAmount),
@@ -180,7 +180,7 @@ func (r *receivablesRepository) CreateReceiptAllocation(ctx context.Context, all
 }
 
 func (r *receivablesRepository) ListReceiptAllocations(ctx context.Context, receiptID uuid.UUID) ([]*domain.ReceiptAllocation, error) {
-	rows, err := r.queries.ListReceiptAllocations(ctx, toPgUUID(receiptID))
+	rows, err := r.queries(ctx).ListReceiptAllocations(ctx, toPgUUID(receiptID))
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func (r *receivablesRepository) ListReceiptAllocations(ctx context.Context, rece
 }
 
 func (r *receivablesRepository) CreateOpenItem(ctx context.Context, item *domain.OpenItem) (*domain.OpenItem, error) {
-	row, err := r.queries.CreateOpenItem(ctx, sqlc.CreateOpenItemParams{
+	row, err := r.queries(ctx).CreateOpenItem(ctx, sqlc.CreateOpenItemParams{
 		LegalEntityID:   toPgUUID(item.LegalEntityID),
 		CustomerID:      toPgUUID(item.CustomerID),
 		DocumentType:    string(item.DocumentType),
@@ -228,7 +228,7 @@ func (r *receivablesRepository) CreateOpenItem(ctx context.Context, item *domain
 }
 
 func (r *receivablesRepository) GetOpenItemByID(ctx context.Context, id uuid.UUID) (*domain.OpenItem, error) {
-	row, err := r.queries.GetOpenItemByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetOpenItemByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrOpenItemNotFound
@@ -255,7 +255,7 @@ func (r *receivablesRepository) GetOpenItemByID(ctx context.Context, id uuid.UUI
 }
 
 func (r *receivablesRepository) LockOpenItem(ctx context.Context, id uuid.UUID) (*domain.OpenItem, error) {
-	row, err := r.queries.LockOpenItem(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).LockOpenItem(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrOpenItemNotFound
@@ -282,7 +282,7 @@ func (r *receivablesRepository) LockOpenItem(ctx context.Context, id uuid.UUID) 
 }
 
 func (r *receivablesRepository) ListOpenItemsByCustomer(ctx context.Context, customerID uuid.UUID, openOnly bool) ([]*domain.OpenItem, error) {
-	rows, err := r.queries.ListOpenItemsByCustomer(ctx, sqlc.ListOpenItemsByCustomerParams{
+	rows, err := r.queries(ctx).ListOpenItemsByCustomer(ctx, sqlc.ListOpenItemsByCustomerParams{
 		CustomerID: toPgUUID(customerID),
 		Column2:    openOnly,
 	})
@@ -316,7 +316,7 @@ func (r *receivablesRepository) ListOpenItemsByCustomer(ctx context.Context, cus
 }
 
 func (r *receivablesRepository) ListOpenItemsByLegalEntity(ctx context.Context, legalEntityID uuid.UUID, openOnly bool, limit, offset int32) ([]*domain.OpenItem, error) {
-	rows, err := r.queries.ListOpenItemsByLegalEntity(ctx, sqlc.ListOpenItemsByLegalEntityParams{
+	rows, err := r.queries(ctx).ListOpenItemsByLegalEntity(ctx, sqlc.ListOpenItemsByLegalEntityParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Column2:       openOnly,
 		Limit:         limit,
@@ -352,7 +352,7 @@ func (r *receivablesRepository) ListOpenItemsByLegalEntity(ctx context.Context, 
 }
 
 func (r *receivablesRepository) UpdateOpenItemAllocation(ctx context.Context, id uuid.UUID, allocated, remaining decimal.Decimal, status domain.OpenItemStatus) (*domain.OpenItem, error) {
-	row, err := r.queries.UpdateOpenItemAllocation(ctx, sqlc.UpdateOpenItemAllocationParams{
+	row, err := r.queries(ctx).UpdateOpenItemAllocation(ctx, sqlc.UpdateOpenItemAllocationParams{
 		ID:              toPgUUID(id),
 		AllocatedAmount: toPgNumeric(allocated),
 		RemainingAmount: toPgNumeric(remaining),
@@ -381,7 +381,7 @@ func (r *receivablesRepository) UpdateOpenItemAllocation(ctx context.Context, id
 }
 
 func (r *receivablesRepository) GetCustomerAgingSummary(ctx context.Context, customerID uuid.UUID) (*domain.CustomerAgingSummary, error) {
-	row, err := r.queries.GetCustomerAgingSummary(ctx, toPgUUID(customerID))
+	row, err := r.queries(ctx).GetCustomerAgingSummary(ctx, toPgUUID(customerID))
 	if err != nil {
 		return nil, err
 	}

@@ -10,13 +10,13 @@ import (
 )
 
 var (
-	ErrJobNotFound            = errors.New("job not found")
-	ErrPositionNotFound       = errors.New("position not found")
-	ErrEmployeeNotFound       = errors.New("employee not found")
-	ErrContractNotFound       = errors.New("contract not found")
-	ErrInvalidSalary          = errors.New("basic salary must be greater than or equal to zero")
-	ErrInvalidProbationPeriod = errors.New("probation period cannot exceed 180 days")
-	ErrInvalidStatusTransition= errors.New("invalid employment or contract status transition")
+	ErrJobNotFound             = errors.New("job not found")
+	ErrPositionNotFound        = errors.New("position not found")
+	ErrEmployeeNotFound        = errors.New("employee not found")
+	ErrContractNotFound        = errors.New("contract not found")
+	ErrInvalidSalary           = errors.New("basic salary must be greater than or equal to zero")
+	ErrInvalidProbationPeriod  = errors.New("probation period cannot exceed 180 days")
+	ErrInvalidStatusTransition = errors.New("invalid employment or contract status transition")
 )
 
 type JobFamily string
@@ -160,17 +160,17 @@ type Employee struct {
 }
 
 type EmployeeIdentifier struct {
-	ID                     uuid.UUID      `json:"id"`
-	EmployeeID             uuid.UUID      `json:"employee_id"`
-	IdentifierType         IdentifierType `json:"identifier_type"`
-	IdentifierValue        string         `json:"identifier_value"`
-	IdentifierValueMasked  string         `json:"identifier_value_masked"`
-	IssueDate              *time.Time     `json:"issue_date,omitempty"`
-	ExpiryDate             *time.Time     `json:"expiry_date,omitempty"`
-	IssuePlace             *string        `json:"issue_place,omitempty"`
-	IsPrimary              bool           `json:"is_primary"`
-	IsVerified             bool           `json:"is_verified"`
-	CreatedAt              time.Time      `json:"created_at"`
+	ID                    uuid.UUID      `json:"id"`
+	EmployeeID            uuid.UUID      `json:"employee_id"`
+	IdentifierType        IdentifierType `json:"identifier_type"`
+	IdentifierValue       string         `json:"identifier_value"`
+	IdentifierValueMasked string         `json:"identifier_value_masked"`
+	IssueDate             *time.Time     `json:"issue_date,omitempty"`
+	ExpiryDate            *time.Time     `json:"expiry_date,omitempty"`
+	IssuePlace            *string        `json:"issue_place,omitempty"`
+	IsPrimary             bool           `json:"is_primary"`
+	IsVerified            bool           `json:"is_verified"`
+	CreatedAt             time.Time      `json:"created_at"`
 }
 
 type EmployeeContact struct {
@@ -241,11 +241,11 @@ type EmployeeBankAccount struct {
 }
 
 type SaudizationMetric struct {
-	SaudiCount             int64           `json:"saudi_count"`
-	ExpatCount             int64           `json:"expat_count"`
-	TotalCount             int64           `json:"total_count"`
+	SaudiCount              int64           `json:"saudi_count"`
+	ExpatCount              int64           `json:"expat_count"`
+	TotalCount              int64           `json:"total_count"`
 	SaudizationRatioPercent decimal.Decimal `json:"saudization_ratio_percent"`
-	NitaqatTier            string          `json:"nitaqat_tier"` // PLATINUM, HIGH_GREEN, MID_GREEN, LOW_GREEN, RED
+	NitaqatTier             string          `json:"nitaqat_tier"` // PLATINUM, HIGH_GREEN, MID_GREEN, LOW_GREEN, RED
 }
 
 // MaskIdentifier returns masked identification strings (e.g. 1088****55)

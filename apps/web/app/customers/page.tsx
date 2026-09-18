@@ -1,4 +1,5 @@
-import { CustomersView } from "@/features/customers/customers-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function CustomersPage() {
-  return <CustomersView />;
+  return <ModuleAPIView titleAr="العملاء والمدينون" titleEn="Customers & Receivables" descriptionAr="العملاء وشروط الدفع والمقبوضات الفعلية." descriptionEn="Live customers, payment terms, and receipts." resources={moduleResources.customers} />;
 }

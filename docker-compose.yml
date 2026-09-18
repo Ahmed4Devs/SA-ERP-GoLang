@@ -1,7 +1,6 @@
 services:
   postgres:
-    image: postgres:18-alpine
-    container_name: erp-postgres
+    image: postgres:18.2-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-erp_dev}
@@ -17,35 +16,55 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile.migrate
+    environment:
+      GOOSE_DRIVER: postgres
+      GOOSE_DBSTRING: postgres://${POSTGRES_USER:-erp_user}:${POSTGRES_PASSWORD:-erp_secret_password}@postgres:5432/${POSTGRES_DB:-erp_dev}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: .
       dockerfile: deployments/docker/Dockerfile.api
-    container_name: erp-api
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       APP_ENV: development
       HTTP_PORT: 8080
       DATABASE_URL: postgres://${POSTGRES_USER:-erp_user}:${POSTGRES_PASSWORD:-erp_secret_password}@postgres:5432/${POSTGRES_DB:-erp_dev}?sslmode=disable
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+      BOOTSTRAP_ADMIN_ENABLED: "true"
+      BOOTSTRAP_DEMO_DATA_ENABLED: "true"
+      MAIL_DRIVER: mock
+      ZATCA_ENVIRONMENT: simulation
+      STORAGE_LOCAL_DIR: /app/data/storage
     ports:
-      - "8080:8080"
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - document_data:/app/data/storage
 
   web:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
-    container_name: erp-web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
     restart: unless-stopped
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8080
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     depends_on:
       - api
 
 volumes:
   postgres_data:
+    driver: local
+  document_data:
     driver: local

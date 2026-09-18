@@ -1,0 +1,158 @@
+import type { ResourceDefinition } from "@/components/modules/module-api-view";
+
+export const moduleResources: Record<string, ResourceDefinition[]> = {
+  accounting: [
+    { key: "accounts", labelAr: "الحسابات", labelEn: "Accounts", path: "/api/v1/accounting/accounts" },
+    { key: "entries", labelAr: "قيود اليومية", labelEn: "Journal entries", path: "/api/v1/accounting/journal-entries" },
+    { key: "years", labelAr: "السنوات المالية", labelEn: "Fiscal years", path: "/api/v1/accounting/fiscal-years" },
+    { key: "journals", labelAr: "دفاتر اليومية", labelEn: "Journals", path: "/api/v1/accounting/journals" },
+  ],
+  attendance: [
+    { key: "shifts", labelAr: "الورديات", labelEn: "Shifts", path: "/api/v1/attendance/shifts" },
+    { key: "daily", labelAr: "السجل اليومي", labelEn: "Daily records", path: "/api/v1/attendance/daily" },
+    { key: "overtime", labelAr: "العمل الإضافي", labelEn: "Overtime", path: "/api/v1/attendance/overtime" },
+  ],
+  audit: [
+    { key: "events", labelAr: "أحداث التدقيق", labelEn: "Audit events", path: "/api/v1/audit/events" },
+    { key: "security", labelAr: "أحداث الأمن", labelEn: "Security events", path: "/api/v1/audit/security-events" },
+    { key: "verify", labelAr: "سلامة السلسلة", labelEn: "Chain integrity", path: "/api/v1/audit/verify" },
+  ],
+  authorization: [
+    { key: "roles", labelAr: "الأدوار", labelEn: "Roles", path: "/api/v1/authz/roles", tenant: false },
+    { key: "permissions", labelAr: "الصلاحيات", labelEn: "Permissions", path: "/api/v1/authz/permissions", tenant: false },
+    { key: "assignments", labelAr: "تكليفاتي", labelEn: "My assignments", path: "/api/v1/authz/assignments/me", tenant: false },
+  ],
+  banking: [
+    { key: "accounts", labelAr: "الحسابات البنكية", labelEn: "Bank accounts", path: "/api/v1/banking/bank-accounts" },
+    { key: "statements", labelAr: "كشوف الحساب", labelEn: "Statements", path: "/api/v1/banking/statements" },
+    { key: "reconciliations", labelAr: "المطابقات", labelEn: "Reconciliations", path: "/api/v1/banking/reconciliations" },
+  ],
+  budgeting: [
+    { key: "budgets", labelAr: "الميزانيات", labelEn: "Budgets", path: "/api/v1/budgeting/budgets" },
+    { key: "transfers", labelAr: "المناقلات", labelEn: "Transfers", path: "/api/v1/budgeting/transfers" },
+    { key: "summary", labelAr: "الملخص", labelEn: "Summary", path: "/api/v1/budgeting/summary" },
+  ],
+  customers: [
+    { key: "customers", labelAr: "العملاء", labelEn: "Customers", path: "/api/v1/receivables/customers" },
+    { key: "terms", labelAr: "شروط الدفع", labelEn: "Payment terms", path: "/api/v1/receivables/payment-terms" },
+    { key: "receipts", labelAr: "المقبوضات", labelEn: "Receipts", path: "/api/v1/receivables/receipts" },
+  ],
+  documents: [
+    { key: "documents", labelAr: "المستندات", labelEn: "Documents", path: "/api/v1/documents/" },
+    { key: "summary", labelAr: "الملخص", labelEn: "Summary", path: "/api/v1/documents/summary" },
+  ],
+  fixedassets: [
+    { key: "assets", labelAr: "الأصول", labelEn: "Assets", path: "/api/v1/fixedassets/assets" },
+    { key: "categories", labelAr: "الفئات", labelEn: "Categories", path: "/api/v1/fixedassets/categories" },
+    { key: "locations", labelAr: "المواقع", labelEn: "Locations", path: "/api/v1/fixedassets/locations" },
+    { key: "runs", labelAr: "الإهلاك", labelEn: "Depreciation", path: "/api/v1/fixedassets/depreciation/runs" },
+    { key: "transfers", labelAr: "المناقلات", labelEn: "Transfers", path: "/api/v1/fixedassets/transfers" },
+  ],
+  gosi: [
+    { key: "rules", labelAr: "القواعد", labelEn: "Rules", path: "/api/v1/gosi/rules" },
+    { key: "profiles", labelAr: "المشتركون", labelEn: "Profiles", path: "/api/v1/gosi/profiles" },
+    { key: "calculations", labelAr: "الاحتساب", labelEn: "Calculations", path: "/api/v1/gosi/calculations" },
+    { key: "dashboard", labelAr: "الملخص", labelEn: "Summary", path: "/api/v1/gosi/dashboard" },
+  ],
+  hr: [
+    { key: "employees", labelAr: "الموظفون", labelEn: "Employees", path: "/api/v1/hr/employees" },
+    { key: "jobs", labelAr: "الوظائف", labelEn: "Jobs", path: "/api/v1/hr/jobs" },
+    { key: "positions", labelAr: "المناصب", labelEn: "Positions", path: "/api/v1/hr/positions" },
+    { key: "contracts", labelAr: "العقود", labelEn: "Contracts", path: "/api/v1/hr/contracts" },
+    { key: "saudization", labelAr: "التوطين", labelEn: "Saudization", path: "/api/v1/hr/saudization" },
+  ],
+  inventory: [
+    { key: "balances", labelAr: "الأرصدة", labelEn: "Balances", path: "/api/v1/inventory/balances" },
+    { key: "warehouses", labelAr: "المستودعات", labelEn: "Warehouses", path: "/api/v1/inventory/warehouses" },
+    { key: "movements", labelAr: "الحركات", labelEn: "Movements", path: "/api/v1/inventory/movements" },
+    { key: "transfers", labelAr: "النقل", labelEn: "Transfers", path: "/api/v1/inventory/transfers" },
+    { key: "adjustments", labelAr: "التسويات", labelEn: "Adjustments", path: "/api/v1/inventory/adjustments" },
+    { key: "counts", labelAr: "الجرد", labelEn: "Stock counts", path: "/api/v1/inventory/counts" },
+  ],
+  leave: [
+    { key: "types", labelAr: "أنواع الإجازات", labelEn: "Leave types", path: "/api/v1/leave/types" },
+    { key: "policies", labelAr: "السياسات", labelEn: "Policies", path: "/api/v1/leave/policies" },
+    { key: "requests", labelAr: "الطلبات", labelEn: "Requests", path: "/api/v1/leave/requests" },
+  ],
+  notifications: [
+    { key: "notifications", labelAr: "الإشعارات", labelEn: "Notifications", path: "/api/v1/notifications/" },
+    { key: "summary", labelAr: "الملخص", labelEn: "Summary", path: "/api/v1/notifications/summary" },
+    { key: "unread", labelAr: "غير المقروء", labelEn: "Unread", path: "/api/v1/notifications/unread-count" },
+  ],
+  organization: [
+    { key: "organizations", labelAr: "المنظمات", labelEn: "Organizations", path: "/api/v1/org/organizations", tenant: false },
+    { key: "assignments", labelAr: "نطاقات المستخدم", labelEn: "User scopes", path: "/api/v1/authz/assignments/me", tenant: false },
+  ],
+  payables: [
+    { key: "invoices", labelAr: "فواتير الموردين", labelEn: "Supplier invoices", path: "/api/v1/payables/invoices" },
+    { key: "payments", labelAr: "المدفوعات", labelEn: "Payments", path: "/api/v1/payables/payments" },
+    { key: "credit-notes", labelAr: "إشعارات الخصم", labelEn: "Credit notes", path: "/api/v1/payables/credit-notes" },
+  ],
+  payroll: [
+    { key: "runs", labelAr: "مسيرات الرواتب", labelEn: "Payroll runs", path: "/api/v1/payroll/runs" },
+    { key: "periods", labelAr: "الفترات", labelEn: "Periods", path: "/api/v1/payroll/periods" },
+    { key: "components", labelAr: "المكونات", labelEn: "Components", path: "/api/v1/payroll/components" },
+    { key: "structures", labelAr: "الهياكل", labelEn: "Structures", path: "/api/v1/payroll/structures" },
+    { key: "payslips", labelAr: "قسائم الرواتب", labelEn: "Payslips", path: "/api/v1/payroll/payslips" },
+    { key: "loans", labelAr: "السلف", labelEn: "Loans", path: "/api/v1/payroll/loans" },
+  ],
+  products: [
+    { key: "items", labelAr: "الأصناف", labelEn: "Items", path: "/api/v1/products/items" },
+    { key: "categories", labelAr: "الفئات", labelEn: "Categories", path: "/api/v1/products/categories" },
+    { key: "uoms", labelAr: "وحدات القياس", labelEn: "Units", path: "/api/v1/products/uoms" },
+  ],
+  purchasing: [
+    { key: "requests", labelAr: "طلبات الشراء", labelEn: "Requests", path: "/api/v1/purchasing/requests" },
+    { key: "rfqs", labelAr: "طلبات العروض", labelEn: "RFQs", path: "/api/v1/purchasing/rfqs" },
+    { key: "quotes", labelAr: "عروض الموردين", labelEn: "Quotes", path: "/api/v1/purchasing/quotes" },
+    { key: "orders", labelAr: "أوامر الشراء", labelEn: "Orders", path: "/api/v1/purchasing/orders" },
+    { key: "receipts", labelAr: "الاستلام", labelEn: "Receipts", path: "/api/v1/purchasing/receipts" },
+  ],
+  reports: [
+    { key: "catalog", labelAr: "دليل التقارير", labelEn: "Report catalog", path: "/api/v1/reports/catalog" },
+    { key: "trial-balance", labelAr: "ميزان المراجعة", labelEn: "Trial balance", path: "/api/v1/reports/trial-balance" },
+    { key: "balance-sheet", labelAr: "المركز المالي", labelEn: "Balance sheet", path: "/api/v1/reports/balance-sheet" },
+    { key: "income", labelAr: "قائمة الدخل", labelEn: "Income statement", path: "/api/v1/reports/income-statement" },
+    { key: "cash-flow", labelAr: "التدفقات النقدية", labelEn: "Cash flow", path: "/api/v1/reports/cash-flow" },
+  ],
+  sales: [
+    { key: "invoices", labelAr: "الفواتير", labelEn: "Invoices", path: "/api/v1/sales/invoices" },
+    { key: "orders", labelAr: "أوامر البيع", labelEn: "Orders", path: "/api/v1/sales/orders" },
+    { key: "quotations", labelAr: "عروض الأسعار", labelEn: "Quotations", path: "/api/v1/sales/quotations" },
+    { key: "deliveries", labelAr: "التسليمات", labelEn: "Deliveries", path: "/api/v1/sales/deliveries" },
+    { key: "credit-notes", labelAr: "الإشعارات الدائنة", labelEn: "Credit notes", path: "/api/v1/sales/credit-notes" },
+  ],
+  settings: [
+    { key: "session", labelAr: "الجلسة", labelEn: "Session", path: "/api/v1/auth/me", tenant: false },
+    { key: "permissions", labelAr: "صلاحياتي", labelEn: "My permissions", path: "/api/v1/authz/permissions/me" },
+    { key: "assignments", labelAr: "الأدوار المسندة", labelEn: "Assignments", path: "/api/v1/authz/assignments/me", tenant: false },
+  ],
+  suppliers: [
+    { key: "suppliers", labelAr: "الموردون", labelEn: "Suppliers", path: "/api/v1/payables/suppliers" },
+    { key: "terms", labelAr: "شروط الدفع", labelEn: "Payment terms", path: "/api/v1/payables/payment-terms" },
+  ],
+  tax: [
+    { key: "categories", labelAr: "الفئات", labelEn: "Categories", path: "/api/v1/tax/categories" },
+    { key: "codes", labelAr: "أكواد الضريبة", labelEn: "Tax codes", path: "/api/v1/tax/codes" },
+    { key: "transactions", labelAr: "الحركات", labelEn: "Transactions", path: "/api/v1/tax/transactions" },
+    { key: "periods", labelAr: "الفترات", labelEn: "Periods", path: "/api/v1/tax/periods" },
+    { key: "returns", labelAr: "الإقرارات", labelEn: "Returns", path: "/api/v1/tax/returns" },
+  ],
+  treasury: [
+    { key: "cash", labelAr: "الحسابات النقدية", labelEn: "Cash accounts", path: "/api/v1/treasury/cash-accounts" },
+    { key: "receipts", labelAr: "سندات القبض", labelEn: "Receipts", path: "/api/v1/treasury/receipts" },
+    { key: "payments", labelAr: "سندات الصرف", labelEn: "Payments", path: "/api/v1/treasury/payments" },
+    { key: "transfers", labelAr: "التحويلات", labelEn: "Transfers", path: "/api/v1/treasury/transfers" },
+  ],
+  workflow: [
+    { key: "inbox", labelAr: "صندوق الموافقات", labelEn: "Approval inbox", path: "/api/v1/workflow/inbox" },
+    { key: "definitions", labelAr: "تعريفات المسارات", labelEn: "Definitions", path: "/api/v1/workflow/definitions" },
+    { key: "delegations", labelAr: "التفويضات", labelEn: "Delegations", path: "/api/v1/workflow/delegations" },
+  ],
+  zatca: [
+    { key: "documents", labelAr: "المستندات", labelEn: "Documents", path: "/api/v1/zatca/documents" },
+    { key: "submissions", labelAr: "عمليات الإرسال", labelEn: "Submissions", path: "/api/v1/zatca/submissions" },
+    { key: "egs", labelAr: "وحدات EGS", labelEn: "EGS units", path: "/api/v1/zatca/egs-units" },
+    { key: "summary", labelAr: "الملخص", labelEn: "Summary", path: "/api/v1/zatca/summary" },
+  ],
+};

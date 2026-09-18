@@ -159,21 +159,21 @@ type CashFlowItem struct {
 }
 
 type CashFlowSection struct {
-	SectionEn string         `json:"section_en"`
-	SectionAr string         `json:"section_ar"`
-	Items     []CashFlowItem `json:"items"`
+	SectionEn string          `json:"section_en"`
+	SectionAr string          `json:"section_ar"`
+	Items     []CashFlowItem  `json:"items"`
 	NetTotal  decimal.Decimal `json:"net_total"`
 }
 
 type CashFlowReport struct {
-	LegalEntityID        uuid.UUID         `json:"legal_entity_id"`
-	GeneratedAt          time.Time         `json:"generated_at"`
-	StartDate            time.Time         `json:"start_date"`
-	EndDate              time.Time         `json:"end_date"`
-	OperatingActivities  CashFlowSection   `json:"operating_activities"`
-	InvestingActivities  CashFlowSection   `json:"investing_activities"`
-	FinancingActivities  CashFlowSection   `json:"financing_activities"`
-	NetCashChange        decimal.Decimal   `json:"net_cash_change"`
+	LegalEntityID       uuid.UUID       `json:"legal_entity_id"`
+	GeneratedAt         time.Time       `json:"generated_at"`
+	StartDate           time.Time       `json:"start_date"`
+	EndDate             time.Time       `json:"end_date"`
+	OperatingActivities CashFlowSection `json:"operating_activities"`
+	InvestingActivities CashFlowSection `json:"investing_activities"`
+	FinancingActivities CashFlowSection `json:"financing_activities"`
+	NetCashChange       decimal.Decimal `json:"net_cash_change"`
 }
 
 // ============================================================================
@@ -227,19 +227,19 @@ type StatementLineItem struct {
 }
 
 type EntityStatementReport struct {
-	ReportType       string              `json:"report_type"` // 'CUSTOMER' or 'SUPPLIER'
-	LegalEntityID    uuid.UUID           `json:"legal_entity_id"`
-	EntityID         uuid.UUID           `json:"entity_id"`
-	EntityNumber     string              `json:"entity_number"`
-	EntityNameEn     string              `json:"entity_name_en"`
-	EntityNameAr     string              `json:"entity_name_ar"`
-	GeneratedAt      time.Time           `json:"generated_at"`
-	StartDate        *time.Time          `json:"start_date,omitempty"`
-	EndDate          *time.Time          `json:"end_date,omitempty"`
-	Lines            []StatementLineItem `json:"lines"`
-	TotalDebited     decimal.Decimal     `json:"total_debited"`
-	TotalCredited    decimal.Decimal     `json:"total_credited"`
-	EndingBalance    decimal.Decimal     `json:"ending_balance"`
+	ReportType    string              `json:"report_type"` // 'CUSTOMER' or 'SUPPLIER'
+	LegalEntityID uuid.UUID           `json:"legal_entity_id"`
+	EntityID      uuid.UUID           `json:"entity_id"`
+	EntityNumber  string              `json:"entity_number"`
+	EntityNameEn  string              `json:"entity_name_en"`
+	EntityNameAr  string              `json:"entity_name_ar"`
+	GeneratedAt   time.Time           `json:"generated_at"`
+	StartDate     *time.Time          `json:"start_date,omitempty"`
+	EndDate       *time.Time          `json:"end_date,omitempty"`
+	Lines         []StatementLineItem `json:"lines"`
+	TotalDebited  decimal.Decimal     `json:"total_debited"`
+	TotalCredited decimal.Decimal     `json:"total_credited"`
+	EndingBalance decimal.Decimal     `json:"ending_balance"`
 }
 
 // ============================================================================
@@ -319,15 +319,15 @@ type PurchasingOrderRow struct {
 }
 
 type PurchasingReport struct {
-	LegalEntityID uuid.UUID            `json:"legal_entity_id"`
-	GeneratedAt   time.Time            `json:"generated_at"`
-	StartDate     *time.Time           `json:"start_date,omitempty"`
-	EndDate       *time.Time           `json:"end_date,omitempty"`
-	Orders        []PurchasingOrderRow `json:"orders"`
-	TotalCount    int                  `json:"total_count"`
-	TotalSubtotal decimal.Decimal      `json:"total_subtotal"`
-	TotalTax      decimal.Decimal      `json:"total_tax"`
-	TotalPurchases decimal.Decimal     `json:"total_purchases"`
+	LegalEntityID  uuid.UUID            `json:"legal_entity_id"`
+	GeneratedAt    time.Time            `json:"generated_at"`
+	StartDate      *time.Time           `json:"start_date,omitempty"`
+	EndDate        *time.Time           `json:"end_date,omitempty"`
+	Orders         []PurchasingOrderRow `json:"orders"`
+	TotalCount     int                  `json:"total_count"`
+	TotalSubtotal  decimal.Decimal      `json:"total_subtotal"`
+	TotalTax       decimal.Decimal      `json:"total_tax"`
+	TotalPurchases decimal.Decimal      `json:"total_purchases"`
 }
 
 // ============================================================================
@@ -335,21 +335,21 @@ type PurchasingReport struct {
 // ============================================================================
 
 type VATReturnBox struct {
-	BoxNumber      int             `json:"box_number"`
-	DescriptionEn  string          `json:"description_en"`
-	DescriptionAr  string          `json:"description_ar"`
-	TaxableAmount  decimal.Decimal `json:"taxable_amount"`
-	AdjustmentAmt  decimal.Decimal `json:"adjustment_amt"`
-	VATAmount      decimal.Decimal `json:"vat_amount"`
+	BoxNumber     int             `json:"box_number"`
+	DescriptionEn string          `json:"description_en"`
+	DescriptionAr string          `json:"description_ar"`
+	TaxableAmount decimal.Decimal `json:"taxable_amount"`
+	AdjustmentAmt decimal.Decimal `json:"adjustment_amt"`
+	VATAmount     decimal.Decimal `json:"vat_amount"`
 }
 
 type VATReturnReport struct {
-	LegalEntityID         uuid.UUID      `json:"legal_entity_id"`
-	GeneratedAt           time.Time      `json:"generated_at"`
-	StartDate             *time.Time     `json:"start_date,omitempty"`
-	EndDate               *time.Time     `json:"end_date,omitempty"`
-	SalesBoxes            []VATReturnBox `json:"sales_boxes"`
-	PurchaseBoxes         []VATReturnBox `json:"purchase_boxes"`
+	LegalEntityID         uuid.UUID       `json:"legal_entity_id"`
+	GeneratedAt           time.Time       `json:"generated_at"`
+	StartDate             *time.Time      `json:"start_date,omitempty"`
+	EndDate               *time.Time      `json:"end_date,omitempty"`
+	SalesBoxes            []VATReturnBox  `json:"sales_boxes"`
+	PurchaseBoxes         []VATReturnBox  `json:"purchase_boxes"`
 	TotalOutputVAT        decimal.Decimal `json:"total_output_vat"`
 	TotalInputVAT         decimal.Decimal `json:"total_input_vat"`
 	NetVATDueOrRefundable decimal.Decimal `json:"net_vat_due_or_refundable"`

@@ -8,6 +8,7 @@ import (
 	"erp/internal/hr/domain"
 	"erp/internal/hr/ports"
 	"erp/internal/platform/database"
+	"erp/internal/platform/identifiers"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -96,7 +97,7 @@ func (s *hrService) OnboardEmployee(
 		return nil, fmt.Errorf("employee bilingual names are required")
 	}
 	if emp.EmployeeNumber == "" {
-		emp.EmployeeNumber = fmt.Sprintf("EMP-%d-%04d", time.Now().Year(), time.Now().UnixNano()%10000)
+		emp.EmployeeNumber = identifiers.NewDocumentNumber("EMP", time.Now())
 	}
 	if emp.DateOfBirth.IsZero() {
 		emp.DateOfBirth = time.Now().AddDate(-25, 0, 0)
@@ -198,7 +199,7 @@ func (s *hrService) CreateContract(ctx context.Context, contract *domain.Contrac
 		return nil, nil, fmt.Errorf("employee_id is required")
 	}
 	if contract.ContractNumber == "" {
-		contract.ContractNumber = fmt.Sprintf("QIWA-%d-%04d", time.Now().Year(), time.Now().UnixNano()%10000)
+		contract.ContractNumber = identifiers.NewDocumentNumber("QIWA", time.Now())
 	}
 	if contract.StartDate.IsZero() {
 		contract.StartDate = time.Now()
@@ -322,10 +323,10 @@ func (s *hrService) GetSaudizationMetrics(ctx context.Context, legalEntityID uui
 	}
 
 	return &domain.SaudizationMetric{
-		SaudiCount:             saudiCount,
-		ExpatCount:             expatCount,
-		TotalCount:             total,
+		SaudiCount:              saudiCount,
+		ExpatCount:              expatCount,
+		TotalCount:              total,
 		SaudizationRatioPercent: ratio,
-		NitaqatTier:            tier,
+		NitaqatTier:             tier,
 	}, nil
 }

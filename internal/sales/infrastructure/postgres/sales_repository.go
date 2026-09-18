@@ -30,24 +30,24 @@ func (r *salesRepository) CreateQuotation(ctx context.Context, q *domain.Quotati
 	queries := sqlc.New(r.db.DBTX(ctx))
 
 	row, err := queries.CreateQuotation(ctx, sqlc.CreateQuotationParams{
-		ID:               toPgUUID(q.ID),
-		LegalEntityID:    toPgUUID(q.LegalEntityID),
-		QuotationNumber:  q.QuotationNumber,
-		CustomerID:       toPgUUID(q.CustomerID),
-		CustomerNameEn:   q.CustomerNameEn,
-		CustomerNameAr:   q.CustomerNameAr,
-		QuoteDate:        toPgDate(q.QuoteDate),
-		ValidUntil:       toPgDate(q.ValidUntil),
-		CurrencyCode:     q.CurrencyCode,
-		ExchangeRate:     toPgNumeric(q.ExchangeRate),
-		Subtotal:         toPgNumeric(q.Subtotal),
-		DiscountAmount:   toPgNumeric(q.DiscountAmount),
-		TaxableAmount:    toPgNumeric(q.TaxableAmount),
-		TaxAmount:        toPgNumeric(q.TaxAmount),
-		TotalAmount:      toPgNumeric(q.TotalAmount),
-		Status:           string(q.Status),
-		Notes:            toPgTextPtr(q.Notes),
-		CreatedByUserID:  toPgUUIDPtr(q.CreatedByUserID),
+		ID:              toPgUUID(q.ID),
+		LegalEntityID:   toPgUUID(q.LegalEntityID),
+		QuotationNumber: q.QuotationNumber,
+		CustomerID:      toPgUUID(q.CustomerID),
+		CustomerNameEn:  q.CustomerNameEn,
+		CustomerNameAr:  q.CustomerNameAr,
+		QuoteDate:       toPgDate(q.QuoteDate),
+		ValidUntil:      toPgDate(q.ValidUntil),
+		CurrencyCode:    q.CurrencyCode,
+		ExchangeRate:    toPgNumeric(q.ExchangeRate),
+		Subtotal:        toPgNumeric(q.Subtotal),
+		DiscountAmount:  toPgNumeric(q.DiscountAmount),
+		TaxableAmount:   toPgNumeric(q.TaxableAmount),
+		TaxAmount:       toPgNumeric(q.TaxAmount),
+		TotalAmount:     toPgNumeric(q.TotalAmount),
+		Status:          string(q.Status),
+		Notes:           toPgTextPtr(q.Notes),
+		CreatedByUserID: toPgUUIDPtr(q.CreatedByUserID),
 	})
 	if err != nil {
 		return nil, err
@@ -79,22 +79,22 @@ func (r *salesRepository) CreateQuotation(ctx context.Context, q *domain.Quotati
 
 	for _, l := range q.Lines {
 		lRow, err := queries.CreateQuotationLine(ctx, sqlc.CreateQuotationLineParams{
-			ID:               toPgUUID(l.ID),
-			QuotationID:      row.ID,
-			LineNumber:       int32(l.LineNumber),
-			ItemID:           toPgUUID(l.ItemID),
-			DescriptionEn:    l.DescriptionEn,
-			DescriptionAr:    l.DescriptionAr,
-			Uom:              l.UOM,
-			Quantity:         toPgNumeric(l.Quantity),
-			UnitPrice:        toPgNumeric(l.UnitPrice),
-			DiscountPercent:  toPgNumeric(l.DiscountPercent),
-			DiscountAmount:   toPgNumeric(l.DiscountAmount),
-			TaxableAmount:    toPgNumeric(l.TaxableAmount),
-			TaxCode:          l.TaxCode,
-			TaxRatePercent:   toPgNumeric(l.TaxRatePercent),
-			TaxAmount:        toPgNumeric(l.TaxAmount),
-			TotalAmount:      toPgNumeric(l.TotalAmount),
+			ID:              toPgUUID(l.ID),
+			QuotationID:     row.ID,
+			LineNumber:      int32(l.LineNumber),
+			ItemID:          toPgUUID(l.ItemID),
+			DescriptionEn:   l.DescriptionEn,
+			DescriptionAr:   l.DescriptionAr,
+			Uom:             l.UOM,
+			Quantity:        toPgNumeric(l.Quantity),
+			UnitPrice:       toPgNumeric(l.UnitPrice),
+			DiscountPercent: toPgNumeric(l.DiscountPercent),
+			DiscountAmount:  toPgNumeric(l.DiscountAmount),
+			TaxableAmount:   toPgNumeric(l.TaxableAmount),
+			TaxCode:         l.TaxCode,
+			TaxRatePercent:  toPgNumeric(l.TaxRatePercent),
+			TaxAmount:       toPgNumeric(l.TaxAmount),
+			TotalAmount:     toPgNumeric(l.TotalAmount),
 		})
 		if err != nil {
 			return nil, err
@@ -237,9 +237,9 @@ func (r *salesRepository) UpdateQuotationStatus(ctx context.Context, id uuid.UUI
 	queries := sqlc.New(r.db.DBTX(ctx))
 
 	row, err := queries.UpdateQuotationStatus(ctx, sqlc.UpdateQuotationStatusParams{
-		ID:                 toPgUUID(id),
-		Status:             string(status),
-		ConvertedOrderID:   toPgUUIDPtr(convertedOrderID),
+		ID:               toPgUUID(id),
+		Status:           string(status),
+		ConvertedOrderID: toPgUUIDPtr(convertedOrderID),
 	})
 	if err != nil {
 		return nil, err
@@ -306,22 +306,22 @@ func (r *salesRepository) CreateOrder(ctx context.Context, o *domain.SalesOrder)
 
 	for _, l := range o.Lines {
 		lRow, err := queries.CreateOrderLine(ctx, sqlc.CreateOrderLineParams{
-			ID:               toPgUUID(l.ID),
-			OrderID:          row.ID,
-			LineNumber:       int32(l.LineNumber),
-			ItemID:           toPgUUID(l.ItemID),
-			DescriptionEn:    l.DescriptionEn,
-			DescriptionAr:    l.DescriptionAr,
-			Uom:              l.UOM,
-			Quantity:         toPgNumeric(l.Quantity),
-			UnitPrice:        toPgNumeric(l.UnitPrice),
-			DiscountPercent:  toPgNumeric(l.DiscountPercent),
-			DiscountAmount:   toPgNumeric(l.DiscountAmount),
-			TaxableAmount:    toPgNumeric(l.TaxableAmount),
-			TaxCode:          l.TaxCode,
-			TaxRatePercent:   toPgNumeric(l.TaxRatePercent),
-			TaxAmount:        toPgNumeric(l.TaxAmount),
-			TotalAmount:      toPgNumeric(l.TotalAmount),
+			ID:              toPgUUID(l.ID),
+			OrderID:         row.ID,
+			LineNumber:      int32(l.LineNumber),
+			ItemID:          toPgUUID(l.ItemID),
+			DescriptionEn:   l.DescriptionEn,
+			DescriptionAr:   l.DescriptionAr,
+			Uom:             l.UOM,
+			Quantity:        toPgNumeric(l.Quantity),
+			UnitPrice:       toPgNumeric(l.UnitPrice),
+			DiscountPercent: toPgNumeric(l.DiscountPercent),
+			DiscountAmount:  toPgNumeric(l.DiscountAmount),
+			TaxableAmount:   toPgNumeric(l.TaxableAmount),
+			TaxCode:         l.TaxCode,
+			TaxRatePercent:  toPgNumeric(l.TaxRatePercent),
+			TaxAmount:       toPgNumeric(l.TaxAmount),
+			TotalAmount:     toPgNumeric(l.TotalAmount),
 		})
 		if err != nil {
 			return nil, err

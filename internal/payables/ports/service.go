@@ -55,18 +55,18 @@ type CreateSupplierInvoiceLineCmd struct {
 }
 
 type CreateSupplierPaymentCmd struct {
-	LegalEntityID          uuid.UUID
-	PaymentNumber          string
-	SupplierID             uuid.UUID
-	PaymentDate            string // YYYY-MM-DD
-	PaymentMethod          domain.PaymentMethod
-	DisbursementAccountID  uuid.UUID
-	Amount                 decimal.Decimal
-	CurrencyCode           string
-	ReferenceNumber        *string
-	Notes                  *string
-	CreatedByUserID        *uuid.UUID
-	Allocations            []PaymentAllocationCmd
+	LegalEntityID         uuid.UUID
+	PaymentNumber         string
+	SupplierID            uuid.UUID
+	PaymentDate           string // YYYY-MM-DD
+	PaymentMethod         domain.PaymentMethod
+	DisbursementAccountID uuid.UUID
+	Amount                decimal.Decimal
+	CurrencyCode          string
+	ReferenceNumber       *string
+	Notes                 *string
+	CreatedByUserID       *uuid.UUID
+	Allocations           []PaymentAllocationCmd
 }
 
 type PaymentAllocationCmd struct {

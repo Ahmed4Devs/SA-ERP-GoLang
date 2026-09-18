@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"erp/internal/zatca/domain"
@@ -24,11 +25,11 @@ func DefaultWorkerConfig() RetryWorkerConfig {
 }
 
 type RetryWorker struct {
-	cfg         RetryWorkerConfig
-	subRepo     ports.SubmissionRepository
-	docRepo     ports.Repository
-	subService  ports.SubmissionService
-	stopChan    chan struct{}
+	cfg        RetryWorkerConfig
+	subRepo    ports.SubmissionRepository
+	docRepo    ports.Repository
+	subService ports.SubmissionService
+	stopChan   chan struct{}
 }
 
 func NewRetryWorker(
@@ -71,18 +72,25 @@ func (w *RetryWorker) ProcessPending(ctx context.Context) (int, error) {
 		default:
 		}
 
-		attempts, _ := w.subRepo.ListAttempts(ctx, sub.ID)
+		attempts, err := w.subRepo.ListAttempts(ctx, sub.ID)
+		if err != nil {
+			return processed, fmt.Errorf("failed to list attempts for submission %s: %w", sub.ID, err)
+		}
 		if len(attempts) >= w.cfg.MaxRetries {
 			// Mark permanently failed
 			sub.Status = "FAILED"
-			_, _ = w.subRepo.UpdateSubmission(ctx, sub)
-			_, _ = w.docRepo.UpdateDocumentStatus(ctx, sub.DocumentID, sub.LegalEntityID, domain.DocumentStatusFailed)
+			if _, err := w.subRepo.UpdateSubmission(ctx, sub); err != nil {
+				return processed, fmt.Errorf("failed to mark submission %s failed: %w", sub.ID, err)
+			}
+			if _, err := w.docRepo.UpdateDocumentStatus(ctx, sub.DocumentID, sub.LegalEntityID, domain.DocumentStatusFailed); err != nil {
+				return processed, fmt.Errorf("failed to mark document %s failed: %w", sub.DocumentID, err)
+			}
 			processed++
 			continue
 		}
 
 		// Attempt retry
-		err := w.subService.RetrySubmission(ctx, sub.ID, sub.LegalEntityID)
+		err = w.subService.RetrySubmission(ctx, sub.ID, sub.LegalEntityID)
 		if err == nil {
 			processed++
 		}
@@ -99,7 +107,12 @@ func (w *RetryWorker) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			_, _ = w.ProcessPending(ctx)
+			processed, err := w.ProcessPending(ctx)
+			if err != nil {
+				slog.Error("ZATCA retry pass failed", "error", err)
+			} else if processed > 0 {
+				slog.Info("ZATCA retry pass completed", "processed", processed)
+			}
 		case <-w.stopChan:
 			return
 		case <-ctx.Done():

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	hrdomain "erp/internal/hr/domain"
 	"erp/internal/hr"
+	hrdomain "erp/internal/hr/domain"
 	"erp/internal/iam"
 	"erp/internal/leave"
 	"erp/internal/leave/domain"
@@ -129,12 +129,12 @@ func TestLeave_AccrualAndBalances(t *testing.T) {
 
 	// 1. Create specific leave type
 	lt, err := svc.CreateLeaveType(ctx, &domain.LeaveType{
-		LegalEntityID:  leID,
-		Code:           "ANNUAL-TEST-" + uuid.New().String()[:6],
-		NameEn:         "Annual Vacation",
-		NameAr:         "الإجازة السنوية",
-		IsPaid:         true,
-		IsActive:       true,
+		LegalEntityID: leID,
+		Code:          "ANNUAL-TEST-" + uuid.New().String()[:6],
+		NameEn:        "Annual Vacation",
+		NameAr:        "الإجازة السنوية",
+		IsPaid:        true,
+		IsActive:      true,
 	})
 	if err != nil {
 		t.Fatalf("failed to create leave type: %v", err)

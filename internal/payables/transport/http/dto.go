@@ -76,16 +76,16 @@ type CreatePaymentTermRequest struct {
 }
 
 type CreateSupplierInvoiceRequest struct {
-	LegalEntityID         uuid.UUID                           `json:"legal_entity_id"`
-	InvoiceNumber         string                              `json:"invoice_number,omitempty"`
-	SupplierInvoiceNumber string                              `json:"supplier_invoice_number"`
-	SupplierID            uuid.UUID                           `json:"supplier_id"`
-	InvoiceDate           string                              `json:"invoice_date"`
-	DueDate               string                              `json:"due_date,omitempty"`
-	CurrencyCode          string                              `json:"currency_code,omitempty"`
-	ExchangeRate          decimal.Decimal                     `json:"exchange_rate,omitempty"`
-	Notes                 *string                             `json:"notes,omitempty"`
-	Lines                 []CreateSupplierInvoiceLineRequest  `json:"lines"`
+	LegalEntityID         uuid.UUID                          `json:"legal_entity_id"`
+	InvoiceNumber         string                             `json:"invoice_number,omitempty"`
+	SupplierInvoiceNumber string                             `json:"supplier_invoice_number"`
+	SupplierID            uuid.UUID                          `json:"supplier_id"`
+	InvoiceDate           string                             `json:"invoice_date"`
+	DueDate               string                             `json:"due_date,omitempty"`
+	CurrencyCode          string                             `json:"currency_code,omitempty"`
+	ExchangeRate          decimal.Decimal                    `json:"exchange_rate,omitempty"`
+	Notes                 *string                            `json:"notes,omitempty"`
+	Lines                 []CreateSupplierInvoiceLineRequest `json:"lines"`
 }
 
 type CreateSupplierInvoiceLineRequest struct {
@@ -99,17 +99,17 @@ type CreateSupplierInvoiceLineRequest struct {
 }
 
 type CreateSupplierPaymentRequest struct {
-	LegalEntityID         uuid.UUID                    `json:"legal_entity_id"`
-	PaymentNumber         string                       `json:"payment_number,omitempty"`
-	SupplierID            uuid.UUID                    `json:"supplier_id"`
-	PaymentDate           string                       `json:"payment_date"`
-	PaymentMethod         domain.PaymentMethod         `json:"payment_method"`
-	DisbursementAccountID uuid.UUID                    `json:"disbursement_account_id"`
-	Amount                decimal.Decimal              `json:"amount"`
-	CurrencyCode          string                       `json:"currency_code,omitempty"`
-	ReferenceNumber       *string                      `json:"reference_number,omitempty"`
-	Notes                 *string                      `json:"notes,omitempty"`
-	Allocations           []PaymentAllocationRequest   `json:"allocations,omitempty"`
+	LegalEntityID         uuid.UUID                  `json:"legal_entity_id"`
+	PaymentNumber         string                     `json:"payment_number,omitempty"`
+	SupplierID            uuid.UUID                  `json:"supplier_id"`
+	PaymentDate           string                     `json:"payment_date"`
+	PaymentMethod         domain.PaymentMethod       `json:"payment_method"`
+	DisbursementAccountID uuid.UUID                  `json:"disbursement_account_id"`
+	Amount                decimal.Decimal            `json:"amount"`
+	CurrencyCode          string                     `json:"currency_code,omitempty"`
+	ReferenceNumber       *string                    `json:"reference_number,omitempty"`
+	Notes                 *string                    `json:"notes,omitempty"`
+	Allocations           []PaymentAllocationRequest `json:"allocations,omitempty"`
 }
 
 type PaymentAllocationRequest struct {
@@ -118,14 +118,14 @@ type PaymentAllocationRequest struct {
 }
 
 type CreateCreditNoteRequest struct {
-	LegalEntityID            uuid.UUID                    `json:"legal_entity_id"`
-	CreditNoteNumber         string                       `json:"credit_note_number,omitempty"`
-	SupplierCreditNoteNumber *string                      `json:"supplier_credit_note_number,omitempty"`
-	SupplierID               uuid.UUID                    `json:"supplier_id"`
-	OriginalInvoiceID        *uuid.UUID                   `json:"original_invoice_id,omitempty"`
-	CreditNoteDate           string                       `json:"credit_note_date"`
-	CurrencyCode             string                       `json:"currency_code,omitempty"`
-	Reason                   *string                      `json:"reason,omitempty"`
+	LegalEntityID            uuid.UUID                     `json:"legal_entity_id"`
+	CreditNoteNumber         string                        `json:"credit_note_number,omitempty"`
+	SupplierCreditNoteNumber *string                       `json:"supplier_credit_note_number,omitempty"`
+	SupplierID               uuid.UUID                     `json:"supplier_id"`
+	OriginalInvoiceID        *uuid.UUID                    `json:"original_invoice_id,omitempty"`
+	CreditNoteDate           string                        `json:"credit_note_date"`
+	CurrencyCode             string                        `json:"currency_code,omitempty"`
+	Reason                   *string                       `json:"reason,omitempty"`
 	Lines                    []CreateCreditNoteLineRequest `json:"lines"`
 }
 

@@ -8,11 +8,11 @@ import (
 )
 
 var (
-	codeRegex    = regexp.MustCompile(`^[A-Za-z0-9_-]{2,32}$`)
-	crRegex      = regexp.MustCompile(`^[0-9]{10}$`)
-	vatRegex     = regexp.MustCompile(`^3[0-9]{13}3$`)
-	bldgRegex    = regexp.MustCompile(`^[0-9]{4}$`)
-	postalRegex  = regexp.MustCompile(`^[0-9]{5}$`)
+	codeRegex   = regexp.MustCompile(`^[A-Za-z0-9_-]{2,32}$`)
+	crRegex     = regexp.MustCompile(`^[0-9]{10}$`)
+	vatRegex    = regexp.MustCompile(`^3[0-9]{13}3$`)
+	bldgRegex   = regexp.MustCompile(`^[0-9]{4}$`)
+	postalRegex = regexp.MustCompile(`^[0-9]{5}$`)
 )
 
 func ValidateCode(code string) error {

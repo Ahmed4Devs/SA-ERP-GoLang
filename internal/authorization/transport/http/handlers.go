@@ -22,16 +22,25 @@ func NewAuthorizationHandler(authzService ports.AuthorizationService) *Authoriza
 func (h *AuthorizationHandler) Routes(authMiddleware func(http.Handler) http.Handler) chi.Router {
 	r := chi.NewRouter()
 
+	// Self-service authorization endpoints need authentication only. They are
+	// used by the web client to discover the caller's scopes and permissions.
 	r.Group(func(r chi.Router) {
 		if authMiddleware != nil {
 			r.Use(authMiddleware)
 		}
-
-		r.Get("/roles", h.ListRoles)
-		r.Get("/permissions", h.ListPermissions)
 		r.Get("/assignments/me", h.ListMyAssignments)
 		r.Get("/permissions/me", h.GetMyPermissions)
 		r.Post("/check", h.CheckPermission)
+	})
+
+	// Role catalog and assignment mutations are administrative operations.
+	r.Group(func(r chi.Router) {
+		if authMiddleware != nil {
+			r.Use(authMiddleware)
+		}
+		r.Use(RequireModuleAccess(h.authzService, "authz.view", "authz.manage"))
+		r.Get("/roles", h.ListRoles)
+		r.Get("/permissions", h.ListPermissions)
 		r.Post("/assignments", h.AssignRole)
 		r.Post("/assignments/revoke", h.RevokeRole)
 	})

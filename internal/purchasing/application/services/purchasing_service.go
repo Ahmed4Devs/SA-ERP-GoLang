@@ -3,10 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"erp/internal/platform/database"
+	"erp/internal/platform/identifiers"
+	"erp/internal/platform/transaction"
 	"erp/internal/purchasing/domain"
 	"erp/internal/purchasing/ports"
 	"github.com/google/uuid"
@@ -16,12 +17,14 @@ import (
 type purchasingService struct {
 	repo ports.Repository
 	db   *database.DB
+	tx   transaction.Manager
 }
 
 func NewPurchasingService(repo ports.Repository, db *database.DB) ports.PurchasingService {
 	return &purchasingService{
 		repo: repo,
 		db:   db,
+		tx:   transaction.NewManager(db.Pool),
 	}
 }
 
@@ -34,7 +37,7 @@ func (s *purchasingService) CreatePurchaseRequest(ctx context.Context, cmd ports
 		return nil, domain.ErrEmptyLineItems
 	}
 
-	prNumber := fmt.Sprintf("PR-%s-%s", time.Now().Format("2006"), strings.ToUpper(uuid.New().String()[:8]))
+	prNumber := identifiers.NewDocumentNumber("PR", time.Now())
 	currency := cmd.CurrencyCode
 	if currency == "" {
 		currency = "SAR"
@@ -112,7 +115,7 @@ func (s *purchasingService) CreateRFQ(ctx context.Context, cmd ports.CreateRFQCm
 		return nil, domain.ErrEmptyLineItems
 	}
 
-	rfqNumber := fmt.Sprintf("RFQ-%s-%s", time.Now().Format("2006"), strings.ToUpper(uuid.New().String()[:8]))
+	rfqNumber := identifiers.NewDocumentNumber("RFQ", time.Now())
 
 	rfq := &domain.RFQ{
 		ID:                uuid.New(),
@@ -248,7 +251,7 @@ func (s *purchasingService) CreatePurchaseOrder(ctx context.Context, cmd ports.C
 		return nil, domain.ErrEmptyLineItems
 	}
 
-	poNumber := fmt.Sprintf("PO-%s-%s", time.Now().Format("2006"), strings.ToUpper(uuid.New().String()[:8]))
+	poNumber := identifiers.NewDocumentNumber("PO", time.Now())
 	currency := cmd.CurrencyCode
 	if currency == "" {
 		currency = "SAR"
@@ -379,7 +382,7 @@ func (s *purchasingService) CreateGoodsReceipt(ctx context.Context, cmd ports.Cr
 		return nil, domain.ErrPONotIssued
 	}
 
-	receiptNumber := fmt.Sprintf("GRN-%s-%s", time.Now().Format("2006"), strings.ToUpper(uuid.New().String()[:8]))
+	receiptNumber := identifiers.NewDocumentNumber("GRN", time.Now())
 
 	gr := &domain.GoodsReceipt{
 		ID:                 uuid.New(),
@@ -428,6 +431,20 @@ func (s *purchasingService) ListGoodsReceipts(ctx context.Context, legalEntityID
 }
 
 func (s *purchasingService) InspectAndAcceptGoodsReceipt(ctx context.Context, id uuid.UUID, inspectorID uuid.UUID) (*domain.GoodsReceipt, error) {
+	var receipt *domain.GoodsReceipt
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		receipt, err = s.inspectAndAcceptGoodsReceipt(txCtx, id, inspectorID)
+		return err
+	})
+	return receipt, err
+}
+
+func (s *purchasingService) inspectAndAcceptGoodsReceipt(ctx context.Context, id uuid.UUID, inspectorID uuid.UUID) (*domain.GoodsReceipt, error) {
+	dbtx := s.db.DBTX(ctx)
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM purchasing.goods_receipts WHERE id = $1 FOR UPDATE", id).Scan(&id); err != nil {
+		return nil, fmt.Errorf("failed to lock goods receipt: %w", err)
+	}
 	gr, err := s.repo.GetGoodsReceipt(ctx, id)
 	if err != nil {
 		return nil, err
@@ -464,7 +481,7 @@ func (s *purchasingService) InspectAndAcceptGoodsReceipt(ctx context.Context, id
 			binID := line.BinID
 			if binID == nil {
 				var defBin uuid.UUID
-				err := s.db.Pool.QueryRow(ctx, "SELECT id FROM warehouse.bin_locations WHERE warehouse_id = $1 LIMIT 1", line.WarehouseID).Scan(&defBin)
+				err := dbtx.QueryRow(ctx, "SELECT id FROM warehouse.bin_locations WHERE warehouse_id = $1 LIMIT 1", line.WarehouseID).Scan(&defBin)
 				if err == nil {
 					binID = &defBin
 				}
@@ -472,13 +489,15 @@ func (s *purchasingService) InspectAndAcceptGoodsReceipt(ctx context.Context, id
 
 			// Lookup UOM ID
 			var uomID uuid.UUID
-			_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM products.units_of_measure LIMIT 1").Scan(&uomID)
+			if err := dbtx.QueryRow(ctx, "SELECT id FROM products.units_of_measure LIMIT 1").Scan(&uomID); err != nil {
+				return nil, fmt.Errorf("failed to resolve inventory unit of measure: %w", err)
+			}
 
-			movementNumber := fmt.Sprintf("SM-IN-%d", time.Now().UnixNano()%1000000)
+			movementNumber := identifiers.NewDocumentNumber("SM-IN", time.Now())
 			movementID := uuid.New()
 
 			// Insert into inventory.stock_movements (POSITIVE quantity for PURCHASE_RECEIPT)
-			_, err = s.db.Pool.Exec(ctx, `
+			_, err = dbtx.Exec(ctx, `
 				INSERT INTO inventory.stock_movements (
 					id, legal_entity_id, movement_number, movement_type, item_id,
 					warehouse_id, bin_id, quantity, uom_id, unit_cost, total_cost,
@@ -486,12 +505,15 @@ func (s *purchasingService) InspectAndAcceptGoodsReceipt(ctx context.Context, id
 				) VALUES ($1, $2, $3, 'PURCHASE_RECEIPT', $4, $5, $6, $7, $8, $9, $10, 'PURCHASE_RECEIPT', $11, $12, $13)
 			`, movementID, gr.LegalEntityID, movementNumber, line.ItemID, line.WarehouseID, binID, line.AcceptedQuantity, uomID, line.UnitCost, line.TotalCost, gr.ID, line.ID, inspectorID)
 
-			if err == nil {
-				_ = s.repo.UpdateGoodsReceiptLineMovement(ctx, line.ID, movementID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create purchase stock movement: %w", err)
+			}
+			if err := s.repo.UpdateGoodsReceiptLineMovement(ctx, line.ID, movementID); err != nil {
+				return nil, fmt.Errorf("failed to link goods receipt movement: %w", err)
+			}
 
-				// Upsert stock_balances
-				if binID != nil {
-					_, _ = s.db.Pool.Exec(ctx, `
+			if binID != nil {
+				if _, err = dbtx.Exec(ctx, `
 						INSERT INTO inventory.stock_balances (
 							id, legal_entity_id, item_id, warehouse_id, bin_id, quantity_on_hand, average_cost, total_value
 						) VALUES (
@@ -501,12 +523,15 @@ func (s *purchasingService) InspectAndAcceptGoodsReceipt(ctx context.Context, id
 							quantity_on_hand = inventory.stock_balances.quantity_on_hand + EXCLUDED.quantity_on_hand,
 							total_value = inventory.stock_balances.total_value + EXCLUDED.total_value,
 							updated_at = now()
-					`, gr.LegalEntityID, line.ItemID, line.WarehouseID, *binID, line.AcceptedQuantity, line.UnitCost, line.TotalCost)
+				`, gr.LegalEntityID, line.ItemID, line.WarehouseID, *binID, line.AcceptedQuantity, line.UnitCost, line.TotalCost); err != nil {
+					return nil, fmt.Errorf("failed to update stock balance: %w", err)
 				}
 			}
 
 			// Update PO Line received quantity
-			_ = s.repo.UpdatePOLineReceivedQty(ctx, line.POLineID, line.AcceptedQuantity)
+			if err := s.repo.UpdatePOLineReceivedQty(ctx, line.POLineID, line.AcceptedQuantity); err != nil {
+				return nil, fmt.Errorf("failed to update purchase-order received quantity: %w", err)
+			}
 		}
 	}
 
@@ -518,19 +543,22 @@ func (s *purchasingService) InspectAndAcceptGoodsReceipt(ctx context.Context, id
 
 	// 3. Update PO Status (Check if fully or partially received)
 	refreshedPO, err := s.repo.GetPurchaseOrder(ctx, po.ID)
-	if err == nil {
-		allReceived := true
-		for _, l := range refreshedPO.Lines {
-			if l.ReceivedQuantity.LessThan(l.Quantity) {
-				allReceived = false
-				break
-			}
+	if err != nil {
+		return nil, fmt.Errorf("failed to reload purchase order: %w", err)
+	}
+	allReceived := true
+	for _, l := range refreshedPO.Lines {
+		if l.ReceivedQuantity.LessThan(l.Quantity) {
+			allReceived = false
+			break
 		}
-		newStatus := domain.POStatusPartiallyReceived
-		if allReceived {
-			newStatus = domain.POStatusReceived
-		}
-		_, _ = s.repo.UpdatePurchaseOrderStatus(ctx, po.ID, newStatus)
+	}
+	newStatus := domain.POStatusPartiallyReceived
+	if allReceived {
+		newStatus = domain.POStatusReceived
+	}
+	if _, err := s.repo.UpdatePurchaseOrderStatus(ctx, po.ID, newStatus); err != nil {
+		return nil, fmt.Errorf("failed to update purchase-order status: %w", err)
 	}
 
 	return acceptedGR, nil

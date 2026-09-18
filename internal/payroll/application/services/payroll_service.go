@@ -8,6 +8,8 @@ import (
 	"erp/internal/payroll/domain"
 	"erp/internal/payroll/ports"
 	"erp/internal/platform/database"
+	"erp/internal/platform/identifiers"
+	"erp/internal/platform/transaction"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -16,12 +18,14 @@ import (
 type PayrollService struct {
 	repo ports.Repository
 	db   *database.DB
+	tx   transaction.Manager
 }
 
 func NewPayrollService(repo ports.Repository, db *database.DB) ports.Service {
 	return &PayrollService{
 		repo: repo,
 		db:   db,
+		tx:   transaction.NewManager(db.Pool),
 	}
 }
 
@@ -175,6 +179,20 @@ func (s *PayrollService) ListRuns(ctx context.Context, legalEntityID uuid.UUID) 
 
 // 3. CalculateRun executes deterministic payroll calculation for all active employees.
 func (s *PayrollService) CalculateRun(ctx context.Context, runID uuid.UUID) (*domain.PayrollRun, error) {
+	var run *domain.PayrollRun
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		run, err = s.calculateRun(txCtx, runID)
+		return err
+	})
+	return run, err
+}
+
+func (s *PayrollService) calculateRun(ctx context.Context, runID uuid.UUID) (*domain.PayrollRun, error) {
+	dbtx := s.db.DBTX(ctx)
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM payroll.runs WHERE id = $1 FOR UPDATE", runID).Scan(&runID); err != nil {
+		return nil, fmt.Errorf("failed to lock payroll run: %w", err)
+	}
 	run, err := s.repo.GetRunByID(ctx, runID)
 	if err != nil {
 		return nil, err
@@ -191,8 +209,12 @@ func (s *PayrollService) CalculateRun(ctx context.Context, runID uuid.UUID) (*do
 	}
 
 	// Clean any previous calculation lines for this run
-	_ = s.repo.DeleteRunEmployees(ctx, runID)
-	_, _ = s.repo.UpdateRunStatus(ctx, runID, domain.RunStatusCalculating, nil)
+	if err := s.repo.DeleteRunEmployees(ctx, runID); err != nil {
+		return nil, fmt.Errorf("failed to clear previous payroll calculation: %w", err)
+	}
+	if _, err := s.repo.UpdateRunStatus(ctx, runID, domain.RunStatusCalculating, nil); err != nil {
+		return nil, fmt.Errorf("failed to mark payroll run as calculating: %w", err)
+	}
 
 	// Fetch active employees with active contracts or salary assignments
 	type EmpContractRow struct {
@@ -205,7 +227,7 @@ func (s *PayrollService) CalculateRun(ctx context.Context, runID uuid.UUID) (*do
 		OtherAllowances    decimal.Decimal
 	}
 
-	rows, err := s.db.Pool.Query(ctx, `
+	rows, err := dbtx.Query(ctx, `
 		SELECT 
 			e.id as employee_id,
 			c.id as contract_id,
@@ -237,11 +259,22 @@ func (s *PayrollService) CalculateRun(ctx context.Context, runID uuid.UUID) (*do
 		if err := rows.Scan(&ec.EmployeeID, &ec.ContractID, &ec.NationalityCode, &basic, &housing, &transport, &other); err != nil {
 			return nil, err
 		}
-		ec.BasicSalary, _ = decimal.NewFromString(basic)
-		ec.HousingAllowance, _ = decimal.NewFromString(housing)
-		ec.TransportAllowance, _ = decimal.NewFromString(transport)
-		ec.OtherAllowances, _ = decimal.NewFromString(other)
+		if ec.BasicSalary, err = decimal.NewFromString(basic); err != nil {
+			return nil, fmt.Errorf("invalid basic salary for employee %s: %w", ec.EmployeeID, err)
+		}
+		if ec.HousingAllowance, err = decimal.NewFromString(housing); err != nil {
+			return nil, fmt.Errorf("invalid housing allowance for employee %s: %w", ec.EmployeeID, err)
+		}
+		if ec.TransportAllowance, err = decimal.NewFromString(transport); err != nil {
+			return nil, fmt.Errorf("invalid transport allowance for employee %s: %w", ec.EmployeeID, err)
+		}
+		if ec.OtherAllowances, err = decimal.NewFromString(other); err != nil {
+			return nil, fmt.Errorf("invalid other allowance for employee %s: %w", ec.EmployeeID, err)
+		}
 		empList = append(empList, ec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed while reading active employees: %w", err)
 	}
 
 	var totalBasic, totalAllowances, totalGross, totalDeductions, totalNet decimal.Decimal
@@ -262,31 +295,41 @@ func (s *PayrollService) CalculateRun(ctx context.Context, runID uuid.UUID) (*do
 		// Pull overtime hours approved in this period
 		var otHours decimal.Decimal
 		var otHoursStr *string
-		_ = s.db.Pool.QueryRow(ctx, `
-			SELECT COALESCE(SUM(approved_hours)::text, '0')
+		if err := dbtx.QueryRow(ctx, `
+			SELECT COALESCE(SUM(overtime_hours)::text, '0')
 			FROM attendance.overtime_requests
 			WHERE employee_id = $1 AND status = 'APPROVED'
-			  AND work_date BETWEEN $2 AND $3
-		`, emp.EmployeeID, period.StartDate, period.EndDate).Scan(&otHoursStr)
+			  AND overtime_date BETWEEN $2 AND $3
+		`, emp.EmployeeID, period.StartDate, period.EndDate).Scan(&otHoursStr); err != nil {
+			return nil, fmt.Errorf("failed to load overtime for employee %s: %w", emp.EmployeeID, err)
+		}
 		if otHoursStr != nil {
-			otHours, _ = decimal.NewFromString(*otHoursStr)
+			if otHours, err = decimal.NewFromString(*otHoursStr); err != nil {
+				return nil, fmt.Errorf("invalid overtime value for employee %s: %w", emp.EmployeeID, err)
+			}
 		}
 
 		// Pull pending loan installments due in this period
 		var loanDeduction decimal.Decimal
-		installments, _ := s.repo.ListPendingLoanInstallmentsByEmployee(ctx, emp.EmployeeID, period.PaymentDueDate)
+		installments, err := s.repo.ListPendingLoanInstallmentsByEmployee(ctx, emp.EmployeeID, period.PaymentDueDate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load loan installments for employee %s: %w", emp.EmployeeID, err)
+		}
 		for _, inst := range installments {
 			loanDeduction = loanDeduction.Add(inst.Amount)
 		}
 
 		// Pull unpaid leave days in this period
 		var unpaidDays int
-		_ = s.db.Pool.QueryRow(ctx, `
-			SELECT COALESCE(SUM(working_days), 0)
-			FROM leave.requests
-			WHERE employee_id = $1 AND status = 'APPROVED' AND leave_type_code = 'UNPAID'
-			  AND start_date <= $3 AND end_date >= $2
-		`, emp.EmployeeID, period.StartDate, period.EndDate).Scan(&unpaidDays)
+		if err := dbtx.QueryRow(ctx, `
+			SELECT COALESCE(SUM(r.total_days), 0)
+			FROM leave.requests r
+			JOIN leave.types t ON t.id = r.leave_type_id
+			WHERE r.employee_id = $1 AND r.status = 'APPROVED' AND t.code = 'UNPAID'
+			  AND r.start_date <= $3 AND r.end_date >= $2
+		`, emp.EmployeeID, period.StartDate, period.EndDate).Scan(&unpaidDays); err != nil {
+			return nil, fmt.Errorf("failed to load unpaid leave for employee %s: %w", emp.EmployeeID, err)
+		}
 
 		calcInput := domain.EmployeePayrollInput{
 			EmployeeID:         emp.EmployeeID,
@@ -371,6 +414,20 @@ func (s *PayrollService) ApproveRun(ctx context.Context, runID uuid.UUID) (*doma
 
 // 5. PostRun verifies invariants, creates balanced General Ledger entries, generates payslips, and posts payroll.
 func (s *PayrollService) PostRun(ctx context.Context, runID uuid.UUID, postedBy *uuid.UUID) (*domain.PayrollRun, error) {
+	var run *domain.PayrollRun
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		run, err = s.postRun(txCtx, runID, postedBy)
+		return err
+	})
+	return run, err
+}
+
+func (s *PayrollService) postRun(ctx context.Context, runID uuid.UUID, postedBy *uuid.UUID) (*domain.PayrollRun, error) {
+	dbtx := s.db.DBTX(ctx)
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM payroll.runs WHERE id = $1 FOR UPDATE", runID).Scan(&runID); err != nil {
+		return nil, fmt.Errorf("failed to lock payroll run: %w", err)
+	}
 	run, err := s.repo.GetRunByID(ctx, runID)
 	if err != nil {
 		return nil, err
@@ -410,22 +467,32 @@ func (s *PayrollService) PostRun(ctx context.Context, runID uuid.UUID, postedBy 
 	}
 
 	var journalID, fiscalPeriodID, salExpenseAccID, accruedSalAccID, gosiLiabilityAccID, loanAssetAccID uuid.UUID
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.journals WHERE legal_entity_id = $1 LIMIT 1", run.LegalEntityID).Scan(&journalID)
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.journals WHERE legal_entity_id = $1 LIMIT 1", run.LegalEntityID).Scan(&journalID); err != nil {
+		return nil, fmt.Errorf("payroll journal is not configured: %w", err)
+	}
 	if period.FiscalPeriodID != nil {
 		fiscalPeriodID = *period.FiscalPeriodID
 	} else {
-		_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.fiscal_periods WHERE legal_entity_id = $1 AND status = 'OPEN' LIMIT 1", run.LegalEntityID).Scan(&fiscalPeriodID)
+		if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.fiscal_periods WHERE legal_entity_id = $1 AND status = 'OPEN' LIMIT 1", run.LegalEntityID).Scan(&fiscalPeriodID); err != nil {
+			return nil, fmt.Errorf("open fiscal period is not configured: %w", err)
+		}
 	}
 
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '521000' LIMIT 1", run.LegalEntityID).Scan(&salExpenseAccID)
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '212000' LIMIT 1", run.LegalEntityID).Scan(&accruedSalAccID)
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '213000' LIMIT 1", run.LegalEntityID).Scan(&gosiLiabilityAccID)
-	if gosiLiabilityAccID == uuid.Nil {
-		gosiLiabilityAccID = accruedSalAccID
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '521000' LIMIT 1", run.LegalEntityID).Scan(&salExpenseAccID); err != nil {
+		return nil, fmt.Errorf("salary expense account 521000 is not configured: %w", err)
 	}
-	_ = s.db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '115000' LIMIT 1", run.LegalEntityID).Scan(&loanAssetAccID)
-	if loanAssetAccID == uuid.Nil {
-		loanAssetAccID = accruedSalAccID
+	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '212000' LIMIT 1", run.LegalEntityID).Scan(&accruedSalAccID); err != nil {
+		return nil, fmt.Errorf("accrued salary account 212000 is not configured: %w", err)
+	}
+	if totalGosi.GreaterThan(decimal.Zero) {
+		if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '213000' LIMIT 1", run.LegalEntityID).Scan(&gosiLiabilityAccID); err != nil {
+			return nil, fmt.Errorf("GOSI liability account 213000 is not configured: %w", err)
+		}
+	}
+	if totalLoan.GreaterThan(decimal.Zero) {
+		if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '115000' LIMIT 1", run.LegalEntityID).Scan(&loanAssetAccID); err != nil {
+			return nil, fmt.Errorf("employee loan account 115000 is not configured: %w", err)
+		}
 	}
 
 	var jeID uuid.UUID
@@ -434,7 +501,7 @@ func (s *PayrollService) PostRun(ctx context.Context, runID uuid.UUID, postedBy 
 		jeNum := fmt.Sprintf("JE-PR-%s", run.RunNumber)
 
 		// 1. Create Journal Entry Header in DRAFT state
-		_, err = s.db.Pool.Exec(ctx, `
+		_, err = dbtx.Exec(ctx, `
 			INSERT INTO accounting.journal_entries (
 				id, legal_entity_id, journal_id, fiscal_period_id, entry_number,
 				accounting_date, status, source_module, source_type, source_id,
@@ -451,74 +518,100 @@ func (s *PayrollService) PostRun(ctx context.Context, runID uuid.UUID, postedBy 
 			run.RunNumber, fmt.Sprintf("استحقاق مسير رواتب - %s", run.RunNumber),
 			run.TotalGross, postedBy)
 
-		if err == nil {
+		if err != nil {
+			return nil, fmt.Errorf("failed to create payroll journal entry: %w", err)
+		}
+		{
 			lineNum := int16(1)
 			// 1. Debit Salaries Expense
-			_, err = s.db.Pool.Exec(ctx, `
+			_, err = dbtx.Exec(ctx, `
 				INSERT INTO accounting.journal_lines (
 					journal_entry_id, legal_entity_id, line_number, account_id,
 					description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
 				) VALUES ($1, $2, $3, $4, 'إجمالي استحقاقات رواتب الموظفين', 'SAR', $5, 0, $5, 0)
 			`, jeID, run.LegalEntityID, lineNum, salExpenseAccID, run.TotalGross)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create salary expense journal line: %w", err)
+			}
 			lineNum++
 
 			// 2. Credit Accrued Salaries Payable (Net)
-			_, _ = s.db.Pool.Exec(ctx, `
+			_, err = dbtx.Exec(ctx, `
 				INSERT INTO accounting.journal_lines (
 					journal_entry_id, legal_entity_id, line_number, account_id,
 					description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
 				) VALUES ($1, $2, $3, $4, 'صافي رواتب الموظفين المستحقة للصرف', 'SAR', 0, $5, 0, $5)
 			`, jeID, run.LegalEntityID, lineNum, accruedSalAccID, run.TotalNet)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create accrued salary journal line: %w", err)
+			}
 			lineNum++
 
 			// 3. Credit GOSI Payable (if any)
 			if totalGosi.GreaterThan(decimal.Zero) {
-				_, _ = s.db.Pool.Exec(ctx, `
+				_, err = dbtx.Exec(ctx, `
 					INSERT INTO accounting.journal_lines (
 						journal_entry_id, legal_entity_id, line_number, account_id,
 						description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
 					) VALUES ($1, $2, $3, $4, 'استقطاعات التأمينات الاجتماعية (حصة الموظفين)', 'SAR', 0, $5, 0, $5)
 				`, jeID, run.LegalEntityID, lineNum, gosiLiabilityAccID, totalGosi)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create GOSI journal line: %w", err)
+				}
 				lineNum++
 			}
 
 			// 4. Credit Loan Recovery (if any)
 			if totalLoan.GreaterThan(decimal.Zero) {
-				_, _ = s.db.Pool.Exec(ctx, `
+				_, err = dbtx.Exec(ctx, `
 					INSERT INTO accounting.journal_lines (
 						journal_entry_id, legal_entity_id, line_number, account_id,
 						description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
 					) VALUES ($1, $2, $3, $4, 'استرداد أقساط سلف وقروض الموظفين', 'SAR', 0, $5, 0, $5)
 				`, jeID, run.LegalEntityID, lineNum, loanAssetAccID, totalLoan)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create loan-recovery journal line: %w", err)
+				}
 				lineNum++
 			}
 
 			// 5. Credit Absence/Other Recovery (if any)
 			if totalAbsence.GreaterThan(decimal.Zero) {
-				_, _ = s.db.Pool.Exec(ctx, `
+				_, err = dbtx.Exec(ctx, `
 					INSERT INTO accounting.journal_lines (
 						journal_entry_id, legal_entity_id, line_number, account_id,
 						description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
 					) VALUES ($1, $2, $3, $4, 'استقطاعات الغياب والإجازات غير مدفوعة الأجر', 'SAR', 0, $5, 0, $5)
 				`, jeID, run.LegalEntityID, lineNum, salExpenseAccID, totalAbsence)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create absence-deduction journal line: %w", err)
+				}
 				lineNum++
 			}
 
 			// 6. Transition Journal Entry to POSTED
-			_, _ = s.db.Pool.Exec(ctx, `
+			_, err = dbtx.Exec(ctx, `
 				UPDATE accounting.journal_entries
 				SET status = 'POSTED', posted_by = $1, posted_at = CURRENT_TIMESTAMP
 				WHERE id = $2
 			`, postedBy, jeID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to post payroll journal entry: %w", err)
+			}
 
 			// Link JE to payroll run
-			_, _ = s.repo.LinkRunJournalEntry(ctx, runID, jeID)
+			if _, err := s.repo.LinkRunJournalEntry(ctx, runID, jeID); err != nil {
+				return nil, fmt.Errorf("failed to link payroll journal entry: %w", err)
+			}
 		}
 	}
 
 	// 2. Generate immutable Payslips for each run employee
 	for idx, re := range runEmployees {
-		calcLines, _ := s.repo.ListCalculationLines(ctx, re.ID)
+		calcLines, err := s.repo.ListCalculationLines(ctx, re.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load payroll calculation lines: %w", err)
+		}
 		snapshot := map[string]any{
 			"basic":       re.BasicSalary.String(),
 			"housing":     re.HousingAllowance.String(),
@@ -548,14 +641,23 @@ func (s *PayrollService) PostRun(ctx context.Context, runID uuid.UUID, postedBy 
 			NetSalary:           re.NetSalary,
 			CalculationSnapshot: snapshot,
 		}
-		_, _ = s.repo.CreatePayslip(ctx, slip)
+		if _, err := s.repo.CreatePayslip(ctx, slip); err != nil {
+			return nil, fmt.Errorf("failed to create payslip: %w", err)
+		}
 
 		// 3. Mark any deducted loan installments as DEDUCTED
 		if re.LoanDeduction.GreaterThan(decimal.Zero) {
-			installments, _ := s.repo.ListPendingLoanInstallmentsByEmployee(ctx, re.EmployeeID, period.PaymentDueDate)
+			installments, err := s.repo.ListPendingLoanInstallmentsByEmployee(ctx, re.EmployeeID, period.PaymentDueDate)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load loan installments: %w", err)
+			}
 			for _, inst := range installments {
-				_, _ = s.repo.UpdateLoanInstallmentStatus(ctx, inst.ID, "DEDUCTED", &run.ID)
-				_, _ = s.repo.UpdateLoanRemainingBalance(ctx, inst.LoanID, inst.Amount)
+				if _, err := s.repo.UpdateLoanInstallmentStatus(ctx, inst.ID, "DEDUCTED", &run.ID); err != nil {
+					return nil, fmt.Errorf("failed to mark loan installment deducted: %w", err)
+				}
+				if _, err := s.repo.UpdateLoanRemainingBalance(ctx, inst.LoanID, inst.Amount); err != nil {
+					return nil, fmt.Errorf("failed to update employee loan balance: %w", err)
+				}
 			}
 		}
 	}
@@ -634,6 +736,26 @@ func (s *PayrollService) CreateLoan(
 	disbursementDate time.Time,
 	reason *string,
 ) (*domain.EmployeeLoan, error) {
+	var loan *domain.EmployeeLoan
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		loan, err = s.createLoan(txCtx, legalEntityID, employeeID, loanNumber, principal, monthlyInstallment, disbursementDate, reason)
+		return err
+	})
+	return loan, err
+}
+
+func (s *PayrollService) createLoan(
+	ctx context.Context,
+	legalEntityID, employeeID uuid.UUID,
+	loanNumber string,
+	principal, monthlyInstallment decimal.Decimal,
+	disbursementDate time.Time,
+	reason *string,
+) (*domain.EmployeeLoan, error) {
+	if principal.LessThanOrEqual(decimal.Zero) || monthlyInstallment.LessThanOrEqual(decimal.Zero) {
+		return nil, fmt.Errorf("principal and monthly installment must be greater than zero")
+	}
 	loan := domain.EmployeeLoan{
 		ID:                 uuid.New(),
 		LegalEntityID:      legalEntityID,
@@ -667,7 +789,9 @@ func (s *PayrollService) CreateLoan(
 			Amount:            monthlyInstallment,
 			Status:            "PENDING",
 		}
-		_, _ = s.repo.CreateLoanInstallment(ctx, inst)
+		if _, err := s.repo.CreateLoanInstallment(ctx, inst); err != nil {
+			return nil, fmt.Errorf("failed to create loan installment %d: %w", i, err)
+		}
 	}
 
 	return created, nil
@@ -714,7 +838,7 @@ func (s *PayrollService) CalculateEndOfService(
 		return nil, err
 	}
 
-	calcNum := fmt.Sprintf("EOS-%s-%d", employeeID.String()[:6], time.Now().Unix()%10000)
+	calcNum := identifiers.NewDocumentNumber("EOS", time.Now())
 	eos := domain.EndOfServiceCalculation{
 		ID:                    uuid.New(),
 		LegalEntityID:         legalEntityID,

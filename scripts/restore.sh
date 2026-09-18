@@ -1,86 +1,107 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# Saudi Enterprise ERP - Production Database Restore Utility
-# Restores logical dumps into PostgreSQL with SHA-256 verification
-# ==============================================================================
+# Restores a PostgreSQL custom-format archive produced by backup.sh.
 set -euo pipefail
+umask 077
 
 BACKUP_FILE="${1:-}"
 FORCE="${2:-}"
 
-if [ -z "${BACKUP_FILE}" ]; then
-    echo "Usage: $0 <path_to_backup_file> [--force]"
-    echo "Example: $0 /backups/erp_erp_db_20260918_020000.sql.gz --force"
+if [ -z "${BACKUP_FILE}" ] || [ ! -f "${BACKUP_FILE}" ]; then
+    echo "Usage: $0 <backup.dump[.enc]> [--force]" >&2
     exit 1
 fi
 
-if [ ! -f "${BACKUP_FILE}" ]; then
-    echo "Error: Backup file does not exist: ${BACKUP_FILE}"
-    exit 1
-fi
-
-echo "===================================================================="
-echo " Starting ERP Production Database Restoration"
-echo " Target File: ${BACKUP_FILE}"
-echo "===================================================================="
-
-# Check Checksum if available
 CHECKSUM_FILE="${BACKUP_FILE}.sha256"
-if [ -f "${CHECKSUM_FILE}" ]; then
-    echo " Verifying SHA-256 checksum..."
-    sha256sum -c "${CHECKSUM_FILE}"
-    echo " Checksum verified successfully."
-else
-    echo " Warning: No .sha256 file found for checksum verification."
+if [ ! -f "${CHECKSUM_FILE}" ]; then
+    echo "Error: required checksum file is missing: ${CHECKSUM_FILE}" >&2
+    exit 1
 fi
+sha256sum -c "${CHECKSUM_FILE}"
 
-# Decrypt if encrypted
 WORKING_FILE="${BACKUP_FILE}"
+TEMP_FILE=""
+cleanup() {
+    if [ -n "${TEMP_FILE}" ] && [ -f "${TEMP_FILE}" ]; then
+        rm -f -- "${TEMP_FILE}"
+    fi
+}
+trap cleanup EXIT
+
 if [[ "${BACKUP_FILE}" == *.enc ]]; then
     if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
-        echo "Error: Encrypted archive detected, but BACKUP_ENCRYPTION_KEY is not set."
+        echo "Error: BACKUP_ENCRYPTION_KEY is required for this encrypted backup." >&2
         exit 1
     fi
-    DECRYPTED_FILE="/tmp/$(basename "${BACKUP_FILE}" .enc)"
-    echo " Decrypting archive to ${DECRYPTED_FILE}..."
+    command -v openssl >/dev/null 2>&1 || { echo "Error: openssl is required for decryption." >&2; exit 1; }
+    TEMP_FILE="$(mktemp "${TMPDIR:-/tmp}/erp-restore.XXXXXX.dump")"
+    export BACKUP_ENCRYPTION_KEY
     openssl enc -d -aes-256-cbc -pbkdf2 \
         -in "${BACKUP_FILE}" \
-        -out "${DECRYPTED_FILE}" \
-        -pass pass:"${BACKUP_ENCRYPTION_KEY}"
-    WORKING_FILE="${DECRYPTED_FILE}"
+        -out "${TEMP_FILE}" \
+        -pass env:BACKUP_ENCRYPTION_KEY
+    WORKING_FILE="${TEMP_FILE}"
 fi
 
-# Safety Confirmation
 if [ "${FORCE}" != "--force" ]; then
-    read -rp "WARNING: This will overwrite the target database. Are you sure? (y/N): " CONFIRM
-    if [[ ! "${CONFIRM}" =~ ^[Yy]$ ]]; then
-        echo "Restoration cancelled by operator."
-        exit 0
-    fi
+    read -rp "WARNING: this recreates the target database. Continue? (y/N): " CONFIRM
+    [[ "${CONFIRM}" =~ ^[Yy]$ ]] || { echo "Restoration cancelled."; exit 0; }
 fi
 
+DB_HOST="${POSTGRES_HOST:-postgres}"
+DB_PORT="${POSTGRES_PORT:-5432}"
 DB_USER="${POSTGRES_USER:-erp_user}"
 DB_NAME="${POSTGRES_DB:-erp_db}"
-COMPOSE_FILE="$(dirname "$0")/../deployments/compose/docker-compose.prod.yml"
+COMPOSE_FILE="${COMPOSE_FILE:-$(dirname "$0")/../deployments/compose/docker-compose.prod.yml}"
+POSTGRES_SERVICE="${POSTGRES_SERVICE:-postgres}"
+MIGRATE_SERVICE="${MIGRATE_SERVICE:-erp-migrate}"
+POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-}"
 
-echo " Terminating open connections and rebuilding database ${DB_NAME}..."
-docker compose -f "${COMPOSE_FILE}" exec -T postgres psql -U "${DB_USER}" -d postgres << EOF
-SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}' AND pid <> pg_backend_pid();
-DROP DATABASE IF EXISTS ${DB_NAME};
-CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};
-EOF
-
-echo " Streaming backup into database..."
-gunzip -c "${WORKING_FILE}" | docker compose -f "${COMPOSE_FILE}" exec -T postgres psql -U "${DB_USER}" -d "${DB_NAME}"
-
-echo " Running schema migrations..."
-docker compose -f "${COMPOSE_FILE}" up erp-migrate
-
-# Cleanup decrypted temp file
-if [[ "${WORKING_FILE}" == /tmp/* ]]; then
-    rm -f "${WORKING_FILE}"
+if [[ ! "${DB_USER}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || [[ ! "${DB_NAME}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    echo "Error: POSTGRES_USER and POSTGRES_DB must be simple PostgreSQL identifiers." >&2
+    exit 1
 fi
 
-echo "===================================================================="
-echo " Restoration completed successfully at $(date +"%Y-%m-%d %H:%M:%S AST")"
-echo "===================================================================="
+TERMINATE_SQL="SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}' AND pid <> pg_backend_pid();"
+
+if [ -n "${POSTGRES_CONTAINER}" ]; then
+    docker exec "${POSTGRES_CONTAINER}" \
+        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="${TERMINATE_SQL}"
+    docker exec "${POSTGRES_CONTAINER}" \
+        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="DROP DATABASE IF EXISTS \"${DB_NAME}\";"
+    docker exec "${POSTGRES_CONTAINER}" \
+        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_USER}\";"
+    docker exec -i "${POSTGRES_CONTAINER}" \
+        pg_restore --username="${DB_USER}" --dbname="${DB_NAME}" --exit-on-error --no-owner < "${WORKING_FILE}"
+elif command -v psql >/dev/null 2>&1 && command -v pg_restore >/dev/null 2>&1; then
+    export PGPASSWORD="${POSTGRES_PASSWORD:-}"
+    psql --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" --dbname=postgres \
+        --set=ON_ERROR_STOP=1 --command="${TERMINATE_SQL}"
+    psql --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" --dbname=postgres \
+        --set=ON_ERROR_STOP=1 --command="DROP DATABASE IF EXISTS \"${DB_NAME}\";"
+    psql --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" --dbname=postgres \
+        --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_USER}\";"
+    pg_restore --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" \
+        --dbname="${DB_NAME}" --exit-on-error --no-owner "${WORKING_FILE}"
+elif command -v docker >/dev/null 2>&1; then
+    docker compose -f "${COMPOSE_FILE}" exec -T "${POSTGRES_SERVICE}" \
+        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="${TERMINATE_SQL}"
+    docker compose -f "${COMPOSE_FILE}" exec -T "${POSTGRES_SERVICE}" \
+        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="DROP DATABASE IF EXISTS \"${DB_NAME}\";"
+    docker compose -f "${COMPOSE_FILE}" exec -T "${POSTGRES_SERVICE}" \
+        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_USER}\";"
+    docker compose -f "${COMPOSE_FILE}" exec -T "${POSTGRES_SERVICE}" \
+        pg_restore --username="${DB_USER}" --dbname="${DB_NAME}" --exit-on-error --no-owner < "${WORKING_FILE}"
+else
+    echo "Error: PostgreSQL client tools or Docker are required." >&2
+    exit 1
+fi
+
+if [ "${RUN_MIGRATIONS_AFTER_RESTORE:-true}" = "true" ]; then
+    command -v docker >/dev/null 2>&1 || {
+        echo "Error: Docker is required to run post-restore migrations. Set RUN_MIGRATIONS_AFTER_RESTORE=false only for a controlled drill." >&2
+        exit 1
+    }
+    docker compose -f "${COMPOSE_FILE}" run --rm "${MIGRATE_SERVICE}"
+fi
+
+echo "Restore completed successfully: ${DB_NAME}"

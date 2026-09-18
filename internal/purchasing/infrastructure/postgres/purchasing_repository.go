@@ -46,11 +46,11 @@ func (r *PurchasingRepository) CreatePurchaseRequest(ctx context.Context, pr *do
 			}
 			return time.Time{}
 		}()),
-		Status:            string(pr.Status),
-		Purpose:           toPgTextPtr(pr.Purpose),
-		Notes:             toPgTextPtr(pr.Notes),
-		EstimatedTotal:    toPgNumeric(pr.EstimatedTotal),
-		CurrencyCode:      pr.CurrencyCode,
+		Status:         string(pr.Status),
+		Purpose:        toPgTextPtr(pr.Purpose),
+		Notes:          toPgTextPtr(pr.Notes),
+		EstimatedTotal: toPgNumeric(pr.EstimatedTotal),
+		CurrencyCode:   pr.CurrencyCode,
 	})
 	if err != nil {
 		return nil, err
@@ -378,32 +378,32 @@ func (r *PurchasingRepository) AwardSupplierQuoteLine(ctx context.Context, lineI
 func (r *PurchasingRepository) CreatePurchaseOrder(ctx context.Context, po *domain.PurchaseOrder) (*domain.PurchaseOrder, error) {
 	q := r.queries(ctx)
 	row, err := q.CreatePurchaseOrder(ctx, sqlc.CreatePurchaseOrderParams{
-		ID:                   toPgUUID(po.ID),
-		LegalEntityID:        toPgUUID(po.LegalEntityID),
-		PoNumber:             po.PONumber,
-		PurchaseRequestID:    toPgUUIDPtr(po.PurchaseRequestID),
-		RfqID:                toPgUUIDPtr(po.RFQID),
-		SupplierQuoteID:      toPgUUIDPtr(po.SupplierQuoteID),
-		SupplierID:           toPgUUID(po.SupplierID),
-		OrderDate:            toPgDate(po.OrderDate),
+		ID:                toPgUUID(po.ID),
+		LegalEntityID:     toPgUUID(po.LegalEntityID),
+		PoNumber:          po.PONumber,
+		PurchaseRequestID: toPgUUIDPtr(po.PurchaseRequestID),
+		RfqID:             toPgUUIDPtr(po.RFQID),
+		SupplierQuoteID:   toPgUUIDPtr(po.SupplierQuoteID),
+		SupplierID:        toPgUUID(po.SupplierID),
+		OrderDate:         toPgDate(po.OrderDate),
 		ExpectedDeliveryDate: toPgDate(func() time.Time {
 			if po.ExpectedDeliveryDate != nil {
 				return *po.ExpectedDeliveryDate
 			}
 			return time.Time{}
 		}()),
-		PaymentTermsID:       toPgUUIDPtr(po.PaymentTermsID),
-		DeliveryWarehouseID:  toPgUUIDPtr(po.DeliveryWarehouseID),
-		CurrencyCode:         po.CurrencyCode,
-		ExchangeRate:         toPgNumeric(po.ExchangeRate),
-		Subtotal:             toPgNumeric(po.Subtotal),
-		DiscountAmount:       toPgNumeric(po.DiscountAmount),
-		TaxableAmount:        toPgNumeric(po.TaxableAmount),
-		TaxAmount:            toPgNumeric(po.TaxAmount),
-		TotalAmount:          toPgNumeric(po.TotalAmount),
-		Status:               string(po.Status),
-		Notes:                toPgTextPtr(po.Notes),
-		CreatedByUserID:      toPgUUIDPtr(po.CreatedByUserID),
+		PaymentTermsID:      toPgUUIDPtr(po.PaymentTermsID),
+		DeliveryWarehouseID: toPgUUIDPtr(po.DeliveryWarehouseID),
+		CurrencyCode:        po.CurrencyCode,
+		ExchangeRate:        toPgNumeric(po.ExchangeRate),
+		Subtotal:            toPgNumeric(po.Subtotal),
+		DiscountAmount:      toPgNumeric(po.DiscountAmount),
+		TaxableAmount:       toPgNumeric(po.TaxableAmount),
+		TaxAmount:           toPgNumeric(po.TaxAmount),
+		TotalAmount:         toPgNumeric(po.TotalAmount),
+		Status:              string(po.Status),
+		Notes:               toPgTextPtr(po.Notes),
+		CreatedByUserID:     toPgUUIDPtr(po.CreatedByUserID),
 	})
 	if err != nil {
 		return nil, err
@@ -517,7 +517,7 @@ func (r *PurchasingRepository) UpdatePurchaseOrderStatus(ctx context.Context, id
 func (r *PurchasingRepository) ApprovePurchaseOrder(ctx context.Context, id uuid.UUID, approverID uuid.UUID) (*domain.PurchaseOrder, error) {
 	q := r.queries(ctx)
 	row, err := q.ApprovePurchaseOrder(ctx, sqlc.ApprovePurchaseOrderParams{
-		ID:                toPgUUID(id),
+		ID:               toPgUUID(id),
 		ApprovedByUserID: toPgUUID(approverID),
 	})
 	if err != nil {

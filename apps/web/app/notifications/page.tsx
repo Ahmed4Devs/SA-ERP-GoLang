@@ -1,4 +1,5 @@
-import { NotificationsView } from "@/features/notifications/notifications-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function NotificationsPage() {
-  return <NotificationsView />;
+  return <ModuleAPIView titleAr="الإشعارات" titleEn="Notifications" descriptionAr="الإشعارات وملخصها وعدّاد غير المقروء من الخدمة الفعلية." descriptionEn="Live notifications, summary, and unread count." resources={moduleResources.notifications} />;
 }

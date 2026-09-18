@@ -51,4 +51,3 @@ func (m *Module) SeedDefaultCOA(ctx context.Context, legalEntityID uuid.UUID) er
 	_, err := m.pool.Exec(ctx, "SELECT accounting.seed_default_coa($1)", legalEntityID)
 	return err
 }
-

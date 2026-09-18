@@ -17,7 +17,7 @@ Before initiating any restore procedure:
    ```
 2. **Verify Backup Integrity**: Validate the SHA-256 checksum against the `.sha256` manifest:
    ```bash
-   sha256sum -c erp_erp_db_20260918_020000.sql.gz.sha256
+   sha256sum -c erp_erp_db_20260918_020000.dump.sha256
    ```
 3. **Backup Current Broken State**: Take a snapshot of the damaged database state before overwriting, in case forensic analysis is required.
 
@@ -26,33 +26,20 @@ Before initiating any restore procedure:
 ## 3. Disaster Recovery Procedures
 
 ### Scenario A: Logical Restore from Dump Archive
-Use this procedure to restore from a standard unencrypted or decrypted `.sql.gz` or `.dump` file:
+Use the tested restore utility for an unencrypted or encrypted custom-format dump:
 
 ```bash
-# Set parameters
-RESTORE_FILE="/backups/erp_erp_db_20260918_020000.sql.gz"
-
-# 1. Terminate open connections and recreate target database
-docker compose -f deployments/compose/docker-compose.prod.yml exec -T postgres psql -U erp_user -d postgres << 'EOF'
-SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'erp_db' AND pid <> pg_backend_pid();
-DROP DATABASE IF EXISTS erp_db;
-CREATE DATABASE erp_db OWNER erp_user;
-EOF
-
-# 2. Stream and decompress backup into PostgreSQL
-gunzip -c "${RESTORE_FILE}" | docker compose -f deployments/compose/docker-compose.prod.yml exec -T postgres psql -U erp_user -d erp_db
-
-# 3. Re-run Goose migrations to apply any newer incremental changes
-docker compose -f deployments/compose/docker-compose.prod.yml up erp-migrate
+./scripts/restore.sh /backups/erp_erp_db_20260918_020000.dump --force
 ```
+
+The utility verifies the required checksum, recreates the target database,
+restores through `pg_restore --exit-on-error --no-owner`, then runs migrations.
 
 ### Scenario B: Decrypting an Encrypted Backup
 If the backup was encrypted with AES-256-CBC:
 ```bash
-openssl enc -d -aes-256-cbc -pbkdf2 \
-    -in /backups/erp_erp_db_20260918_020000.sql.gz.enc \
-    -out /backups/erp_erp_db_20260918_020000.sql.gz \
-    -pass pass:"${BACKUP_ENCRYPTION_KEY}"
+export BACKUP_ENCRYPTION_KEY='read-from-your-secret-manager'
+./scripts/restore.sh /backups/erp_erp_db_20260918_020000.dump.enc --force
 ```
 
 ### Scenario C: Point-In-Time Recovery (PITR)

@@ -2,12 +2,16 @@ package observability
 
 import (
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+var uuidPathSegment = regexp.MustCompile(`(?i)/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}`)
 
 type Metrics struct {
 	registry         *prometheus.Registry
@@ -74,9 +78,12 @@ func (m *Metrics) HTTPMetricsMiddleware(next http.Handler) http.Handler {
 		statusStr := strconv.Itoa(rw.statusCode)
 
 		// Sanitize path to prevent high cardinality
-		path := r.URL.Path
+		path := chi.RouteContext(r.Context()).RoutePattern()
 		if path == "" {
-			path = "/"
+			path = uuidPathSegment.ReplaceAllString(r.URL.Path, "/{id}")
+			if path == "" {
+				path = "/"
+			}
 		}
 
 		m.requestsTotal.WithLabelValues(r.Method, path, statusStr).Inc()

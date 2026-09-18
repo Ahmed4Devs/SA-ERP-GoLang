@@ -64,33 +64,33 @@ const (
 )
 
 type StockMovement struct {
-	ID               uuid.UUID       `json:"id"`
-	LegalEntityID    uuid.UUID       `json:"legal_entity_id"`
-	MovementNumber   string          `json:"movement_number"`
-	MovementType     MovementType    `json:"movement_type"`
-	ItemID           uuid.UUID       `json:"item_id"`
-	SKUID            *uuid.UUID      `json:"sku_id,omitempty"`
-	WarehouseID      uuid.UUID       `json:"warehouse_id"`
-	BinID            uuid.UUID       `json:"bin_id"`
-	LotNumber        *string         `json:"lot_number,omitempty"`
-	SerialNumber     *string         `json:"serial_number,omitempty"`
-	Quantity         decimal.Decimal `json:"quantity"` // Positive for IN, Negative for OUT
-	UOMID            uuid.UUID       `json:"uom_id"`
-	UnitCost         decimal.Decimal `json:"unit_cost"`
-	TotalCost        decimal.Decimal `json:"total_cost"`
-	SourceDocType    *string         `json:"source_doc_type,omitempty"`
-	SourceDocID      *uuid.UUID      `json:"source_doc_id,omitempty"`
-	SourceDocLineID  *uuid.UUID      `json:"source_doc_line_id,omitempty"`
-	OccurredAt       time.Time       `json:"occurred_at"`
-	CreatedBy        uuid.UUID       `json:"created_by"`
-	CreatedAt        time.Time       `json:"created_at"`
-	ItemCode         string          `json:"item_code,omitempty"`
-	ItemNameEn       string          `json:"item_name_en,omitempty"`
-	ItemNameAr       string          `json:"item_name_ar,omitempty"`
-	WarehouseCode    string          `json:"warehouse_code,omitempty"`
-	WarehouseNameAr  string          `json:"warehouse_name_ar,omitempty"`
-	BinCode          string          `json:"bin_code,omitempty"`
-	UOMCode          string          `json:"uom_code,omitempty"`
+	ID              uuid.UUID       `json:"id"`
+	LegalEntityID   uuid.UUID       `json:"legal_entity_id"`
+	MovementNumber  string          `json:"movement_number"`
+	MovementType    MovementType    `json:"movement_type"`
+	ItemID          uuid.UUID       `json:"item_id"`
+	SKUID           *uuid.UUID      `json:"sku_id,omitempty"`
+	WarehouseID     uuid.UUID       `json:"warehouse_id"`
+	BinID           uuid.UUID       `json:"bin_id"`
+	LotNumber       *string         `json:"lot_number,omitempty"`
+	SerialNumber    *string         `json:"serial_number,omitempty"`
+	Quantity        decimal.Decimal `json:"quantity"` // Positive for IN, Negative for OUT
+	UOMID           uuid.UUID       `json:"uom_id"`
+	UnitCost        decimal.Decimal `json:"unit_cost"`
+	TotalCost       decimal.Decimal `json:"total_cost"`
+	SourceDocType   *string         `json:"source_doc_type,omitempty"`
+	SourceDocID     *uuid.UUID      `json:"source_doc_id,omitempty"`
+	SourceDocLineID *uuid.UUID      `json:"source_doc_line_id,omitempty"`
+	OccurredAt      time.Time       `json:"occurred_at"`
+	CreatedBy       uuid.UUID       `json:"created_by"`
+	CreatedAt       time.Time       `json:"created_at"`
+	ItemCode        string          `json:"item_code,omitempty"`
+	ItemNameEn      string          `json:"item_name_en,omitempty"`
+	ItemNameAr      string          `json:"item_name_ar,omitempty"`
+	WarehouseCode   string          `json:"warehouse_code,omitempty"`
+	WarehouseNameAr string          `json:"warehouse_name_ar,omitempty"`
+	BinCode         string          `json:"bin_code,omitempty"`
+	UOMCode         string          `json:"uom_code,omitempty"`
 }
 
 type StockKey struct {
@@ -214,23 +214,23 @@ const (
 )
 
 type StockAdjustment struct {
-	ID               uuid.UUID              `json:"id"`
-	LegalEntityID    uuid.UUID              `json:"legal_entity_id"`
-	AdjustmentNumber string                 `json:"adjustment_number"`
-	WarehouseID      uuid.UUID              `json:"warehouse_id"`
-	AdjustmentType   AdjustmentType         `json:"adjustment_type"`
-	ReasonCode       string                 `json:"reason_code"`
-	Status           AdjustmentStatus       `json:"status"`
-	AdjustmentDate   time.Time              `json:"adjustment_date"`
-	PostedAt         *time.Time             `json:"posted_at,omitempty"`
-	PostedBy         *uuid.UUID             `json:"posted_by,omitempty"`
-	Notes            string                 `json:"notes,omitempty"`
-	CreatedBy        uuid.UUID              `json:"created_by"`
-	CreatedAt        time.Time              `json:"created_at"`
-	UpdatedAt        time.Time              `json:"updated_at"`
-	WarehouseCode    string                 `json:"warehouse_code,omitempty"`
-	WarehouseNameAr  string                 `json:"warehouse_name_ar,omitempty"`
-	Lines            []StockAdjustmentLine  `json:"lines,omitempty"`
+	ID               uuid.UUID             `json:"id"`
+	LegalEntityID    uuid.UUID             `json:"legal_entity_id"`
+	AdjustmentNumber string                `json:"adjustment_number"`
+	WarehouseID      uuid.UUID             `json:"warehouse_id"`
+	AdjustmentType   AdjustmentType        `json:"adjustment_type"`
+	ReasonCode       string                `json:"reason_code"`
+	Status           AdjustmentStatus      `json:"status"`
+	AdjustmentDate   time.Time             `json:"adjustment_date"`
+	PostedAt         *time.Time            `json:"posted_at,omitempty"`
+	PostedBy         *uuid.UUID            `json:"posted_by,omitempty"`
+	Notes            string                `json:"notes,omitempty"`
+	CreatedBy        uuid.UUID             `json:"created_by"`
+	CreatedAt        time.Time             `json:"created_at"`
+	UpdatedAt        time.Time             `json:"updated_at"`
+	WarehouseCode    string                `json:"warehouse_code,omitempty"`
+	WarehouseNameAr  string                `json:"warehouse_name_ar,omitempty"`
+	Lines            []StockAdjustmentLine `json:"lines,omitempty"`
 }
 
 type StockAdjustmentLine struct {

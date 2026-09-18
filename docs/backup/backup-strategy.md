@@ -12,7 +12,7 @@ Under ZATCA (Zakat, Tax and Customs Authority) regulations and the Saudi Electro
 
 ```mermaid
 graph TD
-    DB[(PostgreSQL 18 Primary)] -->|Daily pg_dump| FullDump[Encrypted Full Dump .sql.gz.enc]
+    DB[(PostgreSQL 18 Primary)] -->|Daily pg_dump custom format| FullDump[Encrypted Full Dump .dump.enc]
     DB -->|Continuous pg_receivewal| WALArchive[WAL Archive Stream]
     FullDump --> S3Local[Primary Storage /backups]
     WALArchive --> S3Local
@@ -26,13 +26,13 @@ graph TD
 2. **Daily Full Logical Backup**:
    - Automated `pg_dump` executed every midnight at **02:00 AST (Asia/Riyadh)**.
    - Target RTO (Recovery Time Objective): `< 30 minutes`.
-3. **Weekly Differential / System Snapshot**:
-   - Snapshot of persistent storage volumes (`pgdata`, Redis state).
+3. **Weekly Storage Snapshot**:
+   - Snapshot of persistent PostgreSQL and document-storage volumes.
 
 ---
 
 ## 3. Security, Encryption & Integrity
-- **Compression**: `gzip -9` compression reduces storage footprint by ~75%.
+- **Compression**: PostgreSQL custom-format compression (`pg_dump --format=custom --compress=9`) keeps the archive compatible with `pg_restore` and supports selective/parallel restore.
 - **Encryption**: AES-256 encryption via OpenSSL or GPG using dual-key split custody before writing to disk or cloud storage.
 - **Integrity**: Every backup archive generates a companion `.sha256` checksum file to guarantee that archives have not suffered bitrot or tampering.
 
@@ -54,3 +54,8 @@ Backups are orchestrated via `scripts/backup.sh` scheduled via cron or systemd t
 # Example crontab entry for 02:00 AM Riyadh time
 0 2 * * * /opt/erp/scripts/backup.sh >> /var/log/erp-backup.log 2>&1
 ```
+
+The script creates `erp_<database>_<timestamp>.dump` (or `.dump.enc` when
+`BACKUP_ENCRYPTION_KEY` is set) and a checksum named after the final artifact,
+for example `erp_erp_db_20260918_020000.dump.enc.sha256`. A backup is not
+considered valid until `sha256sum -c` succeeds and a restore drill has passed.

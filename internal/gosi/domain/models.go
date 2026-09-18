@@ -24,22 +24,22 @@ type ContributionRule struct {
 // RuleVersion represents an effective-dated version of a contribution rule with specific rates.
 // Regulatory rates MUST come from versioned database rules — never hard-coded.
 type RuleVersion struct {
-	ID               uuid.UUID
-	RuleID           uuid.UUID
-	LegalEntityID    uuid.UUID
-	VersionNumber    int
-	EffectiveFrom    time.Time
-	EffectiveTo      *time.Time
-	NationalityScope string // SAUDI, NON_SAUDI, ALL
-	EmployeeRate     decimal.Decimal
-	EmployerRate     decimal.Decimal
-	MinimumBasis     decimal.Decimal
-	MaximumBasis     decimal.Decimal
+	ID                uuid.UUID
+	RuleID            uuid.UUID
+	LegalEntityID     uuid.UUID
+	VersionNumber     int
+	EffectiveFrom     time.Time
+	EffectiveTo       *time.Time
+	NationalityScope  string // SAUDI, NON_SAUDI, ALL
+	EmployeeRate      decimal.Decimal
+	EmployerRate      decimal.Decimal
+	MinimumBasis      decimal.Decimal
+	MaximumBasis      decimal.Decimal
 	CalculationConfig map[string]any
-	LegalReference   string
-	Notes            string
-	IsActive         bool
-	CreatedAt        time.Time
+	LegalReference    string
+	Notes             string
+	IsActive          bool
+	CreatedAt         time.Time
 
 	// Joined fields from contribution_rules
 	RuleCode   string
@@ -49,26 +49,26 @@ type RuleVersion struct {
 
 // InsuranceProfile represents an employee's GOSI registration.
 type InsuranceProfile struct {
-	ID                       uuid.UUID
-	LegalEntityID            uuid.UUID
-	EmployeeID               uuid.UUID
-	GosiNumber               string
-	RegistrationDate         *time.Time
-	DeregistrationDate       *time.Time
-	NationalityScope         string // SAUDI or NON_SAUDI
-	IsActive                 bool
+	ID                        uuid.UUID
+	LegalEntityID             uuid.UUID
+	EmployeeID                uuid.UUID
+	GosiNumber                string
+	RegistrationDate          *time.Time
+	DeregistrationDate        *time.Time
+	NationalityScope          string // SAUDI or NON_SAUDI
+	IsActive                  bool
 	ContributionBasisOverride *decimal.Decimal
-	Notes                    string
-	CreatedAt                time.Time
-	UpdatedAt                time.Time
+	Notes                     string
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
 
 	// Joined fields from hr.employees
-	EmployeeNumber     string
-	FirstNameEn        string
-	LastNameEn         string
-	FirstNameAr        string
-	LastNameAr         string
-	NationalityCode    string
+	EmployeeNumber  string
+	FirstNameEn     string
+	LastNameEn      string
+	FirstNameAr     string
+	LastNameAr      string
+	NationalityCode string
 }
 
 // ContributionCalculation represents a monthly contribution calculation for an employee.
@@ -98,19 +98,19 @@ type ContributionCalculation struct {
 
 // CalculationLine represents a single rule-application line within a contribution calculation.
 type CalculationLine struct {
-	ID              uuid.UUID
-	CalculationID   uuid.UUID
-	RuleVersionID   uuid.UUID
-	RuleCode        string
-	RuleNameEn      string
-	RuleNameAr      string
-	BasisAmount     decimal.Decimal
-	EmployeeRate    decimal.Decimal
-	EmployerRate    decimal.Decimal
-	EmployeeAmount  decimal.Decimal
-	EmployerAmount  decimal.Decimal
-	FormulaNote     string
-	CreatedAt       time.Time
+	ID             uuid.UUID
+	CalculationID  uuid.UUID
+	RuleVersionID  uuid.UUID
+	RuleCode       string
+	RuleNameEn     string
+	RuleNameAr     string
+	BasisAmount    decimal.Decimal
+	EmployeeRate   decimal.Decimal
+	EmployerRate   decimal.Decimal
+	EmployeeAmount decimal.Decimal
+	EmployerAmount decimal.Decimal
+	FormulaNote    string
+	CreatedAt      time.Time
 }
 
 // ExportBatch represents a monthly GOSI export batch.

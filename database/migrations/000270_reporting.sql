@@ -25,7 +25,6 @@ SELECT
 FROM accounting.accounts a
 LEFT JOIN accounting.journal_lines jl ON jl.account_id = a.id
 LEFT JOIN accounting.journal_entries je ON je.id = jl.journal_entry_id AND je.status = 'POSTED'
-WHERE a.allow_posting = true
 GROUP BY a.legal_entity_id, a.id, a.code, a.name_en, a.name_ar, a.account_type, a.normal_balance;
 
 -- 2. General Ledger View

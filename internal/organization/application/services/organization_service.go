@@ -11,12 +11,12 @@ import (
 )
 
 type OrganizationService struct {
-	orgRepo        ports.OrganizationRepository
+	orgRepo         ports.OrganizationRepository
 	legalEntityRepo ports.LegalEntityRepository
-	branchRepo     ports.BranchRepository
-	deptRepo       ports.DepartmentRepository
-	costCenterRepo ports.CostCenterRepository
-	addrRepo       ports.AddressRepository
+	branchRepo      ports.BranchRepository
+	deptRepo        ports.DepartmentRepository
+	costCenterRepo  ports.CostCenterRepository
+	addrRepo        ports.AddressRepository
 }
 
 func NewOrganizationService(
@@ -28,12 +28,12 @@ func NewOrganizationService(
 	addrRepo ports.AddressRepository,
 ) ports.OrganizationService {
 	return &OrganizationService{
-		orgRepo:        orgRepo,
+		orgRepo:         orgRepo,
 		legalEntityRepo: legalEntityRepo,
-		branchRepo:     branchRepo,
-		deptRepo:       deptRepo,
-		costCenterRepo: costCenterRepo,
-		addrRepo:       addrRepo,
+		branchRepo:      branchRepo,
+		deptRepo:        deptRepo,
+		costCenterRepo:  costCenterRepo,
+		addrRepo:        addrRepo,
 	}
 }
 

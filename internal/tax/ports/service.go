@@ -11,19 +11,19 @@ import (
 )
 
 type PostTaxTransactionRequest struct {
-	LegalEntityID      uuid.UUID                  `json:"legal_entity_id"`
-	SourceModule       string                     `json:"source_module"`
-	SourceType         string                     `json:"source_type"`
-	SourceID           uuid.UUID                  `json:"source_id"`
-	TransactionNumber  string                     `json:"transaction_number"`
-	TransactionDate    time.Time                  `json:"transaction_date"`
-	TransactionType    string                     `json:"transaction_type"` // OUTPUT, INPUT
-	PartnerID          *uuid.UUID                 `json:"partner_id,omitempty"`
-	PartnerName        *string                    `json:"partner_name,omitempty"`
-	PartnerTaxNumber   *string                    `json:"partner_tax_number,omitempty"`
-	JournalEntryID     *uuid.UUID                 `json:"journal_entry_id,omitempty"`
-	CreatedBy          *uuid.UUID                 `json:"created_by,omitempty"`
-	Lines              []domain.TaxTransactionLine `json:"lines"`
+	LegalEntityID     uuid.UUID                   `json:"legal_entity_id"`
+	SourceModule      string                      `json:"source_module"`
+	SourceType        string                      `json:"source_type"`
+	SourceID          uuid.UUID                   `json:"source_id"`
+	TransactionNumber string                      `json:"transaction_number"`
+	TransactionDate   time.Time                   `json:"transaction_date"`
+	TransactionType   string                      `json:"transaction_type"` // OUTPUT, INPUT
+	PartnerID         *uuid.UUID                  `json:"partner_id,omitempty"`
+	PartnerName       *string                     `json:"partner_name,omitempty"`
+	PartnerTaxNumber  *string                     `json:"partner_tax_number,omitempty"`
+	JournalEntryID    *uuid.UUID                  `json:"journal_entry_id,omitempty"`
+	CreatedBy         *uuid.UUID                  `json:"created_by,omitempty"`
+	Lines             []domain.TaxTransactionLine `json:"lines"`
 }
 
 type CalculateTaxRequest struct {

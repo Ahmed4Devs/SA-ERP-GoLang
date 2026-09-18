@@ -273,7 +273,7 @@ LEFT JOIN (
       AND ($2::DATE IS NULL OR je.accounting_date >= $2::DATE)
       AND ($3::DATE IS NULL OR je.accounting_date <= $3::DATE)
 ) l ON l.account_id = a.id
-WHERE a.legal_entity_id = $1 AND a.allow_posting = true
+WHERE a.legal_entity_id = $1
 GROUP BY a.id, a.code, a.name_en, a.name_ar, a.account_type, a.normal_balance
 ORDER BY a.code ASC
 `

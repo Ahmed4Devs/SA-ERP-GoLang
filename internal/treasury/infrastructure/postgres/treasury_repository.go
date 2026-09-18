@@ -129,18 +129,23 @@ func (r *treasuryRepository) CreateReceipt(ctx context.Context, rc *domain.Recei
 		rc.ID = uuid.New()
 	}
 	row, err := r.q.CreateTreasuryReceipt(ctx, sqlc.CreateTreasuryReceiptParams{
-		ID:                toPgUUID(rc.ID),
-		LegalEntityID:     toPgUUID(rc.LegalEntityID),
-		ReceiptNumber:     rc.ReceiptNumber,
-		CashAccountID:     toPgUUID(rc.CashAccountID),
-		ReceiptDate:       toPgDate(rc.ReceiptDate),
-		ReceiptType:       string(rc.ReceiptType),
-		ReceivedFrom:      rc.ReceivedFrom,
-		Amount:            toPgNumeric(rc.Amount),
-		CurrencyCode:      rc.CurrencyCode,
-		PaymentMethod:     string(rc.PaymentMethod),
-		ChequeNumber:      toPgTextPtr(rc.ChequeNumber),
-		ChequeDate:        toPgDate(func() time.Time { if rc.ChequeDate != nil { return *rc.ChequeDate }; return time.Time{} }()),
+		ID:            toPgUUID(rc.ID),
+		LegalEntityID: toPgUUID(rc.LegalEntityID),
+		ReceiptNumber: rc.ReceiptNumber,
+		CashAccountID: toPgUUID(rc.CashAccountID),
+		ReceiptDate:   toPgDate(rc.ReceiptDate),
+		ReceiptType:   string(rc.ReceiptType),
+		ReceivedFrom:  rc.ReceivedFrom,
+		Amount:        toPgNumeric(rc.Amount),
+		CurrencyCode:  rc.CurrencyCode,
+		PaymentMethod: string(rc.PaymentMethod),
+		ChequeNumber:  toPgTextPtr(rc.ChequeNumber),
+		ChequeDate: toPgDate(func() time.Time {
+			if rc.ChequeDate != nil {
+				return *rc.ChequeDate
+			}
+			return time.Time{}
+		}()),
 		ReferenceNumber:   toPgTextPtr(rc.ReferenceNumber),
 		Description:       toPgTextPtr(rc.Description),
 		Status:            string(rc.Status),

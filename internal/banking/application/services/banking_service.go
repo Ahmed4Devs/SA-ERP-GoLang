@@ -9,6 +9,7 @@ import (
 	"erp/internal/banking/domain"
 	"erp/internal/banking/ports"
 	"erp/internal/platform/database"
+	"erp/internal/platform/identifiers"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -90,7 +91,7 @@ func (s *bankingService) ImportBankStatement(ctx context.Context, stmt *domain.S
 		return nil, fmt.Errorf("bank_account_id is required")
 	}
 	if stmt.StatementNumber == "" {
-		stmt.StatementNumber = fmt.Sprintf("STMT-%d-%04d", time.Now().Year(), time.Now().UnixNano()%10000)
+		stmt.StatementNumber = identifiers.NewDocumentNumber("STMT", time.Now())
 	}
 	if stmt.StatementDate.IsZero() {
 		stmt.StatementDate = time.Now()
@@ -167,7 +168,7 @@ func (s *bankingService) CreateReconciliation(ctx context.Context, recon *domain
 		return nil, fmt.Errorf("bank_account_id is required")
 	}
 	if recon.ReconciliationNumber == "" {
-		recon.ReconciliationNumber = fmt.Sprintf("REC-%d-%04d", time.Now().Year(), time.Now().UnixNano()%10000)
+		recon.ReconciliationNumber = identifiers.NewDocumentNumber("REC", time.Now())
 	}
 	if recon.AsOfDate.IsZero() {
 		recon.AsOfDate = time.Now()

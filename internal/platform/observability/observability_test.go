@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"erp/internal/platform/config"
 	"erp/internal/platform/observability"
 )
 
@@ -19,7 +20,7 @@ func TestObservabilityLoggingAndTracing(t *testing.T) {
 		t.Error("expected extracted logger to not be nil")
 	}
 
-	tp, err := observability.InitTracer("test-service")
+	tp, err := observability.InitTracer(context.Background(), "test-service", "1.0.0", config.TelemetryConfig{})
 	if err != nil {
 		t.Fatalf("failed to initialize tracer: %v", err)
 	}

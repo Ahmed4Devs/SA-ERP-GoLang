@@ -9,22 +9,22 @@ import (
 
 // AssetCategory represents an asset class/category with depreciation rules and account mappings.
 type AssetCategory struct {
-	ID                              uuid.UUID
-	LegalEntityID                   uuid.UUID
-	Code                            string
-	NameEn                          string
-	NameAr                          string
-	DescriptionEn                   string
-	DescriptionAr                   string
-	DepreciationMethod              string // STRAIGHT_LINE
-	UsefulLifeMonths                int
-	SalvageValueRate                decimal.Decimal
-	AssetAccountID                  *uuid.UUID
+	ID                               uuid.UUID
+	LegalEntityID                    uuid.UUID
+	Code                             string
+	NameEn                           string
+	NameAr                           string
+	DescriptionEn                    string
+	DescriptionAr                    string
+	DepreciationMethod               string // STRAIGHT_LINE
+	UsefulLifeMonths                 int
+	SalvageValueRate                 decimal.Decimal
+	AssetAccountID                   *uuid.UUID
 	AccumulatedDepreciationAccountID *uuid.UUID
-	DepreciationExpenseAccountID    *uuid.UUID
-	IsActive                        bool
-	CreatedAt                       time.Time
-	UpdatedAt                       time.Time
+	DepreciationExpenseAccountID     *uuid.UUID
+	IsActive                         bool
+	CreatedAt                        time.Time
+	UpdatedAt                        time.Time
 }
 
 // AssetLocation represents a physical premises, building, floor, or room.
@@ -81,15 +81,15 @@ type Asset struct {
 	UpdatedAt               time.Time
 
 	// Joined fields
-	CategoryCode                    string
-	CategoryNameEn                  string
-	CategoryNameAr                  string
-	DepreciationExpenseAccountID    *uuid.UUID
+	CategoryCode                     string
+	CategoryNameEn                   string
+	CategoryNameAr                   string
+	DepreciationExpenseAccountID     *uuid.UUID
 	AccumulatedDepreciationAccountID *uuid.UUID
-	AssetAccountID                  *uuid.UUID
-	LocationCode                    string
-	LocationNameEn                  string
-	LocationNameAr                  string
+	AssetAccountID                   *uuid.UUID
+	LocationCode                     string
+	LocationNameEn                   string
+	LocationNameAr                   string
 }
 
 // AssetAssignment represents custody assignment to an employee, department, or project.
@@ -175,19 +175,19 @@ type DepreciationLine struct {
 
 // Transfer records asset relocation or custodian change.
 type Transfer struct {
-	ID               uuid.UUID
-	LegalEntityID    uuid.UUID
-	AssetID          uuid.UUID
-	TransferNumber   string
-	TransferDate     time.Time
-	FromLocationID   *uuid.UUID
-	ToLocationID     uuid.UUID
-	FromEmployeeID   *uuid.UUID
-	ToEmployeeID     *uuid.UUID
-	Reason           string
-	Status           string
-	TransferredBy    *uuid.UUID
-	CreatedAt        time.Time
+	ID             uuid.UUID
+	LegalEntityID  uuid.UUID
+	AssetID        uuid.UUID
+	TransferNumber string
+	TransferDate   time.Time
+	FromLocationID *uuid.UUID
+	ToLocationID   uuid.UUID
+	FromEmployeeID *uuid.UUID
+	ToEmployeeID   *uuid.UUID
+	Reason         string
+	Status         string
+	TransferredBy  *uuid.UUID
+	CreatedAt      time.Time
 
 	// Joined fields
 	FromLocationCode string
@@ -200,48 +200,48 @@ type Transfer struct {
 
 // Impairment represents an extraordinary carrying value reduction.
 type Impairment struct {
-	ID                    uuid.UUID
-	LegalEntityID         uuid.UUID
-	AssetID               uuid.UUID
-	ImpairmentNumber      string
-	ImpairmentDate        time.Time
-	CarryingAmountBefore  decimal.Decimal
-	RecoverableAmount     decimal.Decimal
-	ImpairmentLoss        decimal.Decimal
-	Reason                string
-	JournalEntryID        *uuid.UUID
-	CreatedBy             *uuid.UUID
-	CreatedAt             time.Time
+	ID                   uuid.UUID
+	LegalEntityID        uuid.UUID
+	AssetID              uuid.UUID
+	ImpairmentNumber     string
+	ImpairmentDate       time.Time
+	CarryingAmountBefore decimal.Decimal
+	RecoverableAmount    decimal.Decimal
+	ImpairmentLoss       decimal.Decimal
+	Reason               string
+	JournalEntryID       *uuid.UUID
+	CreatedBy            *uuid.UUID
+	CreatedAt            time.Time
 }
 
 // Disposal represents retirement, scrap, or sale of an asset.
 type Disposal struct {
-	ID                               uuid.UUID
-	LegalEntityID                    uuid.UUID
-	AssetID                          uuid.UUID
-	DisposalNumber                   string
-	DisposalDate                     time.Time
-	DisposalType                     string // SALE, SCRAP, WRITE_OFF, DONATION
-	ProceedsAmount                   decimal.Decimal
-	CostAtDisposal                   decimal.Decimal
+	ID                                uuid.UUID
+	LegalEntityID                     uuid.UUID
+	AssetID                           uuid.UUID
+	DisposalNumber                    string
+	DisposalDate                      time.Time
+	DisposalType                      string // SALE, SCRAP, WRITE_OFF, DONATION
+	ProceedsAmount                    decimal.Decimal
+	CostAtDisposal                    decimal.Decimal
 	AccumulatedDepreciationAtDisposal decimal.Decimal
-	NetBookValueAtDisposal           decimal.Decimal
-	GainOrLossAmount                 decimal.Decimal // Proceeds - Net Book Value
-	JournalEntryID                   *uuid.UUID
-	CustomerID                       *uuid.UUID
-	Reason                           string
-	Status                           string
-	CreatedBy                        *uuid.UUID
-	CreatedAt                        time.Time
+	NetBookValueAtDisposal            decimal.Decimal
+	GainOrLossAmount                  decimal.Decimal // Proceeds - Net Book Value
+	JournalEntryID                    *uuid.UUID
+	CustomerID                        *uuid.UUID
+	Reason                            string
+	Status                            string
+	CreatedBy                         *uuid.UUID
+	CreatedAt                         time.Time
 }
 
 // DashboardSummary aggregates KPI metrics for fixed assets.
 type DashboardSummary struct {
-	TotalHistoricalCost      decimal.Decimal
-	TotalNetBookValue        decimal.Decimal
-	TotalAccumulatedDepr     decimal.Decimal
-	TotalActiveAssets        int
-	InServiceRate            string
+	TotalHistoricalCost  decimal.Decimal
+	TotalNetBookValue    decimal.Decimal
+	TotalAccumulatedDepr decimal.Decimal
+	TotalActiveAssets    int
+	InServiceRate        string
 }
 
 // CalculateStraightLineDepreciation computes one month of straight-line depreciation.

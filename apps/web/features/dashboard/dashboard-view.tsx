@@ -34,6 +34,8 @@ import {
   Lock,
 } from "lucide-react";
 import { useLocale } from "@/components/layout/shell";
+import { apiFetch } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
 
 // Types matching backend domain models
 interface FinancialKPIs {
@@ -136,238 +138,74 @@ interface DashboardData {
   activity_feed: ActivityFeedItem[];
 }
 
-// Fallback baseline mock data for offline/initial state
-const defaultDashboardData: DashboardData = {
-  legal_entity_id: "00000000-0000-0000-0000-000000000000",
-  legal_entity_name: "شركة الأفق المتقدمة المحدودة",
+const emptyDashboardData: DashboardData = {
+  legal_entity_id: "",
+  legal_entity_name: "",
   currency: "SAR",
-  generated_at: new Date().toISOString(),
-  financials: {
-    total_revenue: 1450000.0,
-    total_expense: 920000.0,
-    net_profit: 530000.0,
-    profit_margin: 36.55,
-    currency: "SAR",
-  },
-  cash_position: {
-    total_cash_balance: 185400.0,
-    total_bank_balance: 1420600.0,
-    total_liquid_funds: 1606000.0,
-    accounts_count: 5,
-    currency: "SAR",
-  },
+  generated_at: "",
+  financials: { total_revenue: 0, total_expense: 0, net_profit: 0, profit_margin: 0, currency: "SAR" },
+  cash_position: { total_cash_balance: 0, total_bank_balance: 0, total_liquid_funds: 0, accounts_count: 0, currency: "SAR" },
   arap: {
-    total_receivables: 680000.0,
-    overdue_receivables: 85000.0,
-    open_receivable_docs: 14,
-    total_payables: 310000.0,
-    overdue_payables: 32000.0,
-    open_payable_docs: 8,
+    total_receivables: 0,
+    overdue_receivables: 0,
+    open_receivable_docs: 0,
+    total_payables: 0,
+    overdue_payables: 0,
+    open_payable_docs: 0,
     currency: "SAR",
   },
-  stock_warnings: [
-    {
-      item_id: "item-1",
-      item_code: "PRD-SRV-001",
-      item_name_en: "Rack Server 2U Enterprise",
-      item_name_ar: "خادم شبكي فئة المؤسسات 2U",
-      warehouse_name_en: "Riyadh Central Hub",
-      warehouse_name_ar: "مستودع الرياض المركزي",
-      quantity_on_hand: 2,
-      quantity_reserved: 1,
-      quantity_available: 1,
-      reorder_point: 5,
-      severity: "CRITICAL",
-    },
-    {
-      item_id: "item-2",
-      item_code: "PRD-CBL-CAT6",
-      item_name_en: "Cat6 UTP Cable 305m",
-      item_name_ar: "كابل شبكة Cat6 بطول 305م",
-      warehouse_name_en: "Jeddah Branch Depot",
-      warehouse_name_ar: "مستودع فرع جدة",
-      quantity_on_hand: 4,
-      quantity_reserved: 0,
-      quantity_available: 4,
-      reorder_point: 10,
-      severity: "WARNING",
-    },
-    {
-      item_id: "item-3",
-      item_code: "PRD-SWT-24P",
-      item_name_en: "PoE+ Managed Switch 24-Port",
-      item_name_ar: "محول شبكة ذكي 24 منفذ PoE",
-      warehouse_name_en: "Dammam Logistics Center",
-      warehouse_name_ar: "مركز الدمام اللوجستي",
-      quantity_on_hand: 7,
-      quantity_reserved: 1,
-      quantity_available: 6,
-      reorder_point: 8,
-      severity: "LOW",
-    },
-  ],
-  approvals: {
-    total_pending: 4,
-    by_type: {
-      JOURNAL_ENTRY: 2,
-      PURCHASE_ORDER: 1,
-      LEAVE_REQUEST: 1,
-    },
-    recent_requests: [
-      {
-        id: "req-1",
-        resource_type: "JOURNAL_ENTRY",
-        resource_id: "JE-2026-0042",
-        initiator_id: "usr-1",
-        assigned_user_id: "usr-admin",
-        status: "PENDING",
-        created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-      },
-      {
-        id: "req-2",
-        resource_type: "PURCHASE_ORDER",
-        resource_id: "PO-2026-0118",
-        initiator_id: "usr-2",
-        assigned_user_id: "usr-admin",
-        status: "PENDING",
-        created_at: new Date(Date.now() - 3600000 * 5).toISOString(),
-      },
-      {
-        id: "req-3",
-        resource_type: "LEAVE_REQUEST",
-        resource_id: "LR-2026-0033",
-        initiator_id: "usr-3",
-        assigned_user_id: "usr-admin",
-        status: "PENDING",
-        created_at: new Date(Date.now() - 3600000 * 9).toISOString(),
-      },
-    ],
-  },
-  zatca: {
-    total_documents: 148,
-    cleared_count: 142,
-    pending_count: 4,
-    warning_count: 2,
-    rejected_count: 0,
-    compliance_rate: 97.29,
-  },
-  recent_documents: [
-    {
-      id: "doc-1",
-      title: "عقد توريد خوادم البنية التحتية",
-      category: "CONTRACT",
-      filename: "Hardware_Supply_Contract_2026.pdf",
-      mime_type: "application/pdf",
-      byte_size: 2450000,
-      created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-    },
-    {
-      id: "doc-2",
-      title: "فاتورة ضريبية معتمدة زاتكا #INV-0089",
-      category: "INVOICE",
-      filename: "Tax_Invoice_INV-0089.xml",
-      mime_type: "application/xml",
-      byte_size: 18400,
-      created_at: new Date(Date.now() - 3600000 * 8).toISOString(),
-    },
-    {
-      id: "doc-3",
-      title: "شهادة الامتثال الضريبي السنوية",
-      category: "LEGAL",
-      filename: "ZATCA_Compliance_Certificate.pdf",
-      mime_type: "application/pdf",
-      byte_size: 1200000,
-      created_at: new Date(Date.now() - 3600000 * 24).toISOString(),
-    },
-  ],
-  activity_feed: [
-    {
-      id: "act-1",
-      user_name: "مدير النظام (Admin)",
-      action: "POST_JOURNAL",
-      resource_type: "JOURNAL_ENTRY",
-      resource_id: "JE-2026-0041",
-      occurred_at: new Date(Date.now() - 3600000 * 1).toISOString(),
-    },
-    {
-      id: "act-2",
-      user_name: "سارة العتيبي (محاسب رئيسي)",
-      action: "SUBMIT_ZATCA",
-      resource_type: "TAX_INVOICE",
-      resource_id: "INV-2026-0089",
-      occurred_at: new Date(Date.now() - 3600000 * 3).toISOString(),
-    },
-    {
-      id: "act-3",
-      user_name: "خالد المطيري (مسؤول الخزينة)",
-      action: "APPROVE_PAYMENT",
-      resource_type: "SUPPLIER_PAYMENT",
-      resource_id: "PMT-2026-0012",
-      occurred_at: new Date(Date.now() - 3600000 * 6).toISOString(),
-    },
-    {
-      id: "act-4",
-      user_name: "محمد الشمري (أمين المستودع)",
-      action: "STOCK_RECEIPT",
-      resource_type: "TRANSFER_ORDER",
-      resource_id: "TR-2026-0005",
-      occurred_at: new Date(Date.now() - 3600000 * 12).toISOString(),
-    },
-  ],
+  stock_warnings: [],
+  approvals: { total_pending: 0, by_type: {}, recent_requests: [] },
+  zatca: { total_documents: 0, cleared_count: 0, pending_count: 0, warning_count: 0, rejected_count: 0, compliance_rate: 0 },
+  recent_documents: [],
+  activity_feed: [],
 };
 
 export function DashboardView() {
   const { locale, t, dir } = useLocale();
+  const { legalEntityId } = useAuth();
   const isAr = locale === "ar";
 
-  const [data, setData] = useState<DashboardData>(defaultDashboardData);
+  const [data, setData] = useState<DashboardData>(emptyDashboardData);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
   const fetchDashboardData = useCallback(async () => {
+    if (!legalEntityId) {
+      setData(emptyDashboardData);
+      setLoadError(isAr ? "لا يوجد كيان قانوني متاح لهذا المستخدم." : "No legal entity is available for this user.");
+      return;
+    }
     setLoading(true);
+    setLoadError(null);
     try {
-      const res = await fetch("/api/v1/dashboard");
-      if (res.ok) {
-        const json = await res.json();
-        // Merge with defaults to ensure all required fields are safely populated
-        setData({
-          ...defaultDashboardData,
+      const json = await apiFetch<DashboardData>(`/api/v1/dashboard?legal_entity_id=${encodeURIComponent(legalEntityId)}`);
+      setData({
+          ...emptyDashboardData,
           ...json,
-          financials: { ...defaultDashboardData.financials, ...(json.financials || {}) },
-          cash_position: { ...defaultDashboardData.cash_position, ...(json.cash_position || {}) },
-          arap: { ...defaultDashboardData.arap, ...(json.arap || {}) },
-          zatca: { ...defaultDashboardData.zatca, ...(json.zatca || {}) },
+          financials: { ...emptyDashboardData.financials, ...(json.financials || {}) },
+          cash_position: { ...emptyDashboardData.cash_position, ...(json.cash_position || {}) },
+          arap: { ...emptyDashboardData.arap, ...(json.arap || {}) },
+          zatca: { ...emptyDashboardData.zatca, ...(json.zatca || {}) },
           approvals: {
-            ...defaultDashboardData.approvals,
+            ...emptyDashboardData.approvals,
             ...(json.approvals || {}),
-            by_type: json.approvals?.by_type || defaultDashboardData.approvals.by_type,
-            recent_requests:
-              json.approvals?.recent_requests && json.approvals.recent_requests.length > 0
-                ? json.approvals.recent_requests
-                : defaultDashboardData.approvals.recent_requests,
+            by_type: json.approvals?.by_type || {},
+            recent_requests: json.approvals?.recent_requests || [],
           },
-          stock_warnings:
-            json.stock_warnings && json.stock_warnings.length > 0
-              ? json.stock_warnings
-              : defaultDashboardData.stock_warnings,
-          recent_documents:
-            json.recent_documents && json.recent_documents.length > 0
-              ? json.recent_documents
-              : defaultDashboardData.recent_documents,
-          activity_feed:
-            json.activity_feed && json.activity_feed.length > 0
-              ? json.activity_feed
-              : defaultDashboardData.activity_feed,
+          stock_warnings: json.stock_warnings || [],
+          recent_documents: json.recent_documents || [],
+          activity_feed: json.activity_feed || [],
         });
-        setLastRefreshed(new Date());
-      }
-    } catch {
-      // Graceful fallback to default state on local network failure
+      setLastRefreshed(new Date());
+    } catch (error) {
+      setData(emptyDashboardData);
+      setLoadError(error instanceof Error ? error.message : "Unable to load dashboard");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAr, legalEntityId]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -414,6 +252,12 @@ export function DashboardView() {
 
   return (
     <div className="space-y-6 pb-12">
+      {loadError && (
+        <div role="alert" className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{loadError}</span>
+        </div>
+      )}
       {/* 1. Executive Hero & Quick Actions Banner */}
       <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-card via-card to-primary/5 p-6 sm:p-8 shadow-sm">
         <div className="absolute top-0 inset-inline-end-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none -z-0" />

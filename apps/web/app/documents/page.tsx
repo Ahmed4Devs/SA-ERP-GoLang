@@ -1,4 +1,5 @@
-import { DocumentsView } from "@/features/documents/documents-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function DocumentsPage() {
-  return <DocumentsView />;
+  return <ModuleAPIView titleAr="المستندات والوثائق" titleEn="Documents" descriptionAr="الوثائق الفعلية وملخص التخزين للكيان المختار." descriptionEn="Live documents and storage summary for the selected entity." resources={moduleResources.documents} />;
 }

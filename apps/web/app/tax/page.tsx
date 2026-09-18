@@ -1,4 +1,5 @@
-import { TaxView } from "@/features/tax/tax-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function TaxPage() {
-  return <TaxView />;
+  return <ModuleAPIView titleAr="الضرائب وضريبة القيمة المضافة" titleEn="Tax & VAT" descriptionAr="الفئات والأكواد والحركات والفترات والإقرارات الضريبية الفعلية." descriptionEn="Live tax categories, codes, transactions, periods, and returns." resources={moduleResources.tax} />;
 }

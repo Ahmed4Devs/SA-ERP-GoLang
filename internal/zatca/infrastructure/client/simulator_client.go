@@ -65,8 +65,8 @@ func (s *SimulatorClient) Clearance(ctx context.Context, req domain.ClearanceReq
 	clearedBase64 := base64.StdEncoding.EncodeToString([]byte(clearedXML))
 
 	return domain.ClearanceResponse{
-		ClearanceStatus:   "CLEARED",
-		ClearedInvoice:    clearedBase64,
+		ClearanceStatus: "CLEARED",
+		ClearedInvoice:  clearedBase64,
 		ValidationResults: &domain.ValidationResult{
 			OverallStatus: "PASSED",
 			RuleVersion:   "BR-KSA-2.1",

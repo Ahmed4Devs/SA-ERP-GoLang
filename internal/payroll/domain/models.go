@@ -12,14 +12,14 @@ import (
 )
 
 var (
-	ErrPayrollAlreadyPosted   = errors.New("posted payroll is financially immutable and cannot be modified")
-	ErrInvalidPayrollState    = errors.New("invalid payroll run status transition")
-	ErrDuplicatePayrollPost   = errors.New("payroll run has already been posted to the general ledger")
-	ErrPeriodClosed           = errors.New("payroll period is closed")
-	ErrPayrollNotCalculated   = errors.New("payroll run must be in CALCULATED state to be approved")
-	ErrPayrollNotApproved     = errors.New("payroll run must be in APPROVED state to be posted")
-	ErrEmployeeNotFound       = errors.New("employee not found or has no active contract")
-	ErrNegativeNetSalary      = errors.New("total deductions cannot exceed gross salary")
+	ErrPayrollAlreadyPosted = errors.New("posted payroll is financially immutable and cannot be modified")
+	ErrInvalidPayrollState  = errors.New("invalid payroll run status transition")
+	ErrDuplicatePayrollPost = errors.New("payroll run has already been posted to the general ledger")
+	ErrPeriodClosed         = errors.New("payroll period is closed")
+	ErrPayrollNotCalculated = errors.New("payroll run must be in CALCULATED state to be approved")
+	ErrPayrollNotApproved   = errors.New("payroll run must be in APPROVED state to be posted")
+	ErrEmployeeNotFound     = errors.New("employee not found or has no active contract")
+	ErrNegativeNetSalary    = errors.New("total deductions cannot exceed gross salary")
 )
 
 type ComponentType string
@@ -32,25 +32,25 @@ const (
 type RunStatus string
 
 const (
-	RunStatusDraft        RunStatus = "DRAFT"
-	RunStatusCalculating  RunStatus = "CALCULATING"
-	RunStatusCalculated   RunStatus = "CALCULATED"
-	RunStatusUnderReview  RunStatus = "UNDER_REVIEW"
-	RunStatusApproved     RunStatus = "APPROVED"
-	RunStatusPosted       RunStatus = "POSTED"
-	RunStatusPaid         RunStatus = "PAID"
-	RunStatusCancelled    RunStatus = "CANCELLED"
-	RunStatusReversed     RunStatus = "REVERSED"
+	RunStatusDraft       RunStatus = "DRAFT"
+	RunStatusCalculating RunStatus = "CALCULATING"
+	RunStatusCalculated  RunStatus = "CALCULATED"
+	RunStatusUnderReview RunStatus = "UNDER_REVIEW"
+	RunStatusApproved    RunStatus = "APPROVED"
+	RunStatusPosted      RunStatus = "POSTED"
+	RunStatusPaid        RunStatus = "PAID"
+	RunStatusCancelled   RunStatus = "CANCELLED"
+	RunStatusReversed    RunStatus = "REVERSED"
 )
 
 type TerminationReason string
 
 const (
-	TerminationResignation          TerminationReason = "RESIGNATION"
-	TerminationByEmployer           TerminationReason = "TERMINATION_BY_EMPLOYER"
-	TerminationContractExpiry       TerminationReason = "CONTRACT_EXPIRY"
-	TerminationMutualAgreement      TerminationReason = "MUTUAL_AGREEMENT"
-	TerminationForceMajeure         TerminationReason = "FORCE_MAJEURE"
+	TerminationResignation     TerminationReason = "RESIGNATION"
+	TerminationByEmployer      TerminationReason = "TERMINATION_BY_EMPLOYER"
+	TerminationContractExpiry  TerminationReason = "CONTRACT_EXPIRY"
+	TerminationMutualAgreement TerminationReason = "MUTUAL_AGREEMENT"
+	TerminationForceMajeure    TerminationReason = "FORCE_MAJEURE"
 )
 
 // SalaryComponent represents an individual earning or deduction line item.
@@ -126,26 +126,26 @@ type PayrollPeriod struct {
 
 // PayrollRun represents a batch payroll calculation for a period.
 type PayrollRun struct {
-	ID                uuid.UUID
-	LegalEntityID     uuid.UUID
-	PeriodID          uuid.UUID
-	RunNumber         string
-	RunDate           time.Time
-	CutoffDate        time.Time
-	Status            RunStatus
-	TotalBasic        decimal.Decimal
-	TotalAllowances   decimal.Decimal
-	TotalGross        decimal.Decimal
-	TotalDeductions   decimal.Decimal
-	TotalNet          decimal.Decimal
-	EmployeeCount     int
-	JournalEntryID    *uuid.UUID
-	WpsFileGenerated  bool
-	WpsFileName       *string
-	PostedAt          *time.Time
-	PostedBy          *uuid.UUID
-	CreatedBy         *uuid.UUID
-	CreatedAt         time.Time
+	ID               uuid.UUID
+	LegalEntityID    uuid.UUID
+	PeriodID         uuid.UUID
+	RunNumber        string
+	RunDate          time.Time
+	CutoffDate       time.Time
+	Status           RunStatus
+	TotalBasic       decimal.Decimal
+	TotalAllowances  decimal.Decimal
+	TotalGross       decimal.Decimal
+	TotalDeductions  decimal.Decimal
+	TotalNet         decimal.Decimal
+	EmployeeCount    int
+	JournalEntryID   *uuid.UUID
+	WpsFileGenerated bool
+	WpsFileName      *string
+	PostedAt         *time.Time
+	PostedBy         *uuid.UUID
+	CreatedBy        *uuid.UUID
+	CreatedAt        time.Time
 }
 
 // RunEmployee represents a single employee's computed payroll for the run.

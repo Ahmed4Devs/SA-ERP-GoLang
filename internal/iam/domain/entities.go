@@ -48,3 +48,23 @@ type PasswordCredential struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
+
+type MFAFactor struct {
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	FactorType      string
+	EncryptedSecret string
+	IsVerified      bool
+	VerifiedAt      *time.Time
+	LastUsedCounter *int64
+}
+
+type MFAChallenge struct {
+	ID           uuid.UUID
+	UserID       uuid.UUID
+	TokenHash    string
+	IPAddress    string
+	UserAgent    string
+	AttemptCount int
+	ExpiresAt    time.Time
+}

@@ -83,19 +83,19 @@ type EGSUnit struct {
 
 // CSID represents an X.509 Cryptographic Stamp Identifier certificate and ECDSA key pair.
 type CSID struct {
-	ID                   uuid.UUID  `json:"id"`
-	EGSUnitID            uuid.UUID  `json:"egs_unit_id"`
-	CSIDType             CSIDType   `json:"csid_type"`
-	BinarySecurityToken  string     `json:"binary_security_token"`
-	Secret               string     `json:"secret"`
-	PrivateKeyPEM        string     `json:"private_key_pem"`
-	PublicKeyPEM         string     `json:"public_key_pem"`
-	CertificatePEM       string     `json:"certificate_pem"`
-	RequestID            string     `json:"request_id,omitempty"`
-	ComplianceRequestID  string     `json:"compliance_request_id,omitempty"`
-	ExpiresAt            *time.Time `json:"expires_at,omitempty"`
-	Status               string     `json:"status"`
-	CreatedAt            time.Time  `json:"created_at"`
+	ID                  uuid.UUID  `json:"id"`
+	EGSUnitID           uuid.UUID  `json:"egs_unit_id"`
+	CSIDType            CSIDType   `json:"csid_type"`
+	BinarySecurityToken string     `json:"binary_security_token"`
+	Secret              string     `json:"secret"`
+	PrivateKeyPEM       string     `json:"private_key_pem"`
+	PublicKeyPEM        string     `json:"public_key_pem"`
+	CertificatePEM      string     `json:"certificate_pem"`
+	RequestID           string     `json:"request_id,omitempty"`
+	ComplianceRequestID string     `json:"compliance_request_id,omitempty"`
+	ExpiresAt           *time.Time `json:"expires_at,omitempty"`
+	Status              string     `json:"status"`
+	CreatedAt           time.Time  `json:"created_at"`
 }
 
 // InvoiceSequence tracks ICV and PIH hash chains per EGS unit and invoice type.
@@ -110,28 +110,28 @@ type InvoiceSequence struct {
 
 // ZATCADocument represents an electronic tax invoice compliant with Phase 2.
 type ZATCADocument struct {
-	ID                uuid.UUID      `json:"id"`
-	LegalEntityID     uuid.UUID      `json:"legal_entity_id"`
-	EGSUnitID         uuid.UUID      `json:"egs_unit_id"`
-	SalesInvoiceID    *uuid.UUID     `json:"sales_invoice_id,omitempty"`
-	InvoiceUUID       uuid.UUID      `json:"invoice_uuid"`
-	InvoiceNumber     string         `json:"invoice_number"`
-	InvoiceType       InvoiceType    `json:"invoice_type"`
-	InvoiceSubtype    InvoiceSubtype `json:"invoice_subtype"`
-	SubmissionMode    SubmissionMode `json:"submission_mode"`
-	ICV               int64          `json:"icv"`
-	PIH               string         `json:"pih"`
-	IssueDate         string         `json:"issue_date"` // YYYY-MM-DD
-	IssueTime         string         `json:"issue_time"` // HH:MM:SS
-	UBLXML            string         `json:"ubl_xml"`
-	SignedXML         string         `json:"signed_xml,omitempty"`
-	InvoiceHash       string         `json:"invoice_hash"`
-	DigitalSignature  string         `json:"digital_signature,omitempty"`
-	PublicKeyHashing  string         `json:"public_key_hashing,omitempty"`
-	QRCodeData        string         `json:"qr_code_data"`
-	Status            DocumentStatus `json:"status"`
-	CreatedAt         time.Time      `json:"created_at"`
-	UpdatedAt         time.Time      `json:"updated_at"`
+	ID               uuid.UUID      `json:"id"`
+	LegalEntityID    uuid.UUID      `json:"legal_entity_id"`
+	EGSUnitID        uuid.UUID      `json:"egs_unit_id"`
+	SalesInvoiceID   *uuid.UUID     `json:"sales_invoice_id,omitempty"`
+	InvoiceUUID      uuid.UUID      `json:"invoice_uuid"`
+	InvoiceNumber    string         `json:"invoice_number"`
+	InvoiceType      InvoiceType    `json:"invoice_type"`
+	InvoiceSubtype   InvoiceSubtype `json:"invoice_subtype"`
+	SubmissionMode   SubmissionMode `json:"submission_mode"`
+	ICV              int64          `json:"icv"`
+	PIH              string         `json:"pih"`
+	IssueDate        string         `json:"issue_date"` // YYYY-MM-DD
+	IssueTime        string         `json:"issue_time"` // HH:MM:SS
+	UBLXML           string         `json:"ubl_xml"`
+	SignedXML        string         `json:"signed_xml,omitempty"`
+	InvoiceHash      string         `json:"invoice_hash"`
+	DigitalSignature string         `json:"digital_signature,omitempty"`
+	PublicKeyHashing string         `json:"public_key_hashing,omitempty"`
+	QRCodeData       string         `json:"qr_code_data"`
+	Status           DocumentStatus `json:"status"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
 }
 
 // PartyInfo contains tax details for Seller or Buyer.
@@ -149,14 +149,14 @@ type PartyInfo struct {
 
 // InvoiceLineData represents an invoice line item.
 type InvoiceLineData struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Quantity    decimal.Decimal `json:"quantity"`
-	UnitPrice   decimal.Decimal `json:"unit_price"`
-	Discount    decimal.Decimal `json:"discount"`
-	VATRate     decimal.Decimal `json:"vat_rate"`   // e.g. 15.00
-	VATAmount   decimal.Decimal `json:"vat_amount"`
-	LineTotal   decimal.Decimal `json:"line_total"` // tax inclusive
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	Quantity  decimal.Decimal `json:"quantity"`
+	UnitPrice decimal.Decimal `json:"unit_price"`
+	Discount  decimal.Decimal `json:"discount"`
+	VATRate   decimal.Decimal `json:"vat_rate"` // e.g. 15.00
+	VATAmount decimal.Decimal `json:"vat_amount"`
+	LineTotal decimal.Decimal `json:"line_total"` // tax inclusive
 }
 
 // InvoiceData is the comprehensive data structure passed into the XML Generator.
@@ -222,12 +222,12 @@ type ClearanceRequest struct {
 
 // ClearanceResponse is received from the Clearance API.
 type ClearanceResponse struct {
-	ClearanceStatus       string              `json:"clearanceStatus"` // 'CLEARED' or 'NOT_CLEARED'
-	ClearedInvoice        string              `json:"clearedInvoice,omitempty"` // Base64-encoded UBL with ZATCA clearance stamp
-	ValidationResults     *ValidationResult   `json:"validationResults,omitempty"`
-	WarningMessages       []ValidationMessage `json:"warningMessages,omitempty"`
-	ErrorMessages         []ValidationMessage `json:"errorMessages,omitempty"`
-	ZATCARequestID        string              `json:"zatcaRequestId,omitempty"`
+	ClearanceStatus   string              `json:"clearanceStatus"`          // 'CLEARED' or 'NOT_CLEARED'
+	ClearedInvoice    string              `json:"clearedInvoice,omitempty"` // Base64-encoded UBL with ZATCA clearance stamp
+	ValidationResults *ValidationResult   `json:"validationResults,omitempty"`
+	WarningMessages   []ValidationMessage `json:"warningMessages,omitempty"`
+	ErrorMessages     []ValidationMessage `json:"errorMessages,omitempty"`
+	ZATCARequestID    string              `json:"zatcaRequestId,omitempty"`
 }
 
 // ReportingRequest is sent to the Reporting API (B2C Simplified Invoices).
@@ -239,11 +239,11 @@ type ReportingRequest struct {
 
 // ReportingResponse is received from the Reporting API.
 type ReportingResponse struct {
-	ReportingStatus       string              `json:"reportingStatus"` // 'REPORTED' or 'NOT_REPORTED'
-	ValidationResults     *ValidationResult   `json:"validationResults,omitempty"`
-	WarningMessages       []ValidationMessage `json:"warningMessages,omitempty"`
-	ErrorMessages         []ValidationMessage `json:"errorMessages,omitempty"`
-	ZATCARequestID        string              `json:"zatcaRequestId,omitempty"`
+	ReportingStatus   string              `json:"reportingStatus"` // 'REPORTED' or 'NOT_REPORTED'
+	ValidationResults *ValidationResult   `json:"validationResults,omitempty"`
+	WarningMessages   []ValidationMessage `json:"warningMessages,omitempty"`
+	ErrorMessages     []ValidationMessage `json:"errorMessages,omitempty"`
+	ZATCARequestID    string              `json:"zatcaRequestId,omitempty"`
 }
 
 // ComplianceCSIDRequest is sent to issue a Compliance CSID using an OTP.
@@ -254,10 +254,10 @@ type ComplianceCSIDRequest struct {
 
 // ComplianceCSIDResponse contains the issued Compliance CSID certificate and secret.
 type ComplianceCSIDResponse struct {
-	RequestID           string `json:"requestID"`
-	DispositionMessage  string `json:"dispositionMessage"`
-	BinarySecurityToken string `json:"binarySecurityToken"` // Base64 X.509 cert
-	Secret              string `json:"secret"`
+	RequestID           string   `json:"requestID"`
+	DispositionMessage  string   `json:"dispositionMessage"`
+	BinarySecurityToken string   `json:"binarySecurityToken"` // Base64 X.509 cert
+	Secret              string   `json:"secret"`
 	Errors              []string `json:"errors,omitempty"`
 }
 
@@ -265,7 +265,7 @@ type ComplianceCSIDResponse struct {
 type ComplianceCheckRequest struct {
 	InvoiceHash string `json:"invoiceHash"`
 	UUID        string `json:"uuid"`
-	Invoice     string `json:"invoice"` // Base64 signed XML
+	Invoice     string `json:"invoice"`     // Base64 signed XML
 	InvoiceType string `json:"invoiceType"` // 'Standard' or 'Simplified'
 }
 
@@ -284,10 +284,10 @@ type ProductionCSIDRequest struct {
 
 // ProductionCSIDResponse contains the issued Production CSID and token.
 type ProductionCSIDResponse struct {
-	RequestID           string `json:"requestID"`
-	DispositionMessage  string `json:"dispositionMessage"`
-	BinarySecurityToken string `json:"binarySecurityToken"` // Base64 Production X.509 cert
-	Secret              string `json:"secret"`
+	RequestID           string   `json:"requestID"`
+	DispositionMessage  string   `json:"dispositionMessage"`
+	BinarySecurityToken string   `json:"binarySecurityToken"` // Base64 Production X.509 cert
+	Secret              string   `json:"secret"`
 	Errors              []string `json:"errors,omitempty"`
 }
 
@@ -310,21 +310,21 @@ type RenewalResponse struct {
 // ----------------------------------------------------------------------------
 
 type ZATCASubmission struct {
-	ID                uuid.UUID          `json:"id"`
-	DocumentID        uuid.UUID          `json:"document_id"`
-	LegalEntityID     uuid.UUID          `json:"legal_entity_id"`
-	SubmissionMode    SubmissionMode     `json:"submission_mode"`
-	Environment       Environment        `json:"environment"`
-	Status            string             `json:"status"` // 'PENDING', 'CLEARED', 'REPORTED', 'REJECTED', 'RETRY_PENDING', 'FAILED'
-	RequestPayload    string             `json:"request_payload,omitempty"`
-	ResponsePayload   string             `json:"response_payload,omitempty"`
-	ZATCARequestID    string             `json:"zatca_request_id,omitempty"`
-	ClearedInvoiceXML string             `json:"cleared_invoice_xml,omitempty"`
-	WarningMessages   []string           `json:"warning_messages,omitempty"`
-	ErrorMessages     []string           `json:"error_messages,omitempty"`
-	AttemptsCount     int                `json:"attempts_count"`
-	SubmittedAt       time.Time          `json:"submitted_at"`
-	CompletedAt       *time.Time         `json:"completed_at,omitempty"`
+	ID                uuid.UUID           `json:"id"`
+	DocumentID        uuid.UUID           `json:"document_id"`
+	LegalEntityID     uuid.UUID           `json:"legal_entity_id"`
+	SubmissionMode    SubmissionMode      `json:"submission_mode"`
+	Environment       Environment         `json:"environment"`
+	Status            string              `json:"status"` // 'PENDING', 'CLEARED', 'REPORTED', 'REJECTED', 'RETRY_PENDING', 'FAILED'
+	RequestPayload    string              `json:"request_payload,omitempty"`
+	ResponsePayload   string              `json:"response_payload,omitempty"`
+	ZATCARequestID    string              `json:"zatca_request_id,omitempty"`
+	ClearedInvoiceXML string              `json:"cleared_invoice_xml,omitempty"`
+	WarningMessages   []string            `json:"warning_messages,omitempty"`
+	ErrorMessages     []string            `json:"error_messages,omitempty"`
+	AttemptsCount     int                 `json:"attempts_count"`
+	SubmittedAt       time.Time           `json:"submitted_at"`
+	CompletedAt       *time.Time          `json:"completed_at,omitempty"`
 	Attempts          []SubmissionAttempt `json:"attempts,omitempty"`
 }
 
@@ -350,13 +350,13 @@ type SubmissionFilter struct {
 }
 
 type OnboardingStatus struct {
-	EGSUnitID              uuid.UUID  `json:"egs_unit_id"`
-	HasComplianceCSID      bool       `json:"has_compliance_csid"`
-	ComplianceChecksPassed bool       `json:"compliance_checks_passed"`
-	HasProductionCSID      bool       `json:"has_production_csid"`
-	ProductionCSIDExpiresAt *time.Time `json:"production_csid_expires_at,omitempty"`
-	CurrentEnvironment     Environment `json:"current_environment"`
-	Status                 string     `json:"status"` // 'NOT_ONBOARDED', 'COMPLIANCE_IN_PROGRESS', 'ONBOARDED'
+	EGSUnitID               uuid.UUID   `json:"egs_unit_id"`
+	HasComplianceCSID       bool        `json:"has_compliance_csid"`
+	ComplianceChecksPassed  bool        `json:"compliance_checks_passed"`
+	HasProductionCSID       bool        `json:"has_production_csid"`
+	ProductionCSIDExpiresAt *time.Time  `json:"production_csid_expires_at,omitempty"`
+	CurrentEnvironment      Environment `json:"current_environment"`
+	Status                  string      `json:"status"` // 'NOT_ONBOARDED', 'COMPLIANCE_IN_PROGRESS', 'ONBOARDED'
 }
 
 type OnboardingResult struct {
@@ -366,4 +366,3 @@ type OnboardingResult struct {
 	Status              string    `json:"status"`
 	Message             string    `json:"message"`
 }
-

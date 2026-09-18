@@ -983,12 +983,34 @@ type IamLoginAttempts struct {
 }
 
 type IamMfaFactors struct {
-	ID         pgtype.UUID        `json:"id"`
-	UserID     pgtype.UUID        `json:"user_id"`
-	FactorType string             `json:"factor_type"`
-	Secret     string             `json:"secret"`
-	IsVerified bool               `json:"is_verified"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ID              pgtype.UUID        `json:"id"`
+	UserID          pgtype.UUID        `json:"user_id"`
+	FactorType      string             `json:"factor_type"`
+	Secret          string             `json:"secret"`
+	IsVerified      bool               `json:"is_verified"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	VerifiedAt      pgtype.Timestamptz `json:"verified_at"`
+	LastUsedCounter pgtype.Int8        `json:"last_used_counter"`
+}
+
+type IamMfaLoginChallenges struct {
+	ID           pgtype.UUID        `json:"id"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	TokenHash    string             `json:"token_hash"`
+	IpAddress    pgtype.Text        `json:"ip_address"`
+	UserAgent    pgtype.Text        `json:"user_agent"`
+	AttemptCount int32              `json:"attempt_count"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt   pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type IamMfaRecoveryCodes struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	CodeHash  string             `json:"code_hash"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type IamPasswordCredentials struct {

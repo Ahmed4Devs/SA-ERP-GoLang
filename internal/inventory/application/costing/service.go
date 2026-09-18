@@ -3,11 +3,11 @@ package costing
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"erp/internal/inventory/domain"
 	"erp/internal/inventory/ports"
+	"erp/internal/platform/identifiers"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -132,7 +132,7 @@ func (s *CostingService) ExecuteRevaluation(
 	newTotalValue := bal.QuantityOnHand.Mul(req.NewUnitCost).Round(4)
 	varianceAmount := newTotalValue.Sub(oldTotalValue)
 
-	revNum := fmt.Sprintf("REV-%s-%d", strings.ToUpper(uuid.NewString()[:8]), time.Now().UnixNano()%1000000)
+	revNum := identifiers.NewDocumentNumber("REV", time.Now())
 	rev := &domain.InventoryRevaluation{
 		LegalEntityID:     req.LegalEntityID,
 		RevaluationNumber: revNum,

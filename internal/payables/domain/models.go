@@ -11,25 +11,25 @@ import (
 )
 
 var (
-	ErrSupplierNotFound       = errors.New("supplier not found")
-	ErrDuplicateSupplierNum   = errors.New("supplier number already exists")
-	ErrInvalidSupplierType    = errors.New("invalid supplier type, must be LOCAL, INTERNATIONAL, or GOVERNMENT")
-	ErrInvalidTaxID           = errors.New("invalid Saudi VAT number, must be 15 digits starting and ending with 3")
-	ErrInvalidCRNumber        = errors.New("invalid Saudi commercial registration number, must be 10 digits")
-	ErrInvalidIBAN            = errors.New("invalid IBAN format")
-	ErrCityRequired           = errors.New("city is required in supplier address")
-	ErrPaymentTermNotFound    = errors.New("payment term not found")
-	ErrInvoiceNotFound        = errors.New("supplier invoice not found")
-	ErrInvoiceAlreadyPosted   = errors.New("supplier invoice is already posted")
-	ErrInvoiceAlreadyPaid     = errors.New("supplier invoice is already fully paid")
-	ErrInvalidInvoiceStatus   = errors.New("invalid supplier invoice status transition")
-	ErrPaymentNotFound        = errors.New("supplier payment not found")
-	ErrPaymentAlreadyPosted   = errors.New("supplier payment is already posted")
-	ErrOpenItemNotFound       = errors.New("open item not found")
-	ErrOpenItemAlreadyPaid    = errors.New("open item is already paid")
-	ErrOverAllocation         = errors.New("allocated amount exceeds open item or payment balance")
-	ErrCreditNoteNotFound     = errors.New("supplier credit note not found")
-	ErrSupplierBlocked        = errors.New("supplier is suspended or blocked")
+	ErrSupplierNotFound     = errors.New("supplier not found")
+	ErrDuplicateSupplierNum = errors.New("supplier number already exists")
+	ErrInvalidSupplierType  = errors.New("invalid supplier type, must be LOCAL, INTERNATIONAL, or GOVERNMENT")
+	ErrInvalidTaxID         = errors.New("invalid Saudi VAT number, must be 15 digits starting and ending with 3")
+	ErrInvalidCRNumber      = errors.New("invalid Saudi commercial registration number, must be 10 digits")
+	ErrInvalidIBAN          = errors.New("invalid IBAN format")
+	ErrCityRequired         = errors.New("city is required in supplier address")
+	ErrPaymentTermNotFound  = errors.New("payment term not found")
+	ErrInvoiceNotFound      = errors.New("supplier invoice not found")
+	ErrInvoiceAlreadyPosted = errors.New("supplier invoice is already posted")
+	ErrInvoiceAlreadyPaid   = errors.New("supplier invoice is already fully paid")
+	ErrInvalidInvoiceStatus = errors.New("invalid supplier invoice status transition")
+	ErrPaymentNotFound      = errors.New("supplier payment not found")
+	ErrPaymentAlreadyPosted = errors.New("supplier payment is already posted")
+	ErrOpenItemNotFound     = errors.New("open item not found")
+	ErrOpenItemAlreadyPaid  = errors.New("open item is already paid")
+	ErrOverAllocation       = errors.New("allocated amount exceeds open item or payment balance")
+	ErrCreditNoteNotFound   = errors.New("supplier credit note not found")
+	ErrSupplierBlocked      = errors.New("supplier is suspended or blocked")
 )
 
 var (
@@ -110,35 +110,35 @@ type SaudiAddress struct {
 }
 
 type Supplier struct {
-	ID                         uuid.UUID      `json:"id"`
-	LegalEntityID              uuid.UUID      `json:"legal_entity_id"`
-	SupplierNumber             string         `json:"supplier_number"`
-	SupplierType               SupplierType   `json:"supplier_type"`
-	NameEn                     string         `json:"name_en"`
-	NameAr                     string         `json:"name_ar"`
-	TaxID                      *string        `json:"tax_id,omitempty"`
-	CRNumber                   *string        `json:"cr_number,omitempty"`
-	NationalID                 *string        `json:"national_id,omitempty"`
-	IBAN                       *string        `json:"iban,omitempty"`
-	BankName                   *string        `json:"bank_name,omitempty"`
-	SwiftCode                  *string        `json:"swift_code,omitempty"`
-	Address                    SaudiAddress   `json:"address"`
-	Email                      *string        `json:"email,omitempty"`
-	Phone                      *string        `json:"phone,omitempty"`
-	ContactPerson              *string        `json:"contact_person,omitempty"`
-	Website                    *string        `json:"website,omitempty"`
-	PaymentTermsID             *uuid.UUID     `json:"payment_terms_id,omitempty"`
-	PaymentTermsCode           string         `json:"payment_terms_code,omitempty"`
-	PaymentTermsNameAr         string         `json:"payment_terms_name_ar,omitempty"`
-	PaymentTermsDueDays        int32          `json:"payment_terms_due_days,omitempty"`
-	CurrencyCode               string         `json:"currency_code"`
-	DefaultExpenseAccountID    *uuid.UUID     `json:"default_expense_account_id,omitempty"`
-	DefaultLiabilityAccountID  *uuid.UUID     `json:"default_liability_account_id,omitempty"`
-	DefaultExpenseAccountCode  string         `json:"default_expense_account_code,omitempty"`
-	DefaultLiabilityAccountCode string        `json:"default_liability_account_code,omitempty"`
-	Status                     SupplierStatus `json:"status"`
-	CreatedAt                  time.Time      `json:"created_at"`
-	UpdatedAt                  time.Time      `json:"updated_at"`
+	ID                          uuid.UUID      `json:"id"`
+	LegalEntityID               uuid.UUID      `json:"legal_entity_id"`
+	SupplierNumber              string         `json:"supplier_number"`
+	SupplierType                SupplierType   `json:"supplier_type"`
+	NameEn                      string         `json:"name_en"`
+	NameAr                      string         `json:"name_ar"`
+	TaxID                       *string        `json:"tax_id,omitempty"`
+	CRNumber                    *string        `json:"cr_number,omitempty"`
+	NationalID                  *string        `json:"national_id,omitempty"`
+	IBAN                        *string        `json:"iban,omitempty"`
+	BankName                    *string        `json:"bank_name,omitempty"`
+	SwiftCode                   *string        `json:"swift_code,omitempty"`
+	Address                     SaudiAddress   `json:"address"`
+	Email                       *string        `json:"email,omitempty"`
+	Phone                       *string        `json:"phone,omitempty"`
+	ContactPerson               *string        `json:"contact_person,omitempty"`
+	Website                     *string        `json:"website,omitempty"`
+	PaymentTermsID              *uuid.UUID     `json:"payment_terms_id,omitempty"`
+	PaymentTermsCode            string         `json:"payment_terms_code,omitempty"`
+	PaymentTermsNameAr          string         `json:"payment_terms_name_ar,omitempty"`
+	PaymentTermsDueDays         int32          `json:"payment_terms_due_days,omitempty"`
+	CurrencyCode                string         `json:"currency_code"`
+	DefaultExpenseAccountID     *uuid.UUID     `json:"default_expense_account_id,omitempty"`
+	DefaultLiabilityAccountID   *uuid.UUID     `json:"default_liability_account_id,omitempty"`
+	DefaultExpenseAccountCode   string         `json:"default_expense_account_code,omitempty"`
+	DefaultLiabilityAccountCode string         `json:"default_liability_account_code,omitempty"`
+	Status                      SupplierStatus `json:"status"`
+	CreatedAt                   time.Time      `json:"created_at"`
+	UpdatedAt                   time.Time      `json:"updated_at"`
 }
 
 func (s *Supplier) Validate() error {
@@ -189,34 +189,34 @@ type PaymentTerm struct {
 }
 
 type SupplierInvoice struct {
-	ID                    uuid.UUID             `json:"id"`
-	LegalEntityID         uuid.UUID             `json:"legal_entity_id"`
-	InvoiceNumber         string                `json:"invoice_number"`
-	SupplierInvoiceNumber string                `json:"supplier_invoice_number"`
-	SupplierID            uuid.UUID             `json:"supplier_id"`
-	SupplierNameEn        string                `json:"supplier_name_en,omitempty"`
-	SupplierNameAr        string                `json:"supplier_name_ar,omitempty"`
-	SupplierTaxID         *string               `json:"supplier_tax_id,omitempty"`
-	SupplierCRNumber      *string               `json:"supplier_cr_number,omitempty"`
-	SupplierIBAN          *string               `json:"supplier_iban,omitempty"`
-	SupplierLiabilityAccID *uuid.UUID           `json:"supplier_liability_account_id,omitempty"`
-	InvoiceDate           time.Time             `json:"invoice_date"`
-	DueDate               time.Time             `json:"due_date"`
-	CurrencyCode          string                `json:"currency_code"`
-	ExchangeRate          decimal.Decimal       `json:"exchange_rate"`
-	Subtotal              decimal.Decimal       `json:"subtotal"`
-	DiscountAmount        decimal.Decimal       `json:"discount_amount"`
-	TaxableAmount         decimal.Decimal       `json:"taxable_amount"`
-	TaxAmount             decimal.Decimal       `json:"tax_amount"`
-	TotalAmount           decimal.Decimal       `json:"total_amount"`
-	Status                SupplierInvoiceStatus `json:"status"`
-	PaymentStatus         PaymentStatus         `json:"payment_status"`
-	JournalEntryID        *uuid.UUID            `json:"journal_entry_id,omitempty"`
-	Notes                 *string               `json:"notes,omitempty"`
-	CreatedByUserID       *uuid.UUID            `json:"created_by_user_id,omitempty"`
-	CreatedAt             time.Time             `json:"created_at"`
-	UpdatedAt             time.Time             `json:"updated_at"`
-	Lines                 []SupplierInvoiceLine `json:"lines,omitempty"`
+	ID                     uuid.UUID             `json:"id"`
+	LegalEntityID          uuid.UUID             `json:"legal_entity_id"`
+	InvoiceNumber          string                `json:"invoice_number"`
+	SupplierInvoiceNumber  string                `json:"supplier_invoice_number"`
+	SupplierID             uuid.UUID             `json:"supplier_id"`
+	SupplierNameEn         string                `json:"supplier_name_en,omitempty"`
+	SupplierNameAr         string                `json:"supplier_name_ar,omitempty"`
+	SupplierTaxID          *string               `json:"supplier_tax_id,omitempty"`
+	SupplierCRNumber       *string               `json:"supplier_cr_number,omitempty"`
+	SupplierIBAN           *string               `json:"supplier_iban,omitempty"`
+	SupplierLiabilityAccID *uuid.UUID            `json:"supplier_liability_account_id,omitempty"`
+	InvoiceDate            time.Time             `json:"invoice_date"`
+	DueDate                time.Time             `json:"due_date"`
+	CurrencyCode           string                `json:"currency_code"`
+	ExchangeRate           decimal.Decimal       `json:"exchange_rate"`
+	Subtotal               decimal.Decimal       `json:"subtotal"`
+	DiscountAmount         decimal.Decimal       `json:"discount_amount"`
+	TaxableAmount          decimal.Decimal       `json:"taxable_amount"`
+	TaxAmount              decimal.Decimal       `json:"tax_amount"`
+	TotalAmount            decimal.Decimal       `json:"total_amount"`
+	Status                 SupplierInvoiceStatus `json:"status"`
+	PaymentStatus          PaymentStatus         `json:"payment_status"`
+	JournalEntryID         *uuid.UUID            `json:"journal_entry_id,omitempty"`
+	Notes                  *string               `json:"notes,omitempty"`
+	CreatedByUserID        *uuid.UUID            `json:"created_by_user_id,omitempty"`
+	CreatedAt              time.Time             `json:"created_at"`
+	UpdatedAt              time.Time             `json:"updated_at"`
+	Lines                  []SupplierInvoiceLine `json:"lines,omitempty"`
 }
 
 type SupplierInvoiceLine struct {
@@ -243,25 +243,25 @@ type SupplierInvoiceLine struct {
 }
 
 type SupplierCreditNote struct {
-	ID                        uuid.UUID                  `json:"id"`
-	LegalEntityID             uuid.UUID                  `json:"legal_entity_id"`
-	CreditNoteNumber          string                     `json:"credit_note_number"`
-	SupplierCreditNoteNumber  *string                    `json:"supplier_credit_note_number,omitempty"`
-	SupplierID                uuid.UUID                  `json:"supplier_id"`
-	SupplierNameEn            string                     `json:"supplier_name_en,omitempty"`
-	SupplierNameAr            string                     `json:"supplier_name_ar,omitempty"`
-	OriginalInvoiceID         *uuid.UUID                 `json:"original_invoice_id,omitempty"`
-	CreditNoteDate            time.Time                  `json:"credit_note_date"`
-	CurrencyCode              string                     `json:"currency_code"`
-	Subtotal                  decimal.Decimal            `json:"subtotal"`
-	TaxAmount                 decimal.Decimal            `json:"tax_amount"`
-	TotalAmount               decimal.Decimal            `json:"total_amount"`
-	Reason                    *string                    `json:"reason,omitempty"`
-	Status                    string                     `json:"status"`
-	JournalEntryID            *uuid.UUID                 `json:"journal_entry_id,omitempty"`
-	CreatedByUserID           *uuid.UUID                 `json:"created_by_user_id,omitempty"`
-	CreatedAt                 time.Time                  `json:"created_at"`
-	Lines                     []SupplierCreditNoteLine   `json:"lines,omitempty"`
+	ID                       uuid.UUID                `json:"id"`
+	LegalEntityID            uuid.UUID                `json:"legal_entity_id"`
+	CreditNoteNumber         string                   `json:"credit_note_number"`
+	SupplierCreditNoteNumber *string                  `json:"supplier_credit_note_number,omitempty"`
+	SupplierID               uuid.UUID                `json:"supplier_id"`
+	SupplierNameEn           string                   `json:"supplier_name_en,omitempty"`
+	SupplierNameAr           string                   `json:"supplier_name_ar,omitempty"`
+	OriginalInvoiceID        *uuid.UUID               `json:"original_invoice_id,omitempty"`
+	CreditNoteDate           time.Time                `json:"credit_note_date"`
+	CurrencyCode             string                   `json:"currency_code"`
+	Subtotal                 decimal.Decimal          `json:"subtotal"`
+	TaxAmount                decimal.Decimal          `json:"tax_amount"`
+	TotalAmount              decimal.Decimal          `json:"total_amount"`
+	Reason                   *string                  `json:"reason,omitempty"`
+	Status                   string                   `json:"status"`
+	JournalEntryID           *uuid.UUID               `json:"journal_entry_id,omitempty"`
+	CreatedByUserID          *uuid.UUID               `json:"created_by_user_id,omitempty"`
+	CreatedAt                time.Time                `json:"created_at"`
+	Lines                    []SupplierCreditNoteLine `json:"lines,omitempty"`
 }
 
 type SupplierCreditNoteLine struct {
@@ -281,29 +281,29 @@ type SupplierCreditNoteLine struct {
 }
 
 type SupplierPayment struct {
-	ID                        uuid.UUID                `json:"id"`
-	LegalEntityID             uuid.UUID                `json:"legal_entity_id"`
-	PaymentNumber             string                   `json:"payment_number"`
-	SupplierID                uuid.UUID                `json:"supplier_id"`
-	SupplierNameEn            string                   `json:"supplier_name_en,omitempty"`
-	SupplierNameAr            string                   `json:"supplier_name_ar,omitempty"`
-	SupplierNumber            string                   `json:"supplier_number,omitempty"`
-	PaymentDate               time.Time                `json:"payment_date"`
-	PaymentMethod             PaymentMethod            `json:"payment_method"`
-	DisbursementAccountID     uuid.UUID                `json:"disbursement_account_id"`
-	DisbursementAccountNumber string                   `json:"disbursement_account_number,omitempty"`
-	DisbursementAccountNameAr string                   `json:"disbursement_account_name_ar,omitempty"`
-	Amount                    decimal.Decimal          `json:"amount"`
-	CurrencyCode              string                   `json:"currency_code"`
-	ReferenceNumber           *string                  `json:"reference_number,omitempty"`
-	Status                    string                   `json:"status"`
-	Notes                     *string                  `json:"notes,omitempty"`
-	AllocatedAmount           decimal.Decimal          `json:"allocated_amount"`
-	UnallocatedAmount         decimal.Decimal          `json:"unallocated_amount"`
-	JournalEntryID            *uuid.UUID               `json:"journal_entry_id,omitempty"`
-	CreatedByUserID           *uuid.UUID               `json:"created_by_user_id,omitempty"`
-	CreatedAt                 time.Time                `json:"created_at"`
-	Allocations               []PaymentAllocation      `json:"allocations,omitempty"`
+	ID                        uuid.UUID           `json:"id"`
+	LegalEntityID             uuid.UUID           `json:"legal_entity_id"`
+	PaymentNumber             string              `json:"payment_number"`
+	SupplierID                uuid.UUID           `json:"supplier_id"`
+	SupplierNameEn            string              `json:"supplier_name_en,omitempty"`
+	SupplierNameAr            string              `json:"supplier_name_ar,omitempty"`
+	SupplierNumber            string              `json:"supplier_number,omitempty"`
+	PaymentDate               time.Time           `json:"payment_date"`
+	PaymentMethod             PaymentMethod       `json:"payment_method"`
+	DisbursementAccountID     uuid.UUID           `json:"disbursement_account_id"`
+	DisbursementAccountNumber string              `json:"disbursement_account_number,omitempty"`
+	DisbursementAccountNameAr string              `json:"disbursement_account_name_ar,omitempty"`
+	Amount                    decimal.Decimal     `json:"amount"`
+	CurrencyCode              string              `json:"currency_code"`
+	ReferenceNumber           *string             `json:"reference_number,omitempty"`
+	Status                    string              `json:"status"`
+	Notes                     *string             `json:"notes,omitempty"`
+	AllocatedAmount           decimal.Decimal     `json:"allocated_amount"`
+	UnallocatedAmount         decimal.Decimal     `json:"unallocated_amount"`
+	JournalEntryID            *uuid.UUID          `json:"journal_entry_id,omitempty"`
+	CreatedByUserID           *uuid.UUID          `json:"created_by_user_id,omitempty"`
+	CreatedAt                 time.Time           `json:"created_at"`
+	Allocations               []PaymentAllocation `json:"allocations,omitempty"`
 }
 
 type PaymentAllocation struct {
@@ -320,24 +320,24 @@ type PaymentAllocation struct {
 }
 
 type PayablesOpenItem struct {
-	ID               uuid.UUID            `json:"id"`
-	LegalEntityID    uuid.UUID            `json:"legal_entity_id"`
-	SupplierID       uuid.UUID            `json:"supplier_id"`
-	SupplierNumber   string               `json:"supplier_number,omitempty"`
-	SupplierNameAr   string               `json:"supplier_name_ar,omitempty"`
-	DocumentType     OpenItemDocumentType `json:"document_type"`
-	DocumentNumber   string               `json:"document_number"`
-	DocumentID       *uuid.UUID           `json:"document_id,omitempty"`
-	DocumentDate     time.Time            `json:"document_date"`
-	DueDate          time.Time            `json:"due_date"`
-	CurrencyCode     string               `json:"currency_code"`
-	OriginalAmount   decimal.Decimal      `json:"original_amount"`
-	AllocatedAmount  decimal.Decimal      `json:"allocated_amount"`
-	RemainingAmount  decimal.Decimal      `json:"remaining_amount"`
-	Status           OpenItemStatus       `json:"status"`
-	DaysOverdue      int32                `json:"days_overdue"`
-	CreatedAt        time.Time            `json:"created_at"`
-	UpdatedAt        time.Time            `json:"updated_at"`
+	ID              uuid.UUID            `json:"id"`
+	LegalEntityID   uuid.UUID            `json:"legal_entity_id"`
+	SupplierID      uuid.UUID            `json:"supplier_id"`
+	SupplierNumber  string               `json:"supplier_number,omitempty"`
+	SupplierNameAr  string               `json:"supplier_name_ar,omitempty"`
+	DocumentType    OpenItemDocumentType `json:"document_type"`
+	DocumentNumber  string               `json:"document_number"`
+	DocumentID      *uuid.UUID           `json:"document_id,omitempty"`
+	DocumentDate    time.Time            `json:"document_date"`
+	DueDate         time.Time            `json:"due_date"`
+	CurrencyCode    string               `json:"currency_code"`
+	OriginalAmount  decimal.Decimal      `json:"original_amount"`
+	AllocatedAmount decimal.Decimal      `json:"allocated_amount"`
+	RemainingAmount decimal.Decimal      `json:"remaining_amount"`
+	Status          OpenItemStatus       `json:"status"`
+	DaysOverdue     int32                `json:"days_overdue"`
+	CreatedAt       time.Time            `json:"created_at"`
+	UpdatedAt       time.Time            `json:"updated_at"`
 }
 
 type SupplierAgingSummary struct {

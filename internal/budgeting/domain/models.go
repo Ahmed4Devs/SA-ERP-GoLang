@@ -84,30 +84,30 @@ type BudgetVersion struct {
 // BudgetLine represents a multi-dimensional line allocation.
 // Canonical dimensions per Section 40.24: account, department, cost_center, project, period.
 type BudgetLine struct {
-	ID                 uuid.UUID       `json:"id"`
-	BudgetVersionID    uuid.UUID       `json:"budget_version_id"`
-	AccountID          uuid.UUID       `json:"account_id"`
-	DepartmentID       *uuid.UUID      `json:"department_id,omitempty"`
-	CostCenterID       *uuid.UUID      `json:"cost_center_id,omitempty"`
-	ProjectCode        string          `json:"project_code,omitempty"`
-	FiscalPeriodID     *uuid.UUID      `json:"fiscal_period_id,omitempty"`
-	Amount             decimal.Decimal `json:"amount"`
-	ActualAmount       decimal.Decimal `json:"actual_amount"`
-	CommittedAmount    decimal.Decimal `json:"committed_amount"`
-	LineDescriptionEn  string          `json:"line_description_en"`
-	LineDescriptionAr  string          `json:"line_description_ar"`
-	CreatedAt          time.Time       `json:"created_at"`
-	UpdatedAt          time.Time       `json:"updated_at"`
-	AccountCode        string          `json:"account_code,omitempty"`
-	AccountNameEn      string          `json:"account_name_en,omitempty"`
-	AccountNameAr      string          `json:"account_name_ar,omitempty"`
-	DepartmentNameEn   string          `json:"department_name_en,omitempty"`
-	DepartmentNameAr   string          `json:"department_name_ar,omitempty"`
-	CostCenterNameEn   string          `json:"cost_center_name_en,omitempty"`
-	CostCenterNameAr   string          `json:"cost_center_name_ar,omitempty"`
-	PeriodNumber       *int16          `json:"period_number,omitempty"`
-	PeriodNameEn       string          `json:"period_name_en,omitempty"`
-	PeriodNameAr       string          `json:"period_name_ar,omitempty"`
+	ID                uuid.UUID       `json:"id"`
+	BudgetVersionID   uuid.UUID       `json:"budget_version_id"`
+	AccountID         uuid.UUID       `json:"account_id"`
+	DepartmentID      *uuid.UUID      `json:"department_id,omitempty"`
+	CostCenterID      *uuid.UUID      `json:"cost_center_id,omitempty"`
+	ProjectCode       string          `json:"project_code,omitempty"`
+	FiscalPeriodID    *uuid.UUID      `json:"fiscal_period_id,omitempty"`
+	Amount            decimal.Decimal `json:"amount"`
+	ActualAmount      decimal.Decimal `json:"actual_amount"`
+	CommittedAmount   decimal.Decimal `json:"committed_amount"`
+	LineDescriptionEn string          `json:"line_description_en"`
+	LineDescriptionAr string          `json:"line_description_ar"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+	AccountCode       string          `json:"account_code,omitempty"`
+	AccountNameEn     string          `json:"account_name_en,omitempty"`
+	AccountNameAr     string          `json:"account_name_ar,omitempty"`
+	DepartmentNameEn  string          `json:"department_name_en,omitempty"`
+	DepartmentNameAr  string          `json:"department_name_ar,omitempty"`
+	CostCenterNameEn  string          `json:"cost_center_name_en,omitempty"`
+	CostCenterNameAr  string          `json:"cost_center_name_ar,omitempty"`
+	PeriodNumber      *int16          `json:"period_number,omitempty"`
+	PeriodNameEn      string          `json:"period_name_en,omitempty"`
+	PeriodNameAr      string          `json:"period_name_ar,omitempty"`
 }
 
 // BudgetTransfer models inter-line fund transfers/reallocations.

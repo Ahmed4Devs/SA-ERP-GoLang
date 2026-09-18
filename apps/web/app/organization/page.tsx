@@ -1,4 +1,5 @@
-import { OrganizationView } from "@/features/organization/organization-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function OrganizationPage() {
-  return <OrganizationView />;
+  return <ModuleAPIView titleAr="الهيكل التنظيمي" titleEn="Organization" descriptionAr="المنظمات ونطاقات الكيانات الممنوحة للمستخدم." descriptionEn="Live organizations and the current user's entity scopes." resources={moduleResources.organization} />;
 }

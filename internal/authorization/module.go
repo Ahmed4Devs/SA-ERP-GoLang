@@ -44,6 +44,10 @@ func (m *Module) RequirePermission(permission string, extractScope func(*http.Re
 	return authzhttp.RequirePermission(m.Service, permission, extractScope)
 }
 
+func (m *Module) RequireModuleAccess(viewPermission, managePermission string) func(http.Handler) http.Handler {
+	return authzhttp.RequireModuleAccess(m.Service, viewPermission, managePermission)
+}
+
 // SeedAdminRole ensures the system administrator has global SUPER_ADMIN role.
 func (m *Module) SeedAdminRole(ctx context.Context, adminUserID uuid.UUID) error {
 	roles, err := m.Service.ListRoles(ctx)

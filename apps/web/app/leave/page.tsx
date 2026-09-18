@@ -1,4 +1,5 @@
-import { LeaveView } from "@/features/leave/leave-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function LeavePage() {
-  return <LeaveView />;
+  return <ModuleAPIView titleAr="الإجازات" titleEn="Leave Management" descriptionAr="أنواع وسياسات وطلبات الإجازات المسجلة فعلياً." descriptionEn="Live leave types, policies, and requests." resources={moduleResources.leave} />;
 }

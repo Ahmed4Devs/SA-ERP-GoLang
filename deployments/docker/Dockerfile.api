@@ -1,6 +1,6 @@
 # Multi-stage Production Dockerfile for Saudi ERP API Core
 # Stage 1: Build binary
-FROM golang:1.24-alpine AS builder
+FROM golang:1.27.1-alpine AS builder
 
 WORKDIR /src
 
@@ -28,12 +28,13 @@ ENV TZ=Asia/Riyadh
 
 COPY --from=builder /bin/erp-api /app/erp-api
 COPY --from=builder /src/database/migrations /app/database/migrations
+RUN mkdir -p /app/data/storage && chown -R appuser:appgroup /app/data
 
 USER appuser
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/healthz || exit 1
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+	CMD curl -f http://localhost:8080/readyz || exit 1
 
 ENTRYPOINT ["/app/erp-api"]

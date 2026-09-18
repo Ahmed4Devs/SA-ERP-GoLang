@@ -1,4 +1,5 @@
-import { TreasuryView } from "@/features/treasury/treasury-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function TreasuryPage() {
-  return <TreasuryView />;
+  return <ModuleAPIView titleAr="الخزينة والسيولة" titleEn="Treasury" descriptionAr="حسابات النقد والمقبوضات والمدفوعات والتحويلات الفعلية." descriptionEn="Live cash accounts, receipts, payments, and transfers." resources={moduleResources.treasury} />;
 }

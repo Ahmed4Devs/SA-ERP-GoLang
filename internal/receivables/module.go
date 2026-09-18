@@ -24,11 +24,11 @@ type Module struct {
 }
 
 func NewModule(cfg *config.Config, db *database.DB) *Module {
-	customerRepo := postgres.NewCustomerRepository(db.Pool)
-	receivablesRepo := postgres.NewReceivablesRepository(db.Pool)
+	customerRepo := postgres.NewCustomerRepository(db)
+	receivablesRepo := postgres.NewReceivablesRepository(db)
 
-	customerSvc := services.NewCustomerService(customerRepo)
-	receivablesSvc := services.NewReceivablesService(customerRepo, receivablesRepo)
+	customerSvc := services.NewCustomerService(customerRepo, db)
+	receivablesSvc := services.NewReceivablesService(customerRepo, receivablesRepo, db)
 
 	handler := receivableshttp.NewCustomerHandler(customerSvc, receivablesSvc)
 

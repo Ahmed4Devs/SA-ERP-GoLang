@@ -3,6 +3,7 @@ package middleware
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ type RateLimiterConfig struct {
 	GeneralLimit   int           // Max requests allowed per window
 	AuthLimit      int           // Max requests allowed for auth endpoints per window
 	WindowDuration time.Duration // Time window (e.g. 1 minute)
+	TrustedProxies []string
 }
 
 func DefaultRateLimiterConfig() RateLimiterConfig {
@@ -25,6 +27,7 @@ func DefaultRateLimiterConfig() RateLimiterConfig {
 		GeneralLimit:   120,
 		AuthLimit:      10,
 		WindowDuration: 1 * time.Minute,
+		TrustedProxies: []string{"127.0.0.1", "::1"},
 	}
 }
 
@@ -62,10 +65,10 @@ func (rl *RateLimiter) Middleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Extract client identifier (IP from Real-IP, X-Forwarded-For, or RemoteAddr)
-			ip := r.RemoteAddr
-			if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+			ip := clientIP(r.RemoteAddr)
+			if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" && isTrustedProxy(rl.cfg.TrustedProxies, ip) {
 				ip = strings.TrimSpace(strings.Split(forwarded, ",")[0])
-			} else if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+			} else if realIP := r.Header.Get("X-Real-IP"); realIP != "" && isTrustedProxy(rl.cfg.TrustedProxies, ip) {
 				ip = realIP
 			}
 
@@ -123,4 +126,25 @@ func (rl *RateLimiter) Middleware() func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func clientIP(remoteAddr string) string {
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		return host
+	}
+	return remoteAddr
+}
+
+func isTrustedProxy(values []string, target string) bool {
+	targetIP := net.ParseIP(strings.TrimSpace(target))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if strings.EqualFold(value, target) {
+			return true
+		}
+		if _, network, err := net.ParseCIDR(value); err == nil && targetIP != nil && network.Contains(targetIP) {
+			return true
+		}
+	}
+	return false
 }

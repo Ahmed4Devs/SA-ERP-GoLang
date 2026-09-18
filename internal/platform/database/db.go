@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -16,7 +17,22 @@ type DB struct {
 	cfg  *config.Config
 }
 
+const LatestSchemaVersion int64 = 300
+
 func NewPool(ctx context.Context, cfg *config.Config) (*DB, error) {
+	if err := prepareIntegrationTestDatabase(cfg); err != nil {
+		return nil, err
+	}
+	connectCtx := ctx
+	if cfg.Environment == config.EnvTesting {
+		// Test packages may wait for the cross-process database lock longer than
+		// the short setup context created by an individual test. Use a fresh
+		// bounded context once that lock is acquired.
+		var cancel context.CancelFunc
+		connectCtx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+	}
+
 	poolConfig, err := pgxpool.ParseConfig(cfg.Database.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse database config: %w", err)
@@ -28,13 +44,13 @@ func NewPool(ctx context.Context, cfg *config.Config) (*DB, error) {
 	poolConfig.MaxConnIdleTime = 30 * time.Minute
 	poolConfig.HealthCheckPeriod = 1 * time.Minute
 
-	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	pool, err := pgxpool.NewWithConfig(connectCtx, poolConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pgxpool: %w", err)
 	}
 
 	// Verify connectivity
-	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	pingCtx, cancel := context.WithTimeout(connectCtx, 5*time.Second)
 	defer cancel()
 
 	if err := pool.Ping(pingCtx); err != nil {
@@ -51,8 +67,24 @@ func NewPool(ctx context.Context, cfg *config.Config) (*DB, error) {
 func (db *DB) Check() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	return db.Pool.Ping(ctx)
+	if err := db.Pool.Ping(ctx); err != nil {
+		return err
+	}
+	var version int64
+	err := db.Pool.QueryRow(ctx, `
+		SELECT COALESCE(MAX(version_id), 0)
+		FROM goose_db_version
+		WHERE is_applied = TRUE`).Scan(&version)
+	if err != nil {
+		return fmt.Errorf("failed to read schema version: %w", err)
+	}
+	if version != LatestSchemaVersion {
+		return fmt.Errorf("%w: database=%d application=%d", ErrSchemaVersionMismatch, version, LatestSchemaVersion)
+	}
+	return nil
 }
+
+var ErrSchemaVersionMismatch = errors.New("database schema version does not match application")
 
 func (db *DB) Close() {
 	if db.Pool != nil {

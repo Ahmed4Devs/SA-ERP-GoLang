@@ -60,7 +60,7 @@ func setupPayablesTest(t *testing.T) (*payables.Module, *database.DB, uuid.UUID,
 		adminID = admin.ID
 	}
 
-	// 5. Lookup accounts: AP (211000), Bank (111002), Expense (520000)
+	// 5. Lookup accounts: AP (211000), Bank (111002), posting Expense (523000)
 	var apAccountID, bankAccountID, expAccountID uuid.UUID
 	err = db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '211000' LIMIT 1", le.ID).Scan(&apAccountID)
 	if err != nil {
@@ -70,7 +70,7 @@ func setupPayablesTest(t *testing.T) (*payables.Module, *database.DB, uuid.UUID,
 	if err != nil {
 		t.Fatalf("failed to find Bank account: %v", err)
 	}
-	err = db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '520000' LIMIT 1", le.ID).Scan(&expAccountID)
+	err = db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '523000' AND is_active AND allow_posting LIMIT 1", le.ID).Scan(&expAccountID)
 	if err != nil {
 		t.Fatalf("failed to find Expense account: %v", err)
 	}
@@ -90,14 +90,14 @@ func TestSupplier_CreationAndSaudiValidation(t *testing.T) {
 
 	// 1. Positive: Create Valid Local Supplier
 	cmd := ports.CreateSupplierCmd{
-		LegalEntityID:  leID,
-		SupplierType:   domain.SupplierTypeLocal,
-		NameEn:         "Rawabi Industrial Supplies Co.",
-		NameAr:         "شركة روابي للتجهيزات الصناعية",
-		TaxID:          &validTaxID,
-		CRNumber:       &validCR,
-		IBAN:           &validIBAN,
-		BankName:       strPtr("Al-Rajhi Bank"),
+		LegalEntityID: leID,
+		SupplierType:  domain.SupplierTypeLocal,
+		NameEn:        "Rawabi Industrial Supplies Co.",
+		NameAr:        "شركة روابي للتجهيزات الصناعية",
+		TaxID:         &validTaxID,
+		CRNumber:      &validCR,
+		IBAN:          &validIBAN,
+		BankName:      strPtr("Al-Rajhi Bank"),
 		Address: domain.SaudiAddress{
 			BuildingNo:   "4567",
 			StreetName:   "King Abdulaziz Road",
@@ -221,12 +221,12 @@ func TestPayables_SupplierInvoiceCreationAndGLPosting(t *testing.T) {
 	taxID := "310987654300003"
 	crNum := "1010765432"
 	supp, err := suppSvc.CreateSupplier(ctx, ports.CreateSupplierCmd{
-		LegalEntityID:  leID,
-		SupplierType:   domain.SupplierTypeLocal,
-		NameEn:         "Saudi Modern Hardware Tech",
-		NameAr:         "شركة التقنية الحديثة للمعدات",
-		TaxID:          &taxID,
-		CRNumber:       &crNum,
+		LegalEntityID: leID,
+		SupplierType:  domain.SupplierTypeLocal,
+		NameEn:        "Saudi Modern Hardware Tech",
+		NameAr:        "شركة التقنية الحديثة للمعدات",
+		TaxID:         &taxID,
+		CRNumber:      &crNum,
 		Address: domain.SaudiAddress{
 			City:        "Riyadh",
 			CountryCode: "SA",

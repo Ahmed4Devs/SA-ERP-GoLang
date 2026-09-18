@@ -32,6 +32,10 @@ func setupAccountingTest(t *testing.T) (*accounting.Module, *organization.Module
 	if err != nil {
 		t.Skipf("PostgreSQL not accessible: %v", err)
 	}
+	if err := database.MigrateUp(ctx, cfg.Database.URL, "../../../database/migrations"); err != nil {
+		db.Close()
+		t.Fatalf("failed to run migrations: %v", err)
+	}
 
 	txManager := transaction.NewManager(db.Pool)
 	iamMod := iam.NewModule(cfg, db, txManager)

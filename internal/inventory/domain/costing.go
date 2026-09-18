@@ -25,33 +25,33 @@ var (
 )
 
 type CostLayer struct {
-	ID                 uuid.UUID       `json:"id"`
-	LegalEntityID      uuid.UUID       `json:"legal_entity_id"`
-	ItemID             uuid.UUID       `json:"item_id"`
-	WarehouseID        uuid.UUID       `json:"warehouse_id"`
-	SourceMovementID   uuid.UUID       `json:"source_movement_id"`
-	OriginalQuantity   decimal.Decimal `json:"original_quantity"`
-	RemainingQuantity  decimal.Decimal `json:"remaining_quantity"`
-	UnitCost           decimal.Decimal `json:"unit_cost"`
-	TotalCost          decimal.Decimal `json:"total_cost"`
-	CreatedAt          time.Time       `json:"created_at"`
-	UpdatedAt          time.Time       `json:"updated_at"`
-	ItemCode           string          `json:"item_code,omitempty"`
-	ItemNameEn         string          `json:"item_name_en,omitempty"`
-	ItemNameAr         string          `json:"item_name_ar,omitempty"`
-	WarehouseCode      string          `json:"warehouse_code,omitempty"`
-	WarehouseNameAr    string          `json:"warehouse_name_ar,omitempty"`
+	ID                uuid.UUID       `json:"id"`
+	LegalEntityID     uuid.UUID       `json:"legal_entity_id"`
+	ItemID            uuid.UUID       `json:"item_id"`
+	WarehouseID       uuid.UUID       `json:"warehouse_id"`
+	SourceMovementID  uuid.UUID       `json:"source_movement_id"`
+	OriginalQuantity  decimal.Decimal `json:"original_quantity"`
+	RemainingQuantity decimal.Decimal `json:"remaining_quantity"`
+	UnitCost          decimal.Decimal `json:"unit_cost"`
+	TotalCost         decimal.Decimal `json:"total_cost"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+	ItemCode          string          `json:"item_code,omitempty"`
+	ItemNameEn        string          `json:"item_name_en,omitempty"`
+	ItemNameAr        string          `json:"item_name_ar,omitempty"`
+	WarehouseCode     string          `json:"warehouse_code,omitempty"`
+	WarehouseNameAr   string          `json:"warehouse_name_ar,omitempty"`
 }
 
 type CostLayerConsumption struct {
-	ID                uuid.UUID       `json:"id"`
-	LegalEntityID     uuid.UUID       `json:"legal_entity_id"`
-	CostLayerID       uuid.UUID       `json:"cost_layer_id"`
-	IssueMovementID   uuid.UUID       `json:"issue_movement_id"`
-	QuantityConsumed  decimal.Decimal `json:"quantity_consumed"`
-	UnitCost          decimal.Decimal `json:"unit_cost"`
-	TotalCost         decimal.Decimal `json:"total_cost"`
-	ConsumedAt        time.Time       `json:"consumed_at"`
+	ID               uuid.UUID       `json:"id"`
+	LegalEntityID    uuid.UUID       `json:"legal_entity_id"`
+	CostLayerID      uuid.UUID       `json:"cost_layer_id"`
+	IssueMovementID  uuid.UUID       `json:"issue_movement_id"`
+	QuantityConsumed decimal.Decimal `json:"quantity_consumed"`
+	UnitCost         decimal.Decimal `json:"unit_cost"`
+	TotalCost        decimal.Decimal `json:"total_cost"`
+	ConsumedAt       time.Time       `json:"consumed_at"`
 }
 
 type InventoryRevaluation struct {

@@ -39,6 +39,25 @@ func (s *LocalFilesystemBlobStore) RootDir() string {
 	return s.rootDir
 }
 
+// Check verifies that the persistent storage root is writable. It is used by
+// readiness probes so a pod is never sent document traffic with a read-only or
+// disconnected volume.
+func (s *LocalFilesystemBlobStore) Check() error {
+	testFile, err := os.CreateTemp(s.rootDir, ".readiness-*")
+	if err != nil {
+		return fmt.Errorf("storage root is not writable: %w", err)
+	}
+	name := testFile.Name()
+	if err := testFile.Close(); err != nil {
+		_ = os.Remove(name)
+		return fmt.Errorf("failed to close storage readiness file: %w", err)
+	}
+	if err := os.Remove(name); err != nil {
+		return fmt.Errorf("failed to clean storage readiness file: %w", err)
+	}
+	return nil
+}
+
 // resolvePath checks for directory traversal and returns the absolute filesystem path for the given key.
 func (s *LocalFilesystemBlobStore) resolvePath(key string) (string, error) {
 	cleanKey := filepath.Clean(key)

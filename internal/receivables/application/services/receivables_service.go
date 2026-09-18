@@ -3,9 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 
+	"erp/internal/platform/database"
+	"erp/internal/platform/identifiers"
+	"erp/internal/platform/transaction"
 	"erp/internal/receivables/domain"
 	"erp/internal/receivables/ports"
 
@@ -16,19 +18,34 @@ import (
 type receivablesService struct {
 	customerRepo    ports.CustomerRepository
 	receivablesRepo ports.ReceivablesRepository
+	db              *database.DB
+	tx              transaction.Manager
 }
 
 func NewReceivablesService(
 	customerRepo ports.CustomerRepository,
 	receivablesRepo ports.ReceivablesRepository,
+	db *database.DB,
 ) ports.ReceivablesService {
 	return &receivablesService{
 		customerRepo:    customerRepo,
 		receivablesRepo: receivablesRepo,
+		db:              db,
+		tx:              transaction.NewManager(db.Pool),
 	}
 }
 
 func (s *receivablesService) CreateReceipt(ctx context.Context, cmd ports.CreateReceiptCommand) (*domain.Receipt, error) {
+	var receipt *domain.Receipt
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		receipt, err = s.createReceipt(txCtx, cmd)
+		return err
+	})
+	return receipt, err
+}
+
+func (s *receivablesService) createReceipt(ctx context.Context, cmd ports.CreateReceiptCommand) (*domain.Receipt, error) {
 	if cmd.Amount.LessThanOrEqual(decimal.Zero) {
 		return nil, fmt.Errorf("receipt amount must be greater than zero")
 	}
@@ -55,7 +72,7 @@ func (s *receivablesService) CreateReceipt(ctx context.Context, cmd ports.Create
 		receiptDate = time.Now()
 	}
 
-	receiptNumber := fmt.Sprintf("REC-%d-%04d", time.Now().Year(), rand.Intn(9000)+1000)
+	receiptNumber := identifiers.NewDocumentNumber("REC", time.Now())
 
 	totalAllocated := decimal.Zero
 	for _, alloc := range cmd.Allocations {
@@ -142,7 +159,9 @@ func (s *receivablesService) CreateReceipt(ctx context.Context, cmd ports.Create
 
 	// Reduce customer current balance if allocations occurred
 	if totalAllocated.GreaterThan(decimal.Zero) {
-		_, _ = s.customerRepo.UpdateCustomerBalance(ctx, cmd.CustomerID, totalAllocated.Neg())
+		if _, err := s.customerRepo.UpdateCustomerBalance(ctx, cmd.CustomerID, totalAllocated.Neg()); err != nil {
+			return nil, fmt.Errorf("failed to update customer balance: %w", err)
+		}
 	}
 
 	return s.receivablesRepo.GetReceiptByID(ctx, createdReceipt.ID)
@@ -166,6 +185,15 @@ func (s *receivablesService) ListReceipts(ctx context.Context, filter ports.Rece
 }
 
 func (s *receivablesService) AllocateReceipt(ctx context.Context, receiptID uuid.UUID, allocations []ports.AllocationCommand, userID *uuid.UUID) error {
+	return s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		return s.allocateReceipt(txCtx, receiptID, allocations, userID)
+	})
+}
+
+func (s *receivablesService) allocateReceipt(ctx context.Context, receiptID uuid.UUID, allocations []ports.AllocationCommand, userID *uuid.UUID) error {
+	if err := s.db.DBTX(ctx).QueryRow(ctx, "SELECT id FROM receivables.receipts WHERE id = $1 FOR UPDATE", receiptID).Scan(&receiptID); err != nil {
+		return fmt.Errorf("failed to lock receipt: %w", err)
+	}
 	receipt, err := s.receivablesRepo.GetReceiptByID(ctx, receiptID)
 	if err != nil {
 		return err
@@ -223,11 +251,21 @@ func (s *receivablesService) AllocateReceipt(ctx context.Context, receiptID uuid
 		return err
 	}
 
-	_, _ = s.customerRepo.UpdateCustomerBalance(ctx, receipt.CustomerID, totalToAllocate.Neg())
-	return nil
+	_, err = s.customerRepo.UpdateCustomerBalance(ctx, receipt.CustomerID, totalToAllocate.Neg())
+	return err
 }
 
 func (s *receivablesService) CreateOpenItem(ctx context.Context, item *domain.OpenItem) (*domain.OpenItem, error) {
+	var openItem *domain.OpenItem
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		openItem, err = s.createOpenItem(txCtx, item)
+		return err
+	})
+	return openItem, err
+}
+
+func (s *receivablesService) createOpenItem(ctx context.Context, item *domain.OpenItem) (*domain.OpenItem, error) {
 	if item.OriginalAmount.LessThanOrEqual(decimal.Zero) {
 		return nil, fmt.Errorf("open item original amount must be greater than zero")
 	}
@@ -243,7 +281,9 @@ func (s *receivablesService) CreateOpenItem(ctx context.Context, item *domain.Op
 
 	// Invoices increase customer outstanding balance
 	if item.DocumentType == domain.DocumentTypeInvoice || item.DocumentType == domain.DocumentTypeDebitNote {
-		_, _ = s.customerRepo.UpdateCustomerBalance(ctx, item.CustomerID, item.OriginalAmount)
+		if _, err := s.customerRepo.UpdateCustomerBalance(ctx, item.CustomerID, item.OriginalAmount); err != nil {
+			return nil, fmt.Errorf("failed to update customer balance: %w", err)
+		}
 	}
 
 	return created, nil

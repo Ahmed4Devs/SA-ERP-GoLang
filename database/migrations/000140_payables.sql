@@ -287,12 +287,12 @@ BEGIN
     SELECT id INTO v_net30_id FROM payables.payment_terms WHERE legal_entity_id = p_legal_entity_id AND code = 'NET30';
     SELECT id INTO v_immediate_id FROM payables.payment_terms WHERE legal_entity_id = p_legal_entity_id AND code = 'IMMEDIATE';
 
-    -- Find AP GL account (211000) and Operating Expense (520000)
+    -- Find AP GL account (211000) and a posting-level operating expense (523000)
     SELECT id INTO v_ap_account_id FROM accounting.accounts 
     WHERE legal_entity_id = p_legal_entity_id AND code = '211000' LIMIT 1;
 
     SELECT id INTO v_exp_account_id FROM accounting.accounts 
-    WHERE legal_entity_id = p_legal_entity_id AND code = '520000' LIMIT 1;
+    WHERE legal_entity_id = p_legal_entity_id AND code = '523000' AND is_active AND allow_posting LIMIT 1;
 
     -- 2. Default Saudi Suppliers
     IF v_ap_account_id IS NOT NULL THEN

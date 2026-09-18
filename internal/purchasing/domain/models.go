@@ -287,19 +287,19 @@ type GoodsReceiptLine struct {
 
 // ThreeWayMatchResult represents the outcome of comparing PO, Goods Receipt, and Supplier Invoice
 type ThreeWayMatchResult struct {
-	POLineID              uuid.UUID       `json:"po_line_id"`
-	GRNLineID             uuid.UUID       `json:"grn_line_id"`
-	InvoiceLineID         uuid.UUID       `json:"invoice_line_id"`
-	POQuantity            decimal.Decimal `json:"po_quantity"`
-	GRNAcceptedQuantity   decimal.Decimal `json:"grn_accepted_quantity"`
-	InvoicedQuantity      decimal.Decimal `json:"invoiced_quantity"`
-	POUnitPrice           decimal.Decimal `json:"po_unit_price"`
-	InvoiceUnitPrice      decimal.Decimal `json:"invoice_unit_price"`
-	QuantityVariance      decimal.Decimal `json:"quantity_variance"`
-	PriceVariance         decimal.Decimal `json:"price_variance"`
-	MatchStatus           MatchStatus     `json:"match_status"`
-	PassedTolerance       bool            `json:"passed_tolerance"`
-	Notes                 string          `json:"notes"`
+	POLineID            uuid.UUID       `json:"po_line_id"`
+	GRNLineID           uuid.UUID       `json:"grn_line_id"`
+	InvoiceLineID       uuid.UUID       `json:"invoice_line_id"`
+	POQuantity          decimal.Decimal `json:"po_quantity"`
+	GRNAcceptedQuantity decimal.Decimal `json:"grn_accepted_quantity"`
+	InvoicedQuantity    decimal.Decimal `json:"invoiced_quantity"`
+	POUnitPrice         decimal.Decimal `json:"po_unit_price"`
+	InvoiceUnitPrice    decimal.Decimal `json:"invoice_unit_price"`
+	QuantityVariance    decimal.Decimal `json:"quantity_variance"`
+	PriceVariance       decimal.Decimal `json:"price_variance"`
+	MatchStatus         MatchStatus     `json:"match_status"`
+	PassedTolerance     bool            `json:"passed_tolerance"`
+	Notes               string          `json:"notes"`
 }
 
 // CalculateLineAmounts computes gross, discount, taxable, tax, and total

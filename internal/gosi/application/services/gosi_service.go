@@ -8,6 +8,7 @@ import (
 	"erp/internal/gosi/domain"
 	"erp/internal/gosi/ports"
 	"erp/internal/platform/database"
+	"erp/internal/platform/identifiers"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -243,7 +244,7 @@ func (s *GosiService) CreateExportBatch(ctx context.Context, legalEntityID uuid.
 	}
 	totalAmount := totalEmp.Add(totalEr)
 
-	batchNumber := fmt.Sprintf("GOSI-%d%02d-%s", year, month, uuid.New().String()[:8])
+	batchNumber := identifiers.NewDocumentNumber(fmt.Sprintf("GOSI-%d%02d", year, month), time.Now())
 	xmlContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <GOSIContributionReport xmlns="urn:sa:gosi:v1" year="%d" month="%02d">
   <LegalEntity id="%s"/>

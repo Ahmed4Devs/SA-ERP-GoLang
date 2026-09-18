@@ -50,13 +50,13 @@ const (
 type OrderStatus string
 
 const (
-	OrderStatusDraft               OrderStatus = "DRAFT"
-	OrderStatusConfirmed           OrderStatus = "CONFIRMED"
-	OrderStatusPartiallyDelivered  OrderStatus = "PARTIALLY_DELIVERED"
-	OrderStatusDelivered           OrderStatus = "DELIVERED"
-	OrderStatusPartiallyInvoiced   OrderStatus = "PARTIALLY_INVOICED"
-	OrderStatusInvoiced            OrderStatus = "INVOICED"
-	OrderStatusCancelled           OrderStatus = "CANCELLED"
+	OrderStatusDraft              OrderStatus = "DRAFT"
+	OrderStatusConfirmed          OrderStatus = "CONFIRMED"
+	OrderStatusPartiallyDelivered OrderStatus = "PARTIALLY_DELIVERED"
+	OrderStatusDelivered          OrderStatus = "DELIVERED"
+	OrderStatusPartiallyInvoiced  OrderStatus = "PARTIALLY_INVOICED"
+	OrderStatusInvoiced           OrderStatus = "INVOICED"
+	OrderStatusCancelled          OrderStatus = "CANCELLED"
 )
 
 // DeliveryStatus represents the status of a goods shipment/delivery

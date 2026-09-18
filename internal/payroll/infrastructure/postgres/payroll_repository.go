@@ -17,19 +17,19 @@ import (
 
 type Repository struct {
 	db *database.DB
-	q  *sqlc.Queries
 }
 
 func NewRepository(db *database.DB) ports.Repository {
-	return &Repository{
-		db: db,
-		q:  sqlc.New(db.Pool),
-	}
+	return &Repository{db: db}
+}
+
+func (r *Repository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 // 1. Components
 func (r *Repository) CreateComponent(ctx context.Context, comp domain.SalaryComponent) (*domain.SalaryComponent, error) {
-	row, err := r.q.CreateSalaryComponent(ctx, sqlc.CreateSalaryComponentParams{
+	row, err := r.queries(ctx).CreateSalaryComponent(ctx, sqlc.CreateSalaryComponentParams{
 		ID:                   toPgUUID(comp.ID),
 		LegalEntityID:        toPgUUID(comp.LegalEntityID),
 		Code:                 comp.Code,
@@ -63,7 +63,7 @@ func (r *Repository) CreateComponent(ctx context.Context, comp domain.SalaryComp
 }
 
 func (r *Repository) GetComponentByID(ctx context.Context, id uuid.UUID) (*domain.SalaryComponent, error) {
-	row, err := r.q.GetSalaryComponentByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetSalaryComponentByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (r *Repository) GetComponentByID(ctx context.Context, id uuid.UUID) (*domai
 }
 
 func (r *Repository) ListComponents(ctx context.Context, legalEntityID uuid.UUID) ([]domain.SalaryComponent, error) {
-	rows, err := r.q.ListSalaryComponents(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListSalaryComponents(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func (r *Repository) ListComponents(ctx context.Context, legalEntityID uuid.UUID
 
 // 2. Structures
 func (r *Repository) CreateStructure(ctx context.Context, structObj domain.SalaryStructure) (*domain.SalaryStructure, error) {
-	row, err := r.q.CreateSalaryStructure(ctx, sqlc.CreateSalaryStructureParams{
+	row, err := r.queries(ctx).CreateSalaryStructure(ctx, sqlc.CreateSalaryStructureParams{
 		ID:            toPgUUID(structObj.ID),
 		LegalEntityID: toPgUUID(structObj.LegalEntityID),
 		Code:          structObj.Code,
@@ -136,7 +136,7 @@ func (r *Repository) CreateStructure(ctx context.Context, structObj domain.Salar
 }
 
 func (r *Repository) GetStructureByID(ctx context.Context, id uuid.UUID) (*domain.SalaryStructure, error) {
-	row, err := r.q.GetSalaryStructureByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetSalaryStructureByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func (r *Repository) GetStructureByID(ctx context.Context, id uuid.UUID) (*domai
 }
 
 func (r *Repository) ListStructures(ctx context.Context, legalEntityID uuid.UUID) ([]domain.SalaryStructure, error) {
-	rows, err := r.q.ListSalaryStructures(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListSalaryStructures(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (r *Repository) ListStructures(ctx context.Context, legalEntityID uuid.UUID
 }
 
 func (r *Repository) CreateStructureLine(ctx context.Context, line domain.SalaryStructureLine) (*domain.SalaryStructureLine, error) {
-	row, err := r.q.CreateSalaryStructureLine(ctx, sqlc.CreateSalaryStructureLineParams{
+	row, err := r.queries(ctx).CreateSalaryStructureLine(ctx, sqlc.CreateSalaryStructureLineParams{
 		ID:                toPgUUID(line.ID),
 		SalaryStructureID: toPgUUID(line.SalaryStructureID),
 		ComponentID:       toPgUUID(line.ComponentID),
@@ -197,7 +197,7 @@ func (r *Repository) CreateStructureLine(ctx context.Context, line domain.Salary
 }
 
 func (r *Repository) ListStructureLines(ctx context.Context, structureID uuid.UUID) ([]domain.SalaryStructureLine, error) {
-	rows, err := r.q.ListSalaryStructureLines(ctx, toPgUUID(structureID))
+	rows, err := r.queries(ctx).ListSalaryStructureLines(ctx, toPgUUID(structureID))
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (r *Repository) ListStructureLines(ctx context.Context, structureID uuid.UU
 
 // 3. Salary Assignment
 func (r *Repository) CreateSalaryAssignment(ctx context.Context, assign domain.EmployeeSalaryAssignment) (*domain.EmployeeSalaryAssignment, error) {
-	row, err := r.q.CreateEmployeeSalaryAssignment(ctx, sqlc.CreateEmployeeSalaryAssignmentParams{
+	row, err := r.queries(ctx).CreateEmployeeSalaryAssignment(ctx, sqlc.CreateEmployeeSalaryAssignmentParams{
 		ID:                 toPgUUID(assign.ID),
 		LegalEntityID:      toPgUUID(assign.LegalEntityID),
 		EmployeeID:         toPgUUID(assign.EmployeeID),
@@ -251,8 +251,8 @@ func (r *Repository) CreateSalaryAssignment(ctx context.Context, assign domain.E
 }
 
 func (r *Repository) GetActiveSalaryAssignment(ctx context.Context, employeeID uuid.UUID, asOfDate time.Time) (*domain.EmployeeSalaryAssignment, error) {
-	row, err := r.q.GetActiveEmployeeSalaryAssignment(ctx, sqlc.GetActiveEmployeeSalaryAssignmentParams{
-		EmployeeID: toPgUUID(employeeID),
+	row, err := r.queries(ctx).GetActiveEmployeeSalaryAssignment(ctx, sqlc.GetActiveEmployeeSalaryAssignmentParams{
+		EmployeeID:  toPgUUID(employeeID),
 		EffectiveTo: toPgDate(asOfDate),
 	})
 	if err != nil {
@@ -276,7 +276,7 @@ func (r *Repository) GetActiveSalaryAssignment(ctx context.Context, employeeID u
 
 // 4. Periods & Runs
 func (r *Repository) CreatePeriod(ctx context.Context, period domain.PayrollPeriod) (*domain.PayrollPeriod, error) {
-	row, err := r.q.CreatePayrollPeriod(ctx, sqlc.CreatePayrollPeriodParams{
+	row, err := r.queries(ctx).CreatePayrollPeriod(ctx, sqlc.CreatePayrollPeriodParams{
 		ID:             toPgUUID(period.ID),
 		LegalEntityID:  toPgUUID(period.LegalEntityID),
 		FiscalPeriodID: toPgUUIDPtr(period.FiscalPeriodID),
@@ -309,7 +309,7 @@ func (r *Repository) CreatePeriod(ctx context.Context, period domain.PayrollPeri
 }
 
 func (r *Repository) GetPeriodByID(ctx context.Context, id uuid.UUID) (*domain.PayrollPeriod, error) {
-	row, err := r.q.GetPayrollPeriodByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetPayrollPeriodByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +330,7 @@ func (r *Repository) GetPeriodByID(ctx context.Context, id uuid.UUID) (*domain.P
 }
 
 func (r *Repository) ListPeriods(ctx context.Context, legalEntityID uuid.UUID) ([]domain.PayrollPeriod, error) {
-	rows, err := r.q.ListPayrollPeriods(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListPayrollPeriods(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +355,7 @@ func (r *Repository) ListPeriods(ctx context.Context, legalEntityID uuid.UUID) (
 }
 
 func (r *Repository) CreateRun(ctx context.Context, run domain.PayrollRun) (*domain.PayrollRun, error) {
-	row, err := r.q.CreatePayrollRun(ctx, sqlc.CreatePayrollRunParams{
+	row, err := r.queries(ctx).CreatePayrollRun(ctx, sqlc.CreatePayrollRunParams{
 		ID:              toPgUUID(run.ID),
 		LegalEntityID:   toPgUUID(run.LegalEntityID),
 		PeriodID:        toPgUUID(run.PeriodID),
@@ -375,93 +375,93 @@ func (r *Repository) CreateRun(ctx context.Context, run domain.PayrollRun) (*dom
 		return nil, err
 	}
 	return &domain.PayrollRun{
-		ID:              toUUID(row.ID),
-		LegalEntityID:   toUUID(row.LegalEntityID),
-		PeriodID:        toUUID(row.PeriodID),
-		RunNumber:       row.RunNumber,
-		RunDate:         fromPgDate(row.RunDate),
-		CutoffDate:      fromPgDate(row.CutoffDate),
-		Status:          domain.RunStatus(row.Status),
-		TotalBasic:      fromPgNumeric(row.TotalBasic),
-		TotalAllowances: fromPgNumeric(row.TotalAllowances),
-		TotalGross:      fromPgNumeric(row.TotalGross),
-		TotalDeductions: fromPgNumeric(row.TotalDeductions),
-		TotalNet:        fromPgNumeric(row.TotalNet),
-		EmployeeCount:   int(row.EmployeeCount),
-		JournalEntryID:  toUUIDPtr(row.JournalEntryID),
+		ID:               toUUID(row.ID),
+		LegalEntityID:    toUUID(row.LegalEntityID),
+		PeriodID:         toUUID(row.PeriodID),
+		RunNumber:        row.RunNumber,
+		RunDate:          fromPgDate(row.RunDate),
+		CutoffDate:       fromPgDate(row.CutoffDate),
+		Status:           domain.RunStatus(row.Status),
+		TotalBasic:       fromPgNumeric(row.TotalBasic),
+		TotalAllowances:  fromPgNumeric(row.TotalAllowances),
+		TotalGross:       fromPgNumeric(row.TotalGross),
+		TotalDeductions:  fromPgNumeric(row.TotalDeductions),
+		TotalNet:         fromPgNumeric(row.TotalNet),
+		EmployeeCount:    int(row.EmployeeCount),
+		JournalEntryID:   toUUIDPtr(row.JournalEntryID),
 		WpsFileGenerated: row.WpsFileGenerated,
-		WpsFileName:     fromPgTextPtr(row.WpsFileName),
-		PostedAt:        fromPgTimestamptzPtr(row.PostedAt),
-		PostedBy:        toUUIDPtr(row.PostedBy),
-		CreatedBy:       toUUIDPtr(row.CreatedBy),
-		CreatedAt:       fromPgTimestamptz(row.CreatedAt),
+		WpsFileName:      fromPgTextPtr(row.WpsFileName),
+		PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
+		PostedBy:         toUUIDPtr(row.PostedBy),
+		CreatedBy:        toUUIDPtr(row.CreatedBy),
+		CreatedAt:        fromPgTimestamptz(row.CreatedAt),
 	}, nil
 }
 
 func (r *Repository) GetRunByID(ctx context.Context, id uuid.UUID) (*domain.PayrollRun, error) {
-	row, err := r.q.GetPayrollRunByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetPayrollRunByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
 	return &domain.PayrollRun{
-		ID:              toUUID(row.ID),
-		LegalEntityID:   toUUID(row.LegalEntityID),
-		PeriodID:        toUUID(row.PeriodID),
-		RunNumber:       row.RunNumber,
-		RunDate:         fromPgDate(row.RunDate),
-		CutoffDate:      fromPgDate(row.CutoffDate),
-		Status:          domain.RunStatus(row.Status),
-		TotalBasic:      fromPgNumeric(row.TotalBasic),
-		TotalAllowances: fromPgNumeric(row.TotalAllowances),
-		TotalGross:      fromPgNumeric(row.TotalGross),
-		TotalDeductions: fromPgNumeric(row.TotalDeductions),
-		TotalNet:        fromPgNumeric(row.TotalNet),
-		EmployeeCount:   int(row.EmployeeCount),
-		JournalEntryID:  toUUIDPtr(row.JournalEntryID),
+		ID:               toUUID(row.ID),
+		LegalEntityID:    toUUID(row.LegalEntityID),
+		PeriodID:         toUUID(row.PeriodID),
+		RunNumber:        row.RunNumber,
+		RunDate:          fromPgDate(row.RunDate),
+		CutoffDate:       fromPgDate(row.CutoffDate),
+		Status:           domain.RunStatus(row.Status),
+		TotalBasic:       fromPgNumeric(row.TotalBasic),
+		TotalAllowances:  fromPgNumeric(row.TotalAllowances),
+		TotalGross:       fromPgNumeric(row.TotalGross),
+		TotalDeductions:  fromPgNumeric(row.TotalDeductions),
+		TotalNet:         fromPgNumeric(row.TotalNet),
+		EmployeeCount:    int(row.EmployeeCount),
+		JournalEntryID:   toUUIDPtr(row.JournalEntryID),
 		WpsFileGenerated: row.WpsFileGenerated,
-		WpsFileName:     fromPgTextPtr(row.WpsFileName),
-		PostedAt:        fromPgTimestamptzPtr(row.PostedAt),
-		PostedBy:        toUUIDPtr(row.PostedBy),
-		CreatedBy:       toUUIDPtr(row.CreatedBy),
-		CreatedAt:       fromPgTimestamptz(row.CreatedAt),
+		WpsFileName:      fromPgTextPtr(row.WpsFileName),
+		PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
+		PostedBy:         toUUIDPtr(row.PostedBy),
+		CreatedBy:        toUUIDPtr(row.CreatedBy),
+		CreatedAt:        fromPgTimestamptz(row.CreatedAt),
 	}, nil
 }
 
 func (r *Repository) ListRuns(ctx context.Context, legalEntityID uuid.UUID) ([]domain.PayrollRun, error) {
-	rows, err := r.q.ListPayrollRuns(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListPayrollRuns(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
 	var res []domain.PayrollRun
 	for _, row := range rows {
 		res = append(res, domain.PayrollRun{
-			ID:              toUUID(row.ID),
-			LegalEntityID:   toUUID(row.LegalEntityID),
-			PeriodID:        toUUID(row.PeriodID),
-			RunNumber:       row.RunNumber,
-			RunDate:         fromPgDate(row.RunDate),
-			CutoffDate:      fromPgDate(row.CutoffDate),
-			Status:          domain.RunStatus(row.Status),
-			TotalBasic:      fromPgNumeric(row.TotalBasic),
-			TotalAllowances: fromPgNumeric(row.TotalAllowances),
-			TotalGross:      fromPgNumeric(row.TotalGross),
-			TotalDeductions: fromPgNumeric(row.TotalDeductions),
-			TotalNet:        fromPgNumeric(row.TotalNet),
-			EmployeeCount:   int(row.EmployeeCount),
-			JournalEntryID:  toUUIDPtr(row.JournalEntryID),
+			ID:               toUUID(row.ID),
+			LegalEntityID:    toUUID(row.LegalEntityID),
+			PeriodID:         toUUID(row.PeriodID),
+			RunNumber:        row.RunNumber,
+			RunDate:          fromPgDate(row.RunDate),
+			CutoffDate:       fromPgDate(row.CutoffDate),
+			Status:           domain.RunStatus(row.Status),
+			TotalBasic:       fromPgNumeric(row.TotalBasic),
+			TotalAllowances:  fromPgNumeric(row.TotalAllowances),
+			TotalGross:       fromPgNumeric(row.TotalGross),
+			TotalDeductions:  fromPgNumeric(row.TotalDeductions),
+			TotalNet:         fromPgNumeric(row.TotalNet),
+			EmployeeCount:    int(row.EmployeeCount),
+			JournalEntryID:   toUUIDPtr(row.JournalEntryID),
 			WpsFileGenerated: row.WpsFileGenerated,
-			WpsFileName:     fromPgTextPtr(row.WpsFileName),
-			PostedAt:        fromPgTimestamptzPtr(row.PostedAt),
-			PostedBy:        toUUIDPtr(row.PostedBy),
-			CreatedBy:       toUUIDPtr(row.CreatedBy),
-			CreatedAt:       fromPgTimestamptz(row.CreatedAt),
+			WpsFileName:      fromPgTextPtr(row.WpsFileName),
+			PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
+			PostedBy:         toUUIDPtr(row.PostedBy),
+			CreatedBy:        toUUIDPtr(row.CreatedBy),
+			CreatedAt:        fromPgTimestamptz(row.CreatedAt),
 		})
 	}
 	return res, nil
 }
 
 func (r *Repository) UpdateRunStatus(ctx context.Context, id uuid.UUID, status domain.RunStatus, postedBy *uuid.UUID) (*domain.PayrollRun, error) {
-	row, err := r.q.UpdatePayrollRunStatus(ctx, sqlc.UpdatePayrollRunStatusParams{
+	row, err := r.queries(ctx).UpdatePayrollRunStatus(ctx, sqlc.UpdatePayrollRunStatusParams{
 		ID:       toPgUUID(id),
 		Status:   string(status),
 		PostedBy: toPgUUIDPtr(postedBy),
@@ -470,31 +470,31 @@ func (r *Repository) UpdateRunStatus(ctx context.Context, id uuid.UUID, status d
 		return nil, err
 	}
 	return &domain.PayrollRun{
-		ID:              toUUID(row.ID),
-		LegalEntityID:   toUUID(row.LegalEntityID),
-		PeriodID:        toUUID(row.PeriodID),
-		RunNumber:       row.RunNumber,
-		RunDate:         fromPgDate(row.RunDate),
-		CutoffDate:      fromPgDate(row.CutoffDate),
-		Status:          domain.RunStatus(row.Status),
-		TotalBasic:      fromPgNumeric(row.TotalBasic),
-		TotalAllowances: fromPgNumeric(row.TotalAllowances),
-		TotalGross:      fromPgNumeric(row.TotalGross),
-		TotalDeductions: fromPgNumeric(row.TotalDeductions),
-		TotalNet:        fromPgNumeric(row.TotalNet),
-		EmployeeCount:   int(row.EmployeeCount),
-		JournalEntryID:  toUUIDPtr(row.JournalEntryID),
+		ID:               toUUID(row.ID),
+		LegalEntityID:    toUUID(row.LegalEntityID),
+		PeriodID:         toUUID(row.PeriodID),
+		RunNumber:        row.RunNumber,
+		RunDate:          fromPgDate(row.RunDate),
+		CutoffDate:       fromPgDate(row.CutoffDate),
+		Status:           domain.RunStatus(row.Status),
+		TotalBasic:       fromPgNumeric(row.TotalBasic),
+		TotalAllowances:  fromPgNumeric(row.TotalAllowances),
+		TotalGross:       fromPgNumeric(row.TotalGross),
+		TotalDeductions:  fromPgNumeric(row.TotalDeductions),
+		TotalNet:         fromPgNumeric(row.TotalNet),
+		EmployeeCount:    int(row.EmployeeCount),
+		JournalEntryID:   toUUIDPtr(row.JournalEntryID),
 		WpsFileGenerated: row.WpsFileGenerated,
-		WpsFileName:     fromPgTextPtr(row.WpsFileName),
-		PostedAt:        fromPgTimestamptzPtr(row.PostedAt),
-		PostedBy:        toUUIDPtr(row.PostedBy),
-		CreatedBy:       toUUIDPtr(row.CreatedBy),
-		CreatedAt:       fromPgTimestamptz(row.CreatedAt),
+		WpsFileName:      fromPgTextPtr(row.WpsFileName),
+		PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
+		PostedBy:         toUUIDPtr(row.PostedBy),
+		CreatedBy:        toUUIDPtr(row.CreatedBy),
+		CreatedAt:        fromPgTimestamptz(row.CreatedAt),
 	}, nil
 }
 
 func (r *Repository) UpdateRunTotals(ctx context.Context, id uuid.UUID, basic, allow, gross, ded, net decimal.Decimal, count int) (*domain.PayrollRun, error) {
-	row, err := r.q.UpdatePayrollRunTotals(ctx, sqlc.UpdatePayrollRunTotalsParams{
+	row, err := r.queries(ctx).UpdatePayrollRunTotals(ctx, sqlc.UpdatePayrollRunTotalsParams{
 		ID:              toPgUUID(id),
 		TotalBasic:      toPgNumeric(basic),
 		TotalAllowances: toPgNumeric(allow),
@@ -507,31 +507,31 @@ func (r *Repository) UpdateRunTotals(ctx context.Context, id uuid.UUID, basic, a
 		return nil, err
 	}
 	return &domain.PayrollRun{
-		ID:              toUUID(row.ID),
-		LegalEntityID:   toUUID(row.LegalEntityID),
-		PeriodID:        toUUID(row.PeriodID),
-		RunNumber:       row.RunNumber,
-		RunDate:         fromPgDate(row.RunDate),
-		CutoffDate:      fromPgDate(row.CutoffDate),
-		Status:          domain.RunStatus(row.Status),
-		TotalBasic:      fromPgNumeric(row.TotalBasic),
-		TotalAllowances: fromPgNumeric(row.TotalAllowances),
-		TotalGross:      fromPgNumeric(row.TotalGross),
-		TotalDeductions: fromPgNumeric(row.TotalDeductions),
-		TotalNet:        fromPgNumeric(row.TotalNet),
-		EmployeeCount:   int(row.EmployeeCount),
-		JournalEntryID:  toUUIDPtr(row.JournalEntryID),
+		ID:               toUUID(row.ID),
+		LegalEntityID:    toUUID(row.LegalEntityID),
+		PeriodID:         toUUID(row.PeriodID),
+		RunNumber:        row.RunNumber,
+		RunDate:          fromPgDate(row.RunDate),
+		CutoffDate:       fromPgDate(row.CutoffDate),
+		Status:           domain.RunStatus(row.Status),
+		TotalBasic:       fromPgNumeric(row.TotalBasic),
+		TotalAllowances:  fromPgNumeric(row.TotalAllowances),
+		TotalGross:       fromPgNumeric(row.TotalGross),
+		TotalDeductions:  fromPgNumeric(row.TotalDeductions),
+		TotalNet:         fromPgNumeric(row.TotalNet),
+		EmployeeCount:    int(row.EmployeeCount),
+		JournalEntryID:   toUUIDPtr(row.JournalEntryID),
 		WpsFileGenerated: row.WpsFileGenerated,
-		WpsFileName:     fromPgTextPtr(row.WpsFileName),
-		PostedAt:        fromPgTimestamptzPtr(row.PostedAt),
-		PostedBy:        toUUIDPtr(row.PostedBy),
-		CreatedBy:       toUUIDPtr(row.CreatedBy),
-		CreatedAt:       fromPgTimestamptz(row.CreatedAt),
+		WpsFileName:      fromPgTextPtr(row.WpsFileName),
+		PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
+		PostedBy:         toUUIDPtr(row.PostedBy),
+		CreatedBy:        toUUIDPtr(row.CreatedBy),
+		CreatedAt:        fromPgTimestamptz(row.CreatedAt),
 	}, nil
 }
 
 func (r *Repository) LinkRunJournalEntry(ctx context.Context, id uuid.UUID, journalEntryID uuid.UUID) (*domain.PayrollRun, error) {
-	row, err := r.q.LinkPayrollRunJournalEntry(ctx, sqlc.LinkPayrollRunJournalEntryParams{
+	row, err := r.queries(ctx).LinkPayrollRunJournalEntry(ctx, sqlc.LinkPayrollRunJournalEntryParams{
 		ID:             toPgUUID(id),
 		JournalEntryID: toPgUUID(journalEntryID),
 	})
@@ -539,31 +539,31 @@ func (r *Repository) LinkRunJournalEntry(ctx context.Context, id uuid.UUID, jour
 		return nil, err
 	}
 	return &domain.PayrollRun{
-		ID:              toUUID(row.ID),
-		LegalEntityID:   toUUID(row.LegalEntityID),
-		PeriodID:        toUUID(row.PeriodID),
-		RunNumber:       row.RunNumber,
-		RunDate:         fromPgDate(row.RunDate),
-		CutoffDate:      fromPgDate(row.CutoffDate),
-		Status:          domain.RunStatus(row.Status),
-		TotalBasic:      fromPgNumeric(row.TotalBasic),
-		TotalAllowances: fromPgNumeric(row.TotalAllowances),
-		TotalGross:      fromPgNumeric(row.TotalGross),
-		TotalDeductions: fromPgNumeric(row.TotalDeductions),
-		TotalNet:        fromPgNumeric(row.TotalNet),
-		EmployeeCount:   int(row.EmployeeCount),
-		JournalEntryID:  toUUIDPtr(row.JournalEntryID),
+		ID:               toUUID(row.ID),
+		LegalEntityID:    toUUID(row.LegalEntityID),
+		PeriodID:         toUUID(row.PeriodID),
+		RunNumber:        row.RunNumber,
+		RunDate:          fromPgDate(row.RunDate),
+		CutoffDate:       fromPgDate(row.CutoffDate),
+		Status:           domain.RunStatus(row.Status),
+		TotalBasic:       fromPgNumeric(row.TotalBasic),
+		TotalAllowances:  fromPgNumeric(row.TotalAllowances),
+		TotalGross:       fromPgNumeric(row.TotalGross),
+		TotalDeductions:  fromPgNumeric(row.TotalDeductions),
+		TotalNet:         fromPgNumeric(row.TotalNet),
+		EmployeeCount:    int(row.EmployeeCount),
+		JournalEntryID:   toUUIDPtr(row.JournalEntryID),
 		WpsFileGenerated: row.WpsFileGenerated,
-		WpsFileName:     fromPgTextPtr(row.WpsFileName),
-		PostedAt:        fromPgTimestamptzPtr(row.PostedAt),
-		PostedBy:        toUUIDPtr(row.PostedBy),
-		CreatedBy:       toUUIDPtr(row.CreatedBy),
-		CreatedAt:       fromPgTimestamptz(row.CreatedAt),
+		WpsFileName:      fromPgTextPtr(row.WpsFileName),
+		PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
+		PostedBy:         toUUIDPtr(row.PostedBy),
+		CreatedBy:        toUUIDPtr(row.CreatedBy),
+		CreatedAt:        fromPgTimestamptz(row.CreatedAt),
 	}, nil
 }
 
 func (r *Repository) UpdateRunWpsStatus(ctx context.Context, id uuid.UUID, fileName string) (*domain.PayrollRun, error) {
-	row, err := r.q.UpdatePayrollRunWpsStatus(ctx, sqlc.UpdatePayrollRunWpsStatusParams{
+	row, err := r.queries(ctx).UpdatePayrollRunWpsStatus(ctx, sqlc.UpdatePayrollRunWpsStatusParams{
 		ID:          toPgUUID(id),
 		WpsFileName: toPgText(fileName),
 	})
@@ -571,32 +571,32 @@ func (r *Repository) UpdateRunWpsStatus(ctx context.Context, id uuid.UUID, fileN
 		return nil, err
 	}
 	return &domain.PayrollRun{
-		ID:              toUUID(row.ID),
-		LegalEntityID:   toUUID(row.LegalEntityID),
-		PeriodID:        toUUID(row.PeriodID),
-		RunNumber:       row.RunNumber,
-		RunDate:         fromPgDate(row.RunDate),
-		CutoffDate:      fromPgDate(row.CutoffDate),
-		Status:          domain.RunStatus(row.Status),
-		TotalBasic:      fromPgNumeric(row.TotalBasic),
-		TotalAllowances: fromPgNumeric(row.TotalAllowances),
-		TotalGross:      fromPgNumeric(row.TotalGross),
-		TotalDeductions: fromPgNumeric(row.TotalDeductions),
-		TotalNet:        fromPgNumeric(row.TotalNet),
-		EmployeeCount:   int(row.EmployeeCount),
-		JournalEntryID:  toUUIDPtr(row.JournalEntryID),
+		ID:               toUUID(row.ID),
+		LegalEntityID:    toUUID(row.LegalEntityID),
+		PeriodID:         toUUID(row.PeriodID),
+		RunNumber:        row.RunNumber,
+		RunDate:          fromPgDate(row.RunDate),
+		CutoffDate:       fromPgDate(row.CutoffDate),
+		Status:           domain.RunStatus(row.Status),
+		TotalBasic:       fromPgNumeric(row.TotalBasic),
+		TotalAllowances:  fromPgNumeric(row.TotalAllowances),
+		TotalGross:       fromPgNumeric(row.TotalGross),
+		TotalDeductions:  fromPgNumeric(row.TotalDeductions),
+		TotalNet:         fromPgNumeric(row.TotalNet),
+		EmployeeCount:    int(row.EmployeeCount),
+		JournalEntryID:   toUUIDPtr(row.JournalEntryID),
 		WpsFileGenerated: row.WpsFileGenerated,
-		WpsFileName:     fromPgTextPtr(row.WpsFileName),
-		PostedAt:        fromPgTimestamptzPtr(row.PostedAt),
-		PostedBy:        toUUIDPtr(row.PostedBy),
-		CreatedBy:       toUUIDPtr(row.CreatedBy),
-		CreatedAt:       fromPgTimestamptz(row.CreatedAt),
+		WpsFileName:      fromPgTextPtr(row.WpsFileName),
+		PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
+		PostedBy:         toUUIDPtr(row.PostedBy),
+		CreatedBy:        toUUIDPtr(row.CreatedBy),
+		CreatedAt:        fromPgTimestamptz(row.CreatedAt),
 	}, nil
 }
 
 // 5. Run Employees & Lines
 func (r *Repository) CreateRunEmployee(ctx context.Context, emp domain.RunEmployee) (*domain.RunEmployee, error) {
-	row, err := r.q.CreatePayrollRunEmployee(ctx, sqlc.CreatePayrollRunEmployeeParams{
+	row, err := r.queries(ctx).CreatePayrollRunEmployee(ctx, sqlc.CreatePayrollRunEmployeeParams{
 		ID:                    toPgUUID(emp.ID),
 		RunID:                 toPgUUID(emp.RunID),
 		EmployeeID:            toPgUUID(emp.EmployeeID),
@@ -641,7 +641,7 @@ func (r *Repository) CreateRunEmployee(ctx context.Context, emp domain.RunEmploy
 }
 
 func (r *Repository) ListRunEmployees(ctx context.Context, runID uuid.UUID) ([]domain.RunEmployee, error) {
-	rows, err := r.q.ListPayrollRunEmployees(ctx, toPgUUID(runID))
+	rows, err := r.queries(ctx).ListPayrollRunEmployees(ctx, toPgUUID(runID))
 	if err != nil {
 		return nil, err
 	}
@@ -672,7 +672,7 @@ func (r *Repository) ListRunEmployees(ctx context.Context, runID uuid.UUID) ([]d
 }
 
 func (r *Repository) GetRunEmployeeByID(ctx context.Context, id uuid.UUID) (*domain.RunEmployee, error) {
-	row, err := r.q.GetPayrollRunEmployeeByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetPayrollRunEmployeeByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -699,11 +699,11 @@ func (r *Repository) GetRunEmployeeByID(ctx context.Context, id uuid.UUID) (*dom
 }
 
 func (r *Repository) DeleteRunEmployees(ctx context.Context, runID uuid.UUID) error {
-	return r.q.DeletePayrollRunEmployees(ctx, toPgUUID(runID))
+	return r.queries(ctx).DeletePayrollRunEmployees(ctx, toPgUUID(runID))
 }
 
 func (r *Repository) CreateCalculationLine(ctx context.Context, line domain.CalculationLine) (*domain.CalculationLine, error) {
-	row, err := r.q.CreateCalculationLine(ctx, sqlc.CreateCalculationLineParams{
+	row, err := r.queries(ctx).CreateCalculationLine(ctx, sqlc.CreateCalculationLineParams{
 		ID:            toPgUUID(line.ID),
 		RunEmployeeID: toPgUUID(line.RunEmployeeID),
 		ComponentID:   toPgUUIDPtr(line.ComponentID),
@@ -736,7 +736,7 @@ func (r *Repository) CreateCalculationLine(ctx context.Context, line domain.Calc
 }
 
 func (r *Repository) ListCalculationLines(ctx context.Context, runEmployeeID uuid.UUID) ([]domain.CalculationLine, error) {
-	rows, err := r.q.ListCalculationLinesByRunEmployee(ctx, toPgUUID(runEmployeeID))
+	rows, err := r.queries(ctx).ListCalculationLinesByRunEmployee(ctx, toPgUUID(runEmployeeID))
 	if err != nil {
 		return nil, err
 	}
@@ -763,7 +763,7 @@ func (r *Repository) ListCalculationLines(ctx context.Context, runEmployeeID uui
 // 6. Payslips
 func (r *Repository) CreatePayslip(ctx context.Context, slip domain.Payslip) (*domain.Payslip, error) {
 	snapBytes, _ := json.Marshal(slip.CalculationSnapshot)
-	row, err := r.q.CreatePayslip(ctx, sqlc.CreatePayslipParams{
+	row, err := r.queries(ctx).CreatePayslip(ctx, sqlc.CreatePayslipParams{
 		ID:                  toPgUUID(slip.ID),
 		LegalEntityID:       toPgUUID(slip.LegalEntityID),
 		RunEmployeeID:       toPgUUID(slip.RunEmployeeID),
@@ -797,7 +797,7 @@ func (r *Repository) CreatePayslip(ctx context.Context, slip domain.Payslip) (*d
 }
 
 func (r *Repository) GetPayslipByID(ctx context.Context, id uuid.UUID) (*domain.Payslip, error) {
-	row, err := r.q.GetPayslipByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetPayslipByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -821,7 +821,7 @@ func (r *Repository) GetPayslipByID(ctx context.Context, id uuid.UUID) (*domain.
 }
 
 func (r *Repository) ListPayslipsByPeriod(ctx context.Context, periodID uuid.UUID) ([]domain.Payslip, error) {
-	rows, err := r.q.ListPayslipsByPeriod(ctx, toPgUUID(periodID))
+	rows, err := r.queries(ctx).ListPayslipsByPeriod(ctx, toPgUUID(periodID))
 	if err != nil {
 		return nil, err
 	}
@@ -849,7 +849,7 @@ func (r *Repository) ListPayslipsByPeriod(ctx context.Context, periodID uuid.UUI
 }
 
 func (r *Repository) ListPayslipsByEmployee(ctx context.Context, employeeID uuid.UUID) ([]domain.Payslip, error) {
-	rows, err := r.q.ListPayslipsByEmployee(ctx, toPgUUID(employeeID))
+	rows, err := r.queries(ctx).ListPayslipsByEmployee(ctx, toPgUUID(employeeID))
 	if err != nil {
 		return nil, err
 	}
@@ -878,7 +878,7 @@ func (r *Repository) ListPayslipsByEmployee(ctx context.Context, employeeID uuid
 
 // 7. Loans
 func (r *Repository) CreateLoan(ctx context.Context, loan domain.EmployeeLoan) (*domain.EmployeeLoan, error) {
-	row, err := r.q.CreateEmployeeLoan(ctx, sqlc.CreateEmployeeLoanParams{
+	row, err := r.queries(ctx).CreateEmployeeLoan(ctx, sqlc.CreateEmployeeLoanParams{
 		ID:                 toPgUUID(loan.ID),
 		LegalEntityID:      toPgUUID(loan.LegalEntityID),
 		EmployeeID:         toPgUUID(loan.EmployeeID),
@@ -909,7 +909,7 @@ func (r *Repository) CreateLoan(ctx context.Context, loan domain.EmployeeLoan) (
 }
 
 func (r *Repository) GetLoanByID(ctx context.Context, id uuid.UUID) (*domain.EmployeeLoan, error) {
-	row, err := r.q.GetEmployeeLoanByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetEmployeeLoanByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -929,7 +929,7 @@ func (r *Repository) GetLoanByID(ctx context.Context, id uuid.UUID) (*domain.Emp
 }
 
 func (r *Repository) ListLoans(ctx context.Context, legalEntityID uuid.UUID) ([]domain.EmployeeLoan, error) {
-	rows, err := r.q.ListEmployeeLoans(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListEmployeeLoans(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -953,7 +953,7 @@ func (r *Repository) ListLoans(ctx context.Context, legalEntityID uuid.UUID) ([]
 }
 
 func (r *Repository) CreateLoanInstallment(ctx context.Context, inst domain.LoanInstallment) (*domain.LoanInstallment, error) {
-	row, err := r.q.CreateLoanInstallment(ctx, sqlc.CreateLoanInstallmentParams{
+	row, err := r.queries(ctx).CreateLoanInstallment(ctx, sqlc.CreateLoanInstallmentParams{
 		ID:                toPgUUID(inst.ID),
 		LoanID:            toPgUUID(inst.LoanID),
 		PayrollRunID:      toPgUUIDPtr(inst.PayrollRunID),
@@ -979,7 +979,7 @@ func (r *Repository) CreateLoanInstallment(ctx context.Context, inst domain.Loan
 }
 
 func (r *Repository) ListPendingLoanInstallmentsByEmployee(ctx context.Context, employeeID uuid.UUID, dueDate time.Time) ([]domain.LoanInstallment, error) {
-	rows, err := r.q.ListPendingLoanInstallmentsByEmployee(ctx, sqlc.ListPendingLoanInstallmentsByEmployeeParams{
+	rows, err := r.queries(ctx).ListPendingLoanInstallmentsByEmployee(ctx, sqlc.ListPendingLoanInstallmentsByEmployeeParams{
 		EmployeeID: toPgUUID(employeeID),
 		DueDate:    toPgDate(dueDate),
 	})
@@ -1004,7 +1004,7 @@ func (r *Repository) ListPendingLoanInstallmentsByEmployee(ctx context.Context, 
 }
 
 func (r *Repository) UpdateLoanInstallmentStatus(ctx context.Context, id uuid.UUID, status string, runID *uuid.UUID) (*domain.LoanInstallment, error) {
-	row, err := r.q.UpdateLoanInstallmentStatus(ctx, sqlc.UpdateLoanInstallmentStatusParams{
+	row, err := r.queries(ctx).UpdateLoanInstallmentStatus(ctx, sqlc.UpdateLoanInstallmentStatusParams{
 		ID:           toPgUUID(id),
 		Status:       status,
 		PayrollRunID: toPgUUIDPtr(runID),
@@ -1026,7 +1026,7 @@ func (r *Repository) UpdateLoanInstallmentStatus(ctx context.Context, id uuid.UU
 }
 
 func (r *Repository) UpdateLoanRemainingBalance(ctx context.Context, id uuid.UUID, deductionAmount decimal.Decimal) (*domain.EmployeeLoan, error) {
-	row, err := r.q.UpdateLoanRemainingBalance(ctx, sqlc.UpdateLoanRemainingBalanceParams{
+	row, err := r.queries(ctx).UpdateLoanRemainingBalance(ctx, sqlc.UpdateLoanRemainingBalanceParams{
 		ID:               toPgUUID(id),
 		RemainingBalance: toPgNumeric(deductionAmount),
 	})
@@ -1051,7 +1051,7 @@ func (r *Repository) UpdateLoanRemainingBalance(ctx context.Context, id uuid.UUI
 // 8. End of Service
 func (r *Repository) CreateEndOfService(ctx context.Context, eos domain.EndOfServiceCalculation) (*domain.EndOfServiceCalculation, error) {
 	snapBytes, _ := json.Marshal(eos.CalculationBreakdown)
-	row, err := r.q.CreateEndOfServiceCalculation(ctx, sqlc.CreateEndOfServiceCalculationParams{
+	row, err := r.queries(ctx).CreateEndOfServiceCalculation(ctx, sqlc.CreateEndOfServiceCalculationParams{
 		ID:                    toPgUUID(eos.ID),
 		LegalEntityID:         toPgUUID(eos.LegalEntityID),
 		EmployeeID:            toPgUUID(eos.EmployeeID),
@@ -1090,7 +1090,7 @@ func (r *Repository) CreateEndOfService(ctx context.Context, eos domain.EndOfSer
 }
 
 func (r *Repository) GetEndOfServiceByID(ctx context.Context, id uuid.UUID) (*domain.EndOfServiceCalculation, error) {
-	row, err := r.q.GetEndOfServiceCalculationByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetEndOfServiceCalculationByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -1116,7 +1116,7 @@ func (r *Repository) GetEndOfServiceByID(ctx context.Context, id uuid.UUID) (*do
 }
 
 func (r *Repository) ListEndOfService(ctx context.Context, legalEntityID uuid.UUID) ([]domain.EndOfServiceCalculation, error) {
-	rows, err := r.q.ListEndOfServiceCalculations(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListEndOfServiceCalculations(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}

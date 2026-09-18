@@ -21,7 +21,7 @@ The ERP system is constructed as a **Modular Monolith** using Go for the high-pe
                    │                    │                    │
                    ▼                    ▼                    ▼
               PostgreSQL           Go Worker         Integrations
-             (Multi-Schema)          River           ZATCA / GOSI
+             (Multi-Schema)      ZATCA retries       ZATCA / SMTP
 ```
 
 ---
@@ -35,11 +35,11 @@ The ERP system is constructed as a **Modular Monolith** using Go for the high-pe
 
 ## 3. Technology Stack
 
-- **Backend:** Go 1.27+, net/http with Chi router, pgx/v5 connection pool, sqlc compiled type-safe SQL, Goose migrations, River queue worker, log/slog structured logging.
+- **Backend:** Go 1.27+, net/http with Chi router, pgx/v5 connection pool, sqlc compiled type-safe SQL, Goose migrations, PostgreSQL-backed ZATCA retry worker, log/slog structured logging.
 - **Database:** PostgreSQL >= 18 with `pg_trgm`, `uuidv7()`, and strict schema separation.
-- **Frontend:** Next.js 15+ (App Router), React 19, TypeScript, Tailwind CSS, Lucide icons, next-themes.
+- **Frontend:** Next.js 16+ (App Router), React 19, TypeScript, Tailwind CSS, Lucide icons, next-themes.
 - **Localization:** Arabic (`ar-SA`) & English (`en`), first-class RTL & LTR styling, light/dark/system themes.
-- **Compliance:** Built-in adapters for ZATCA E-Invoicing Phase 2 (Clearance/Reporting) and GOSI Social Insurance calculations.
+- **Regulatory integrations:** Adapters for ZATCA clearance/reporting and GOSI calculations. Formal compliance/certification remains an operator responsibility and is not implied by the source code alone.
 
 ---
 

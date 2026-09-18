@@ -72,13 +72,13 @@ func (h *CustomerHandler) CreateCustomer(w http.ResponseWriter, r *http.Request)
 	}
 
 	cmd := ports.CreateCustomerCommand{
-		LegalEntityID:  req.LegalEntityID,
-		CustomerType:   req.CustomerType,
-		NameEn:         req.NameEn,
-		NameAr:         req.NameAr,
-		TaxID:          req.TaxID,
-		CRNumber:       req.CRNumber,
-		NationalID:     req.NationalID,
+		LegalEntityID: req.LegalEntityID,
+		CustomerType:  req.CustomerType,
+		NameEn:        req.NameEn,
+		NameAr:        req.NameAr,
+		TaxID:         req.TaxID,
+		CRNumber:      req.CRNumber,
+		NationalID:    req.NationalID,
 		Address: domain.SaudiAddress{
 			BuildingNo:   req.BuildingNo,
 			StreetName:   req.StreetName,

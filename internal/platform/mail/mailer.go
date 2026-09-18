@@ -12,7 +12,7 @@ import (
 var (
 	ErrRecipientRequired = errors.New("at least one recipient email address is required")
 	ErrSubjectRequired   = errors.New("email subject cannot be empty")
-	ErrMailSendFailed     = errors.New("failed to send email")
+	ErrMailSendFailed    = errors.New("failed to send email")
 )
 
 // EmailAttachment represents a file attached to an email message.

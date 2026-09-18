@@ -47,6 +47,15 @@ func setupTestDB(t *testing.T) (*database.DB, *config.Config) {
 	return db, cfg
 }
 
+func TestDatabaseReadinessChecksSchemaVersion(t *testing.T) {
+	db, _ := setupTestDB(t)
+	defer db.Close()
+
+	if err := db.Check(); err != nil {
+		t.Fatalf("database readiness check failed: %v", err)
+	}
+}
+
 func textVal(s string) pgtype.Text {
 	return pgtype.Text{String: s, Valid: true}
 }
@@ -165,6 +174,12 @@ func TestOutboxEvents(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
+	// Pending events intentionally survive normal application restarts. Clear
+	// this integration-test queue so LIMIT ordering is deterministic across
+	// repeated local and CI runs against the same dedicated test database.
+	if _, err := db.Pool.Exec(ctx, "TRUNCATE platform.outbox_events"); err != nil {
+		t.Fatalf("failed to reset test outbox: %v", err)
+	}
 	queries := sqlc.New(db.Pool)
 
 	payload := map[string]any{

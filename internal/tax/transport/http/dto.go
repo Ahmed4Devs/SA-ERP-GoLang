@@ -29,9 +29,9 @@ type AddRateVersionRequest struct {
 }
 
 type CalculateTaxRequestDTO struct {
-	LegalEntityID   uuid.UUID                `json:"legal_entity_id"`
-	TransactionDate *time.Time               `json:"transaction_date,omitempty"`
-	Lines           []CalculateTaxLineDTO    `json:"lines"`
+	LegalEntityID   uuid.UUID             `json:"legal_entity_id"`
+	TransactionDate *time.Time            `json:"transaction_date,omitempty"`
+	Lines           []CalculateTaxLineDTO `json:"lines"`
 }
 
 type CalculateTaxLineDTO struct {
@@ -45,18 +45,18 @@ type CalculateTaxLineDTO struct {
 }
 
 type PostTaxTransactionRequestDTO struct {
-	LegalEntityID     uuid.UUID                     `json:"legal_entity_id"`
-	SourceModule      string                        `json:"source_module"`
-	SourceType        string                        `json:"source_type"`
-	SourceID          uuid.UUID                     `json:"source_id"`
-	TransactionNumber string                        `json:"transaction_number"`
-	TransactionDate   *time.Time                    `json:"transaction_date,omitempty"`
-	TransactionType   string                        `json:"transaction_type"` // OUTPUT, INPUT
-	PartnerID         *uuid.UUID                    `json:"partner_id,omitempty"`
-	PartnerName       *string                       `json:"partner_name,omitempty"`
-	PartnerTaxNumber  *string                       `json:"partner_tax_number,omitempty"`
-	JournalEntryID    *uuid.UUID                    `json:"journal_entry_id,omitempty"`
-	Lines             []PostTaxTransactionLineDTO   `json:"lines"`
+	LegalEntityID     uuid.UUID                   `json:"legal_entity_id"`
+	SourceModule      string                      `json:"source_module"`
+	SourceType        string                      `json:"source_type"`
+	SourceID          uuid.UUID                   `json:"source_id"`
+	TransactionNumber string                      `json:"transaction_number"`
+	TransactionDate   *time.Time                  `json:"transaction_date,omitempty"`
+	TransactionType   string                      `json:"transaction_type"` // OUTPUT, INPUT
+	PartnerID         *uuid.UUID                  `json:"partner_id,omitempty"`
+	PartnerName       *string                     `json:"partner_name,omitempty"`
+	PartnerTaxNumber  *string                     `json:"partner_tax_number,omitempty"`
+	JournalEntryID    *uuid.UUID                  `json:"journal_entry_id,omitempty"`
+	Lines             []PostTaxTransactionLineDTO `json:"lines"`
 }
 
 type PostTaxTransactionLineDTO struct {

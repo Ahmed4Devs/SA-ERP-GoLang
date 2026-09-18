@@ -1,4 +1,5 @@
-import { BudgetingView } from "@/features/budgeting/budgeting-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function BudgetsPage() {
-  return <BudgetingView />;
+  return <ModuleAPIView titleAr="الميزانيات التقديرية" titleEn="Budgeting" descriptionAr="الميزانيات والمناقلات وملخص الرقابة من قاعدة البيانات." descriptionEn="Live budgets, transfers, and control summary." resources={moduleResources.budgeting} />;
 }

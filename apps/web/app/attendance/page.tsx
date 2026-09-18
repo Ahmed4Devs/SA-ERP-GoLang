@@ -1,4 +1,5 @@
-import { AttendanceView } from "@/features/attendance/attendance-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function AttendancePage() {
-  return <AttendanceView />;
+  return <ModuleAPIView titleAr="الحضور والانصراف" titleEn="Attendance" descriptionAr="بيانات الورديات والحضور والعمل الإضافي المسجلة في النظام." descriptionEn="Live shifts, attendance records, and overtime data." resources={moduleResources.attendance} />;
 }

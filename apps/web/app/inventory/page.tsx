@@ -1,4 +1,5 @@
-import { InventoryView } from "@/features/inventory/inventory-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function InventoryPage() {
-  return <InventoryView />;
+  return <ModuleAPIView titleAr="المخزون والمستودعات" titleEn="Inventory" descriptionAr="الأرصدة والمستودعات والحركات والجرد الفعلي." descriptionEn="Live balances, warehouses, movements, transfers, and counts." resources={moduleResources.inventory} />;
 }

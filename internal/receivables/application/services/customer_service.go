@@ -3,10 +3,12 @@ package services
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"strings"
 	"time"
 
+	"erp/internal/platform/database"
+	"erp/internal/platform/identifiers"
+	"erp/internal/platform/transaction"
 	"erp/internal/receivables/domain"
 	"erp/internal/receivables/ports"
 
@@ -16,21 +18,33 @@ import (
 
 type customerService struct {
 	customerRepo ports.CustomerRepository
+	tx           transaction.Manager
 }
 
-func NewCustomerService(customerRepo ports.CustomerRepository) ports.CustomerService {
+func NewCustomerService(customerRepo ports.CustomerRepository, db *database.DB) ports.CustomerService {
 	return &customerService{
 		customerRepo: customerRepo,
+		tx:           transaction.NewManager(db.Pool),
 	}
 }
 
 func (s *customerService) CreateCustomer(ctx context.Context, cmd ports.CreateCustomerCommand) (*domain.Customer, error) {
+	var customer *domain.Customer
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		customer, err = s.createCustomer(txCtx, cmd)
+		return err
+	})
+	return customer, err
+}
+
+func (s *customerService) createCustomer(ctx context.Context, cmd ports.CreateCustomerCommand) (*domain.Customer, error) {
 	currencyCode := cmd.CurrencyCode
 	if currencyCode == "" {
 		currencyCode = "SAR"
 	}
 
-	custNum := fmt.Sprintf("CUST-%d-%04d", time.Now().Year(), rand.Intn(9000)+1000)
+	custNum := identifiers.NewDocumentNumber("CUST", time.Now())
 
 	customer := &domain.Customer{
 		LegalEntityID:    cmd.LegalEntityID,
@@ -84,12 +98,14 @@ func (s *customerService) CreateCustomer(ctx context.Context, cmd ports.CreateCu
 
 	// Link GL Account if specified
 	if cmd.DefaultAccountID != nil && *cmd.DefaultAccountID != uuid.Nil {
-		_, _ = s.customerRepo.UpsertCustomerAccount(ctx, &domain.CustomerAccount{
+		if _, err := s.customerRepo.UpsertCustomerAccount(ctx, &domain.CustomerAccount{
 			CustomerID:   created.ID,
 			GLAccountID:  *cmd.DefaultAccountID,
 			CurrencyCode: currencyCode,
 			IsPrimary:    true,
-		})
+		}); err != nil {
+			return nil, fmt.Errorf("failed to link customer GL account: %w", err)
+		}
 	}
 
 	return created, nil

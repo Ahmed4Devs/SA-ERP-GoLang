@@ -21,6 +21,9 @@ func TestLocalFilesystemBlobStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to initialize blob store: %v", err)
 	}
+	if err := store.Check(); err != nil {
+		t.Fatalf("expected writable store readiness: %v", err)
+	}
 
 	ctx := context.Background()
 	content := []byte("Hello Saudi ERP Secure Storage Engine - 2026!")

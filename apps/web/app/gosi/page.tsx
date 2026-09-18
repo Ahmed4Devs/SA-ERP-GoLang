@@ -1,4 +1,5 @@
-import { GosiView } from "@/features/gosi/gosi-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function GosiPage() {
-  return <GosiView />;
+  return <ModuleAPIView titleAr="التأمينات الاجتماعية" titleEn="GOSI" descriptionAr="قواعد التأمينات والمشتركون والاحتساب الفعلي." descriptionEn="Live GOSI rules, profiles, and calculations." resources={moduleResources.gosi} />;
 }

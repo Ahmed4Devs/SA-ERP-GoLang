@@ -88,16 +88,16 @@ func TestShift_CreationAndAssignment(t *testing.T) {
 	// 1. Create Shift
 	shiftCode := "SHIFT-TEST-" + uuid.New().String()[:6]
 	shift, err := svc.CreateShift(ctx, &domain.Shift{
-		LegalEntityID:          leID,
-		Code:                   shiftCode,
-		NameEn:                 "Engineering Shift",
-		NameAr:                 "وردية الهندسة والتطوير",
-		StartTime:              "08:00:00",
-		EndTime:                "17:00:00",
-		GracePeriodMinutes:     15,
-		BreakDurationMinutes:   60,
+		LegalEntityID:           leID,
+		Code:                    shiftCode,
+		NameEn:                  "Engineering Shift",
+		NameAr:                  "وردية الهندسة والتطوير",
+		StartTime:               "08:00:00",
+		EndTime:                 "17:00:00",
+		GracePeriodMinutes:      15,
+		BreakDurationMinutes:    60,
 		HalfDayThresholdMinutes: 240,
-		IsActive:               true,
+		IsActive:                true,
 	})
 	if err != nil {
 		t.Fatalf("failed to create shift: %v", err)
@@ -135,16 +135,16 @@ func TestAttendance_ClockInOutAndCalculation(t *testing.T) {
 
 	// 1. Create Shift with 08:00:00 start and 15 min grace
 	shift, err := svc.CreateShift(ctx, &domain.Shift{
-		LegalEntityID:          leID,
-		Code:                   "SHIFT-PUNCH-" + uuid.New().String()[:6],
-		NameEn:                 "Morning Shift",
-		NameAr:                 "الوردية الصباحية",
-		StartTime:              "08:00:00",
-		EndTime:                "17:00:00",
-		GracePeriodMinutes:     15,
-		BreakDurationMinutes:   60,
+		LegalEntityID:           leID,
+		Code:                    "SHIFT-PUNCH-" + uuid.New().String()[:6],
+		NameEn:                  "Morning Shift",
+		NameAr:                  "الوردية الصباحية",
+		StartTime:               "08:00:00",
+		EndTime:                 "17:00:00",
+		GracePeriodMinutes:      15,
+		BreakDurationMinutes:    60,
 		HalfDayThresholdMinutes: 240,
-		IsActive:               true,
+		IsActive:                true,
 	})
 	if err != nil {
 		t.Fatalf("failed to create shift: %v", err)

@@ -140,8 +140,9 @@ func TestSecurity_RateLimiting(t *testing.T) {
 // 3. CSRF Protection Test
 func TestSecurity_CSRFProtection(t *testing.T) {
 	csrf := middleware.CSRFProtection(middleware.CSRFConfig{
-		AllowedOrigins: []string{"http://localhost:3000"},
-		ExemptPaths:    []string{"/health"},
+		AllowedOrigins:       []string{"http://localhost:3000"},
+		ExemptPaths:          []string{"/health"},
+		ProtectedCookieNames: []string{"erp_session"},
 	})
 
 	handler := csrf(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -177,6 +178,37 @@ func TestSecurity_CSRFProtection(t *testing.T) {
 
 	if wGet.Code != http.StatusOK {
 		t.Fatalf("expected status 200 for GET request, got %d", wGet.Code)
+	}
+
+	// Case 4: A mutating cookie-authenticated request without browser origin
+	// metadata must be rejected instead of bypassing CSRF protection.
+	reqCookie := httptest.NewRequest(http.MethodPost, "/api/v1/documents", bytes.NewBufferString(`{"title":"test"}`))
+	reqCookie.AddCookie(&http.Cookie{Name: "erp_session", Value: "session-token"})
+	wCookie := httptest.NewRecorder()
+	handler.ServeHTTP(wCookie, reqCookie)
+
+	if wCookie.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403 for cookie-authenticated POST without origin metadata, got %d", wCookie.Code)
+	}
+
+	// Case 5: A non-browser API client without protected cookies remains valid.
+	reqBearer := httptest.NewRequest(http.MethodPost, "/api/v1/documents", bytes.NewBufferString(`{"title":"test"}`))
+	reqBearer.Header.Set("Authorization", "Bearer api-token")
+	wBearer := httptest.NewRecorder()
+	handler.ServeHTTP(wBearer, reqBearer)
+
+	if wBearer.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for non-cookie API client, got %d", wBearer.Code)
+	}
+
+	// Case 6: Exempted health paths remain available regardless of cookies.
+	reqExempt := httptest.NewRequest(http.MethodPost, "/health/check", nil)
+	reqExempt.AddCookie(&http.Cookie{Name: "erp_session", Value: "session-token"})
+	wExempt := httptest.NewRecorder()
+	handler.ServeHTTP(wExempt, reqExempt)
+
+	if wExempt.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for exempt path, got %d", wExempt.Code)
 	}
 }
 

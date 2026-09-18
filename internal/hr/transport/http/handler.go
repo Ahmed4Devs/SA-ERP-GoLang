@@ -124,10 +124,10 @@ func (h *HRHandler) listEmployees(w http.ResponseWriter, r *http.Request) {
 }
 
 type OnboardEmployeeRequest struct {
-	Employee    domain.Employee            `json:"employee"`
-	Identifier  *domain.EmployeeIdentifier `json:"identifier,omitempty"`
-	Contact     *domain.EmployeeContact    `json:"contact,omitempty"`
-	BankAccount *domain.EmployeeBankAccount`json:"bank_account,omitempty"`
+	Employee    domain.Employee             `json:"employee"`
+	Identifier  *domain.EmployeeIdentifier  `json:"identifier,omitempty"`
+	Contact     *domain.EmployeeContact     `json:"contact,omitempty"`
+	BankAccount *domain.EmployeeBankAccount `json:"bank_account,omitempty"`
 }
 
 func (h *HRHandler) onboardEmployee(w http.ResponseWriter, r *http.Request) {
@@ -185,7 +185,7 @@ func (h *HRHandler) terminateEmployee(w http.ResponseWriter, r *http.Request) {
 }
 
 type CreateContractRequest struct {
-	Contract       domain.Contract        `json:"contract"`
+	Contract       domain.Contract         `json:"contract"`
 	InitialVersion *domain.ContractVersion `json:"initial_version,omitempty"`
 }
 

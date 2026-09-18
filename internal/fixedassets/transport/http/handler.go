@@ -89,18 +89,18 @@ func (h *FixedAssetsHandler) ListCategories(w http.ResponseWriter, r *http.Reque
 }
 
 type CreateCategoryRequest struct {
-	LegalEntityID                   string          `json:"legal_entity_id"`
-	Code                            string          `json:"code"`
-	NameEn                          string          `json:"name_en"`
-	NameAr                          string          `json:"name_ar"`
-	DescriptionEn                   string          `json:"description_en"`
-	DescriptionAr                   string          `json:"description_ar"`
-	DepreciationMethod              string          `json:"depreciation_method"`
-	UsefulLifeMonths                int             `json:"useful_life_months"`
-	SalvageValueRate                decimal.Decimal `json:"salvage_value_rate"`
-	AssetAccountID                  *string         `json:"asset_account_id"`
-	AccumulatedDepreciationAccountID *string        `json:"accumulated_depreciation_account_id"`
-	DepreciationExpenseAccountID    *string         `json:"depreciation_expense_account_id"`
+	LegalEntityID                    string          `json:"legal_entity_id"`
+	Code                             string          `json:"code"`
+	NameEn                           string          `json:"name_en"`
+	NameAr                           string          `json:"name_ar"`
+	DescriptionEn                    string          `json:"description_en"`
+	DescriptionAr                    string          `json:"description_ar"`
+	DepreciationMethod               string          `json:"depreciation_method"`
+	UsefulLifeMonths                 int             `json:"useful_life_months"`
+	SalvageValueRate                 decimal.Decimal `json:"salvage_value_rate"`
+	AssetAccountID                   *string         `json:"asset_account_id"`
+	AccumulatedDepreciationAccountID *string         `json:"accumulated_depreciation_account_id"`
+	DepreciationExpenseAccountID     *string         `json:"depreciation_expense_account_id"`
 }
 
 func (h *FixedAssetsHandler) CreateCategory(w http.ResponseWriter, r *http.Request) {

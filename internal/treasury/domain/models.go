@@ -9,14 +9,14 @@ import (
 )
 
 var (
-	ErrCashAccountNotFound     = errors.New("cash account not found")
-	ErrReceiptNotFound         = errors.New("treasury receipt not found")
-	ErrPaymentNotFound         = errors.New("treasury payment not found")
-	ErrTransferNotFound        = errors.New("treasury transfer not found")
+	ErrCashAccountNotFound      = errors.New("cash account not found")
+	ErrReceiptNotFound          = errors.New("treasury receipt not found")
+	ErrPaymentNotFound          = errors.New("treasury payment not found")
+	ErrTransferNotFound         = errors.New("treasury transfer not found")
 	ErrCashAccountLimitExceeded = errors.New("cash balance exceeds account maximum limit")
-	ErrInsufficientCashBalance = errors.New("insufficient cash balance in account")
-	ErrInvalidStatusTransition = errors.New("invalid status transition")
-	ErrInvalidAmount           = errors.New("amount must be greater than zero")
+	ErrInsufficientCashBalance  = errors.New("insufficient cash balance in account")
+	ErrInvalidStatusTransition  = errors.New("invalid status transition")
+	ErrInvalidAmount            = errors.New("amount must be greater than zero")
 )
 
 type CashAccountType string

@@ -1,4 +1,5 @@
-import { RolesView } from "@/features/authorization/roles-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function AuthorizationPage() {
-  return <RolesView />;
+  return <ModuleAPIView titleAr="الصلاحيات والأدوار" titleEn="Authorization" descriptionAr="الأدوار والصلاحيات والتكليفات التي يفرضها الخادم." descriptionEn="Server-enforced roles, permissions, and assignments." resources={moduleResources.authorization} />;
 }

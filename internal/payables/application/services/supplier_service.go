@@ -2,12 +2,11 @@ package services
 
 import (
 	"context"
-	"fmt"
-	"math/rand"
 	"time"
 
 	"erp/internal/payables/domain"
 	"erp/internal/payables/ports"
+	"erp/internal/platform/identifiers"
 	"github.com/google/uuid"
 )
 
@@ -22,7 +21,7 @@ func NewSupplierService(supplierRepo ports.SupplierRepository) ports.SupplierSer
 func (s *supplierService) CreateSupplier(ctx context.Context, cmd ports.CreateSupplierCmd) (*domain.Supplier, error) {
 	suppNumber := cmd.SupplierNumber
 	if suppNumber == "" {
-		suppNumber = fmt.Sprintf("SUP-%d-%04d", time.Now().Year(), rand.Intn(9000)+1000)
+		suppNumber = identifiers.NewDocumentNumber("SUP", time.Now())
 	}
 
 	curr := cmd.CurrencyCode

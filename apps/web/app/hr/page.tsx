@@ -1,4 +1,5 @@
-import { HRView } from "@/features/hr/hr-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function HRPage() {
-  return <HRView />;
+  return <ModuleAPIView titleAr="الموارد البشرية" titleEn="Human Resources" descriptionAr="الموظفون والوظائف والعقود وبيانات التوطين الفعلية." descriptionEn="Live employees, jobs, contracts, and Saudization metrics." resources={moduleResources.hr} />;
 }

@@ -7,9 +7,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"erp/internal/platform/config"
+	"erp/internal/platform/database"
+	"erp/internal/platform/observability"
+	"erp/internal/zatca"
 )
 
 func main() {
@@ -18,8 +20,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to load worker config: %v\n", err)
 		os.Exit(1)
 	}
+	if !cfg.ZATCA.Enabled {
+		fmt.Fprintln(os.Stderr, "ZATCA worker is disabled; set ZATCA_ENABLED=true only for an approved deployment")
+		os.Exit(1)
+	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := observability.NewLogger(cfg.AppName+"-worker", string(cfg.Environment), cfg.LogLevel)
 	slog.SetDefault(logger)
 
 	logger.Info("Starting Saudi ERP Worker Daemon",
@@ -31,19 +37,15 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Worker run loop placeholder (will run River job queue in Phase 1+)
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	logger.Info("Worker daemon initialized and ready for jobs")
-
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Info("Worker daemon shutting down gracefully")
-			return
-		case <-ticker.C:
-			logger.Debug("Worker heartbeat check")
-		}
+	db, err := database.NewPool(ctx, cfg)
+	if err != nil {
+		logger.Error("Worker database connection failed", "error", err)
+		os.Exit(1)
 	}
+	defer db.Close()
+
+	zatcaModule := zatca.NewModule(cfg, db)
+	logger.Info("Worker daemon initialized", "jobs", []string{"zatca_submission_retries"})
+	zatcaModule.RetryWorker.Start(ctx)
+	logger.Info("Worker daemon stopped gracefully")
 }

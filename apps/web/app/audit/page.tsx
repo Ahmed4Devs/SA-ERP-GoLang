@@ -1,4 +1,5 @@
-import { AuditView } from "@/features/audit/audit-view";
+import { ModuleAPIView } from "@/components/modules/module-api-view";
+import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function AuditPage() {
-  return <AuditView />;
+  return <ModuleAPIView titleAr="سجل التدقيق" titleEn="Audit Log" descriptionAr="أحداث التدقيق والأمن وسلامة سلسلة التجزئة من المصدر الفعلي." descriptionEn="Live audit, security events, and integrity status." resources={moduleResources.audit} />;
 }

@@ -8,6 +8,7 @@ import (
 	"erp/internal/leave/domain"
 	"erp/internal/leave/ports"
 	"erp/internal/platform/database"
+	"erp/internal/platform/identifiers"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -156,7 +157,7 @@ func (s *leaveService) SubmitLeaveRequest(ctx context.Context, req *domain.Leave
 		req.ReturnDate = req.EndDate.AddDate(0, 0, 1)
 	}
 	if req.RequestNumber == "" {
-		req.RequestNumber = fmt.Sprintf("LR-%d-%04d", time.Now().Year(), time.Now().UnixNano()%10000)
+		req.RequestNumber = identifiers.NewDocumentNumber("LR", time.Now())
 	}
 
 	// 2. Validate leave balance

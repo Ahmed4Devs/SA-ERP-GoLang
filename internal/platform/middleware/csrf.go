@@ -8,14 +8,16 @@ import (
 )
 
 type CSRFConfig struct {
-	AllowedOrigins []string
-	ExemptPaths    []string
+	AllowedOrigins       []string
+	ExemptPaths          []string
+	ProtectedCookieNames []string
 }
 
 func DefaultCSRFConfig() CSRFConfig {
 	return CSRFConfig{
-		AllowedOrigins: []string{"http://localhost:3000", "http://127.0.0.1:3000"},
-		ExemptPaths:    []string{"/health", "/ready", "/metrics"},
+		AllowedOrigins:       []string{"http://localhost:3000", "http://127.0.0.1:3000"},
+		ExemptPaths:          []string{"/health", "/ready", "/metrics"},
+		ProtectedCookieNames: []string{"erp_session"},
 	}
 }
 
@@ -66,7 +68,16 @@ func CSRFProtection(cfg CSRFConfig) func(http.Handler) http.Handler {
 				return
 			}
 
-			// If neither Origin nor Referer is present, standard API client with custom header or same-host is accepted
+			// Browser requests authenticated by a cookie must prove their origin. Requests
+			// without protected cookies remain available to non-browser API clients using
+			// explicit credentials such as an Authorization bearer token.
+			for _, cookieName := range cfg.ProtectedCookieNames {
+				if cookie, err := r.Cookie(cookieName); err == nil && cookie.Value != "" {
+					rejectCSRF(w, "Forbidden: Origin or Referer is required for cookie-authenticated requests")
+					return
+				}
+			}
+
 			next.ServeHTTP(w, r)
 		})
 	}

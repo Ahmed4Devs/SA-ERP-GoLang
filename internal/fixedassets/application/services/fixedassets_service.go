@@ -8,6 +8,7 @@ import (
 	"erp/internal/fixedassets/domain"
 	"erp/internal/fixedassets/ports"
 	"erp/internal/platform/database"
+	"erp/internal/platform/identifiers"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -151,7 +152,7 @@ func (s *FixedAssetsService) RunMonthlyDepreciation(
 	}
 
 	runDate := time.Date(year, time.Month(month), 28, 0, 0, 0, 0, time.UTC)
-	runNumber := fmt.Sprintf("DEP-%d%02d-%s", year, month, uuid.New().String()[:6])
+	runNumber := identifiers.NewDocumentNumber(fmt.Sprintf("DEP-%d%02d", year, month), time.Now())
 
 	var linesToCreate []domain.DepreciationLine
 	totalDepr := decimal.Zero
@@ -281,7 +282,7 @@ func (s *FixedAssetsService) GetAssetSchedule(ctx context.Context, assetID, book
 
 func (s *FixedAssetsService) TransferAsset(ctx context.Context, transfer domain.Transfer) (*domain.Transfer, error) {
 	if transfer.TransferNumber == "" {
-		transfer.TransferNumber = fmt.Sprintf("TRF-%s", uuid.New().String()[:8])
+		transfer.TransferNumber = identifiers.NewDocumentNumber("TRF", time.Now())
 	}
 	if transfer.TransferDate.IsZero() {
 		transfer.TransferDate = time.Now()
@@ -327,7 +328,7 @@ func (s *FixedAssetsService) DisposeAsset(ctx context.Context, disposal domain.D
 	}
 
 	if disposal.DisposalNumber == "" {
-		disposal.DisposalNumber = fmt.Sprintf("DISP-%s", uuid.New().String()[:8])
+		disposal.DisposalNumber = identifiers.NewDocumentNumber("DISP", time.Now())
 	}
 	if disposal.DisposalDate.IsZero() {
 		disposal.DisposalDate = time.Now()
