@@ -1,26 +1,39 @@
-# Build Stage
+# Multi-stage Production Dockerfile for Saudi ERP API Core
+# Stage 1: Build binary
 FROM golang:1.24-alpine AS builder
 
-WORKDIR /app
+WORKDIR /src
 
-RUN apk add --no-cache git
+RUN apk add --no-cache git ca-certificates tzdata
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/bin/erp-api ./cmd/erp-api
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-w -s -X main.version=v1.0.0" \
+    -o /bin/erp-api ./cmd/erp-api
 
-# Final Stage
+# Stage 2: Minimal hardened runtime image
 FROM alpine:3.21
+
+RUN apk --no-cache add ca-certificates tzdata curl && \
+    addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 
-RUN apk --no-cache add ca-certificates tzdata
+# Set default timezone for Saudi Arabia
+ENV TZ=Asia/Riyadh
 
-COPY --from=builder /app/bin/erp-api /app/erp-api
+COPY --from=builder /bin/erp-api /app/erp-api
+COPY --from=builder /src/database/migrations /app/database/migrations
+
+USER appuser
 
 EXPOSE 8080
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
 
 ENTRYPOINT ["/app/erp-api"]
