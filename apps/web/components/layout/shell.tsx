@@ -141,7 +141,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { key: "documents", href: "/documents", icon: FolderArchive, label: (t.nav as any)?.documents || "إدارة المستندات والوثائق", active: pathname === "/documents" },
     { key: "notifications", href: "/notifications", icon: Bell, label: (t.nav as any)?.notifications || "مركز التنبيهات والإشعارات", active: pathname === "/notifications" },
     { key: "reports", href: "/reports", icon: BarChart3, label: t.nav.reports, active: pathname === "/reports" },
-    { key: "settings", href: "#", icon: Settings, label: t.nav.settings },
+    { key: "settings", href: "/settings", icon: Settings, label: t.nav.settings, active: pathname === "/settings" },
   ];
 
   // Get active item for breadcrumb
