@@ -506,3 +506,40 @@ func TestHR_SeedDefaultHRData(t *testing.T) {
 		t.Fatalf("expected positive total count")
 	}
 }
+
+func TestEmployee_OnboardingRollsBackWhenIdentifierFails(t *testing.T) {
+	hrMod, db, leID, _, ctx := setupHRTest(t)
+	defer db.Close()
+
+	employeeNumber := "ROLLBACK-EMP-" + uuid.New().String()[:8]
+	_, err := hrMod.HRService.OnboardEmployee(ctx, &domain.Employee{
+		LegalEntityID:          leID,
+		EmployeeNumber:         employeeNumber,
+		FirstNameEn:            "Rollback",
+		LastNameEn:             "Employee",
+		FirstNameAr:            "موظف",
+		LastNameAr:             "تراجع",
+		NationalityCountryCode: "SA",
+		IsSaudiNational:        true,
+		HireDate:               time.Now(),
+		EmploymentStatus:       domain.EmploymentStatusActive,
+	}, &domain.EmployeeIdentifier{
+		IdentifierType:  domain.IdentifierType("INVALID_TYPE"),
+		IdentifierValue: "ROLLBACK-ID-" + uuid.New().String(),
+		IsPrimary:       true,
+	}, nil, nil)
+	if err == nil {
+		t.Fatal("expected employee identifier constraint failure")
+	}
+
+	var count int
+	if err := db.Pool.QueryRow(ctx,
+		"SELECT COUNT(*) FROM hr.employees WHERE legal_entity_id = $1 AND employee_number = $2",
+		leID, employeeNumber,
+	).Scan(&count); err != nil {
+		t.Fatalf("failed to verify employee rollback: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected employee rollback, found %d rows", count)
+	}
+}

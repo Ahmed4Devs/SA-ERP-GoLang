@@ -17,14 +17,14 @@ import (
 
 type attendanceRepository struct {
 	db *database.DB
-	q  *sqlc.Queries
 }
 
 func NewAttendanceRepository(db *database.DB) ports.AttendanceRepository {
-	return &attendanceRepository{
-		db: db,
-		q:  sqlc.New(db.Pool),
-	}
+	return &attendanceRepository{db: db}
+}
+
+func (r *attendanceRepository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 // ============================================================================
@@ -40,7 +40,7 @@ func (r *attendanceRepository) CreateShift(ctx context.Context, s *domain.Shift)
 		workDaysJSON = []byte(`["SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY"]`)
 	}
 
-	row, err := r.q.CreateShift(ctx, sqlc.CreateShiftParams{
+	row, err := r.queries(ctx).CreateShift(ctx, sqlc.CreateShiftParams{
 		ID:                      toPgUUID(s.ID),
 		LegalEntityID:           toPgUUID(s.LegalEntityID),
 		Code:                    s.Code,
@@ -62,7 +62,7 @@ func (r *attendanceRepository) CreateShift(ctx context.Context, s *domain.Shift)
 }
 
 func (r *attendanceRepository) GetShiftByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Shift, error) {
-	row, err := r.q.GetShiftByID(ctx, sqlc.GetShiftByIDParams{
+	row, err := r.queries(ctx).GetShiftByID(ctx, sqlc.GetShiftByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -76,7 +76,7 @@ func (r *attendanceRepository) GetShiftByID(ctx context.Context, legalEntityID, 
 }
 
 func (r *attendanceRepository) GetShiftByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.Shift, error) {
-	row, err := r.q.GetShiftByCode(ctx, sqlc.GetShiftByCodeParams{
+	row, err := r.queries(ctx).GetShiftByCode(ctx, sqlc.GetShiftByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Code:          code,
 	})
@@ -90,7 +90,7 @@ func (r *attendanceRepository) GetShiftByCode(ctx context.Context, legalEntityID
 }
 
 func (r *attendanceRepository) ListShifts(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.Shift, error) {
-	rows, err := r.q.ListShifts(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListShifts(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func (r *attendanceRepository) CreateShiftAssignment(ctx context.Context, a *dom
 	if a.ID == uuid.Nil {
 		a.ID = uuid.New()
 	}
-	row, err := r.q.CreateShiftAssignment(ctx, sqlc.CreateShiftAssignmentParams{
+	row, err := r.queries(ctx).CreateShiftAssignment(ctx, sqlc.CreateShiftAssignmentParams{
 		ID:         toPgUUID(a.ID),
 		EmployeeID: toPgUUID(a.EmployeeID),
 		ShiftID:    toPgUUID(a.ShiftID),
@@ -124,7 +124,7 @@ func (r *attendanceRepository) CreateShiftAssignment(ctx context.Context, a *dom
 }
 
 func (r *attendanceRepository) GetActiveShiftAssignment(ctx context.Context, employeeID uuid.UUID) (*domain.ShiftAssignment, error) {
-	row, err := r.q.GetActiveShiftAssignment(ctx, toPgUUID(employeeID))
+	row, err := r.queries(ctx).GetActiveShiftAssignment(ctx, toPgUUID(employeeID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -147,7 +147,7 @@ func (r *attendanceRepository) GetActiveShiftAssignment(ctx context.Context, emp
 }
 
 func (r *attendanceRepository) ListShiftAssignments(ctx context.Context, employeeID uuid.UUID) ([]*domain.ShiftAssignment, error) {
-	rows, err := r.q.ListShiftAssignments(ctx, toPgUUID(employeeID))
+	rows, err := r.queries(ctx).ListShiftAssignments(ctx, toPgUUID(employeeID))
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +186,7 @@ func (r *attendanceRepository) CreateAttendanceRecord(ctx context.Context, rec *
 		checkOutMethod = &s
 	}
 
-	row, err := r.q.CreateAttendanceRecord(ctx, sqlc.CreateAttendanceRecordParams{
+	row, err := r.queries(ctx).CreateAttendanceRecord(ctx, sqlc.CreateAttendanceRecordParams{
 		ID:                    toPgUUID(rec.ID),
 		LegalEntityID:         toPgUUID(rec.LegalEntityID),
 		EmployeeID:            toPgUUID(rec.EmployeeID),
@@ -211,7 +211,7 @@ func (r *attendanceRepository) CreateAttendanceRecord(ctx context.Context, rec *
 }
 
 func (r *attendanceRepository) GetAttendanceRecordByID(ctx context.Context, id uuid.UUID) (*domain.AttendanceRecord, error) {
-	row, err := r.q.GetAttendanceRecordByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetAttendanceRecordByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrRecordNotFound
@@ -222,7 +222,7 @@ func (r *attendanceRepository) GetAttendanceRecordByID(ctx context.Context, id u
 }
 
 func (r *attendanceRepository) GetAttendanceRecordByEmployeeAndDate(ctx context.Context, employeeID uuid.UUID, date time.Time) (*domain.AttendanceRecord, error) {
-	row, err := r.q.GetAttendanceRecordByEmployeeAndDate(ctx, sqlc.GetAttendanceRecordByEmployeeAndDateParams{
+	row, err := r.queries(ctx).GetAttendanceRecordByEmployeeAndDate(ctx, sqlc.GetAttendanceRecordByEmployeeAndDateParams{
 		EmployeeID: toPgUUID(employeeID),
 		WorkDate:   toPgDate(date),
 	})
@@ -242,7 +242,7 @@ func (r *attendanceRepository) UpdateAttendanceRecordClockOut(ctx context.Contex
 		checkOutMethod = &s
 	}
 
-	row, err := r.q.UpdateAttendanceRecordClockOut(ctx, sqlc.UpdateAttendanceRecordClockOutParams{
+	row, err := r.queries(ctx).UpdateAttendanceRecordClockOut(ctx, sqlc.UpdateAttendanceRecordClockOutParams{
 		ID:                    toPgUUID(rec.ID),
 		LegalEntityID:         toPgUUID(rec.LegalEntityID),
 		ClockOut:              toPgTimestamptzPtr(rec.ClockOut),
@@ -260,7 +260,7 @@ func (r *attendanceRepository) UpdateAttendanceRecordClockOut(ctx context.Contex
 }
 
 func (r *attendanceRepository) ListAttendanceRecordsByDate(ctx context.Context, legalEntityID uuid.UUID, date time.Time) ([]*domain.AttendanceRecord, error) {
-	rows, err := r.q.ListAttendanceRecordsByDate(ctx, sqlc.ListAttendanceRecordsByDateParams{
+	rows, err := r.queries(ctx).ListAttendanceRecordsByDate(ctx, sqlc.ListAttendanceRecordsByDateParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		WorkDate:      toPgDate(date),
 	})
@@ -301,7 +301,7 @@ func (r *attendanceRepository) ListAttendanceRecordsByDate(ctx context.Context, 
 }
 
 func (r *attendanceRepository) ListEmployeeAttendanceRecords(ctx context.Context, employeeID uuid.UUID, from, to time.Time) ([]*domain.AttendanceRecord, error) {
-	rows, err := r.q.ListEmployeeAttendanceRecords(ctx, sqlc.ListEmployeeAttendanceRecordsParams{
+	rows, err := r.queries(ctx).ListEmployeeAttendanceRecords(ctx, sqlc.ListEmployeeAttendanceRecordsParams{
 		EmployeeID: toPgUUID(employeeID),
 		WorkDate:   toPgDate(from),
 		WorkDate_2: toPgDate(to),
@@ -324,7 +324,7 @@ func (r *attendanceRepository) CreateOvertimeRequest(ctx context.Context, o *dom
 	if o.ID == uuid.Nil {
 		o.ID = uuid.New()
 	}
-	row, err := r.q.CreateOvertimeRequest(ctx, sqlc.CreateOvertimeRequestParams{
+	row, err := r.queries(ctx).CreateOvertimeRequest(ctx, sqlc.CreateOvertimeRequestParams{
 		ID:             toPgUUID(o.ID),
 		LegalEntityID:  toPgUUID(o.LegalEntityID),
 		EmployeeID:     toPgUUID(o.EmployeeID),
@@ -342,7 +342,7 @@ func (r *attendanceRepository) CreateOvertimeRequest(ctx context.Context, o *dom
 }
 
 func (r *attendanceRepository) GetOvertimeRequestByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.OvertimeRequest, error) {
-	row, err := r.q.GetOvertimeRequestByID(ctx, sqlc.GetOvertimeRequestByIDParams{
+	row, err := r.queries(ctx).GetOvertimeRequestByID(ctx, sqlc.GetOvertimeRequestByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -356,7 +356,7 @@ func (r *attendanceRepository) GetOvertimeRequestByID(ctx context.Context, legal
 }
 
 func (r *attendanceRepository) ListOvertimeRequests(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.OvertimeRequest, error) {
-	rows, err := r.q.ListOvertimeRequests(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListOvertimeRequests(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +389,7 @@ func (r *attendanceRepository) ListOvertimeRequests(ctx context.Context, legalEn
 }
 
 func (r *attendanceRepository) UpdateOvertimeStatus(ctx context.Context, legalEntityID, id uuid.UUID, status domain.RequestStatus, approvedBy uuid.UUID) (*domain.OvertimeRequest, error) {
-	row, err := r.q.UpdateOvertimeStatus(ctx, sqlc.UpdateOvertimeStatusParams{
+	row, err := r.queries(ctx).UpdateOvertimeStatus(ctx, sqlc.UpdateOvertimeStatusParams{
 		ID:               toPgUUID(id),
 		LegalEntityID:    toPgUUID(legalEntityID),
 		Status:           string(status),
@@ -409,7 +409,7 @@ func (r *attendanceRepository) CreateAttendanceAdjustment(ctx context.Context, a
 	if a.ID == uuid.Nil {
 		a.ID = uuid.New()
 	}
-	row, err := r.q.CreateAttendanceAdjustment(ctx, sqlc.CreateAttendanceAdjustmentParams{
+	row, err := r.queries(ctx).CreateAttendanceAdjustment(ctx, sqlc.CreateAttendanceAdjustmentParams{
 		ID:                    toPgUUID(a.ID),
 		AttendanceRecordID:    toPgUUID(a.AttendanceRecordID),
 		RequestedByEmployeeID: toPgUUID(a.RequestedByEmployeeID),
@@ -427,7 +427,7 @@ func (r *attendanceRepository) CreateAttendanceAdjustment(ctx context.Context, a
 }
 
 func (r *attendanceRepository) GetAttendanceAdjustmentByID(ctx context.Context, id uuid.UUID) (*domain.AttendanceAdjustment, error) {
-	row, err := r.q.GetAttendanceAdjustmentByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetAttendanceAdjustmentByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrAdjustmentNotFound
@@ -438,7 +438,7 @@ func (r *attendanceRepository) GetAttendanceAdjustmentByID(ctx context.Context, 
 }
 
 func (r *attendanceRepository) UpdateAdjustmentStatus(ctx context.Context, id uuid.UUID, status domain.RequestStatus, reviewedBy uuid.UUID, reviewNotes string) (*domain.AttendanceAdjustment, error) {
-	row, err := r.q.UpdateAdjustmentStatus(ctx, sqlc.UpdateAdjustmentStatusParams{
+	row, err := r.queries(ctx).UpdateAdjustmentStatus(ctx, sqlc.UpdateAdjustmentStatusParams{
 		ID:               toPgUUID(id),
 		Status:           string(status),
 		ReviewedByUserID: toPgUUIDPtr(&reviewedBy),

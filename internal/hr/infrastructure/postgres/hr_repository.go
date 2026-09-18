@@ -16,14 +16,14 @@ import (
 
 type hrRepository struct {
 	db *database.DB
-	q  *sqlc.Queries
 }
 
 func NewHRRepository(db *database.DB) ports.HRRepository {
-	return &hrRepository{
-		db: db,
-		q:  sqlc.New(db.Pool),
-	}
+	return &hrRepository{db: db}
+}
+
+func (r *hrRepository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 // ============================================================================
@@ -34,7 +34,7 @@ func (r *hrRepository) CreateJob(ctx context.Context, j *domain.Job) (*domain.Jo
 	if j.ID == uuid.Nil {
 		j.ID = uuid.New()
 	}
-	row, err := r.q.CreateJob(ctx, sqlc.CreateJobParams{
+	row, err := r.queries(ctx).CreateJob(ctx, sqlc.CreateJobParams{
 		ID:            toPgUUID(j.ID),
 		LegalEntityID: toPgUUID(j.LegalEntityID),
 		Code:          j.Code,
@@ -52,7 +52,7 @@ func (r *hrRepository) CreateJob(ctx context.Context, j *domain.Job) (*domain.Jo
 }
 
 func (r *hrRepository) GetJobByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Job, error) {
-	row, err := r.q.GetJobByID(ctx, sqlc.GetJobByIDParams{
+	row, err := r.queries(ctx).GetJobByID(ctx, sqlc.GetJobByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -66,7 +66,7 @@ func (r *hrRepository) GetJobByID(ctx context.Context, legalEntityID, id uuid.UU
 }
 
 func (r *hrRepository) GetJobByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.Job, error) {
-	row, err := r.q.GetJobByCode(ctx, sqlc.GetJobByCodeParams{
+	row, err := r.queries(ctx).GetJobByCode(ctx, sqlc.GetJobByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Code:          code,
 	})
@@ -80,7 +80,7 @@ func (r *hrRepository) GetJobByCode(ctx context.Context, legalEntityID uuid.UUID
 }
 
 func (r *hrRepository) ListJobs(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.Job, error) {
-	rows, err := r.q.ListJobs(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListJobs(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (r *hrRepository) CreatePosition(ctx context.Context, p *domain.Position) (
 	if p.ID == uuid.Nil {
 		p.ID = uuid.New()
 	}
-	row, err := r.q.CreatePosition(ctx, sqlc.CreatePositionParams{
+	row, err := r.queries(ctx).CreatePosition(ctx, sqlc.CreatePositionParams{
 		ID:                  toPgUUID(p.ID),
 		LegalEntityID:       toPgUUID(p.LegalEntityID),
 		Code:                p.Code,
@@ -117,7 +117,7 @@ func (r *hrRepository) CreatePosition(ctx context.Context, p *domain.Position) (
 }
 
 func (r *hrRepository) GetPositionByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Position, error) {
-	row, err := r.q.GetPositionByID(ctx, sqlc.GetPositionByIDParams{
+	row, err := r.queries(ctx).GetPositionByID(ctx, sqlc.GetPositionByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -131,7 +131,7 @@ func (r *hrRepository) GetPositionByID(ctx context.Context, legalEntityID, id uu
 }
 
 func (r *hrRepository) GetPositionByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.Position, error) {
-	row, err := r.q.GetPositionByCode(ctx, sqlc.GetPositionByCodeParams{
+	row, err := r.queries(ctx).GetPositionByCode(ctx, sqlc.GetPositionByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Code:          code,
 	})
@@ -145,7 +145,7 @@ func (r *hrRepository) GetPositionByCode(ctx context.Context, legalEntityID uuid
 }
 
 func (r *hrRepository) ListPositions(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.Position, error) {
-	rows, err := r.q.ListPositions(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListPositions(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func (r *hrRepository) ListPositions(ctx context.Context, legalEntityID uuid.UUI
 }
 
 func (r *hrRepository) UpdatePositionStatus(ctx context.Context, legalEntityID, id uuid.UUID, status domain.PositionStatus) (*domain.Position, error) {
-	row, err := r.q.UpdatePositionStatus(ctx, sqlc.UpdatePositionStatusParams{
+	row, err := r.queries(ctx).UpdatePositionStatus(ctx, sqlc.UpdatePositionStatusParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 		Status:        string(status),
@@ -176,7 +176,7 @@ func (r *hrRepository) CreateEmployee(ctx context.Context, e *domain.Employee) (
 	if e.ID == uuid.Nil {
 		e.ID = uuid.New()
 	}
-	row, err := r.q.CreateEmployee(ctx, sqlc.CreateEmployeeParams{
+	row, err := r.queries(ctx).CreateEmployee(ctx, sqlc.CreateEmployeeParams{
 		ID:                     toPgUUID(e.ID),
 		LegalEntityID:          toPgUUID(e.LegalEntityID),
 		EmployeeNumber:         e.EmployeeNumber,
@@ -206,7 +206,7 @@ func (r *hrRepository) CreateEmployee(ctx context.Context, e *domain.Employee) (
 }
 
 func (r *hrRepository) GetEmployeeByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Employee, error) {
-	row, err := r.q.GetEmployeeByID(ctx, sqlc.GetEmployeeByIDParams{
+	row, err := r.queries(ctx).GetEmployeeByID(ctx, sqlc.GetEmployeeByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -220,7 +220,7 @@ func (r *hrRepository) GetEmployeeByID(ctx context.Context, legalEntityID, id uu
 }
 
 func (r *hrRepository) GetEmployeeByNumber(ctx context.Context, legalEntityID uuid.UUID, number string) (*domain.Employee, error) {
-	row, err := r.q.GetEmployeeByNumber(ctx, sqlc.GetEmployeeByNumberParams{
+	row, err := r.queries(ctx).GetEmployeeByNumber(ctx, sqlc.GetEmployeeByNumberParams{
 		LegalEntityID:  toPgUUID(legalEntityID),
 		EmployeeNumber: number,
 	})
@@ -234,7 +234,7 @@ func (r *hrRepository) GetEmployeeByNumber(ctx context.Context, legalEntityID uu
 }
 
 func (r *hrRepository) ListEmployees(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.Employee, error) {
-	rows, err := r.q.ListEmployees(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListEmployees(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (r *hrRepository) UpdateEmployeeStatus(ctx context.Context, legalEntityID, 
 		now := time.Now()
 		termDate = &now
 	}
-	row, err := r.q.UpdateEmployeeStatus(ctx, sqlc.UpdateEmployeeStatusParams{
+	row, err := r.queries(ctx).UpdateEmployeeStatus(ctx, sqlc.UpdateEmployeeStatusParams{
 		ID:               toPgUUID(id),
 		LegalEntityID:    toPgUUID(legalEntityID),
 		EmploymentStatus: string(status),
@@ -264,7 +264,7 @@ func (r *hrRepository) UpdateEmployeeStatus(ctx context.Context, legalEntityID, 
 }
 
 func (r *hrRepository) CountEmployeesByNationality(ctx context.Context, legalEntityID uuid.UUID) (saudiCount int64, expatCount int64, err error) {
-	rows, err := r.q.CountEmployeesByNationality(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).CountEmployeesByNationality(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return 0, 0, err
 	}
@@ -289,7 +289,7 @@ func (r *hrRepository) CreateIdentifier(ctx context.Context, iden *domain.Employ
 	if iden.IdentifierValueMasked == "" {
 		iden.IdentifierValueMasked = domain.MaskIdentifier(iden.IdentifierValue)
 	}
-	row, err := r.q.CreateEmployeeIdentifier(ctx, sqlc.CreateEmployeeIdentifierParams{
+	row, err := r.queries(ctx).CreateEmployeeIdentifier(ctx, sqlc.CreateEmployeeIdentifierParams{
 		ID:                    toPgUUID(iden.ID),
 		EmployeeID:            toPgUUID(iden.EmployeeID),
 		IdentifierType:        string(iden.IdentifierType),
@@ -308,7 +308,7 @@ func (r *hrRepository) CreateIdentifier(ctx context.Context, iden *domain.Employ
 }
 
 func (r *hrRepository) ListIdentifiers(ctx context.Context, employeeID uuid.UUID) ([]*domain.EmployeeIdentifier, error) {
-	rows, err := r.q.ListEmployeeIdentifiers(ctx, toPgUUID(employeeID))
+	rows, err := r.queries(ctx).ListEmployeeIdentifiers(ctx, toPgUUID(employeeID))
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +323,7 @@ func (r *hrRepository) CreateContact(ctx context.Context, c *domain.EmployeeCont
 	if c.ID == uuid.Nil {
 		c.ID = uuid.New()
 	}
-	row, err := r.q.CreateEmployeeContact(ctx, sqlc.CreateEmployeeContactParams{
+	row, err := r.queries(ctx).CreateEmployeeContact(ctx, sqlc.CreateEmployeeContactParams{
 		ID:            toPgUUID(c.ID),
 		EmployeeID:    toPgUUID(c.EmployeeID),
 		WorkEmail:     toPgTextPtr(c.WorkEmail),
@@ -346,7 +346,7 @@ func (r *hrRepository) CreateContact(ctx context.Context, c *domain.EmployeeCont
 }
 
 func (r *hrRepository) GetContact(ctx context.Context, employeeID uuid.UUID) (*domain.EmployeeContact, error) {
-	row, err := r.q.GetEmployeeContact(ctx, toPgUUID(employeeID))
+	row, err := r.queries(ctx).GetEmployeeContact(ctx, toPgUUID(employeeID))
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +361,7 @@ func (r *hrRepository) CreateContract(ctx context.Context, c *domain.Contract) (
 	if c.ID == uuid.Nil {
 		c.ID = uuid.New()
 	}
-	row, err := r.q.CreateContract(ctx, sqlc.CreateContractParams{
+	row, err := r.queries(ctx).CreateContract(ctx, sqlc.CreateContractParams{
 		ID:                  toPgUUID(c.ID),
 		LegalEntityID:       toPgUUID(c.LegalEntityID),
 		EmployeeID:          toPgUUID(c.EmployeeID),
@@ -383,7 +383,7 @@ func (r *hrRepository) CreateContract(ctx context.Context, c *domain.Contract) (
 }
 
 func (r *hrRepository) GetContractByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Contract, error) {
-	row, err := r.q.GetContractByID(ctx, sqlc.GetContractByIDParams{
+	row, err := r.queries(ctx).GetContractByID(ctx, sqlc.GetContractByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -397,7 +397,7 @@ func (r *hrRepository) GetContractByID(ctx context.Context, legalEntityID, id uu
 }
 
 func (r *hrRepository) GetContractByNumber(ctx context.Context, legalEntityID uuid.UUID, number string) (*domain.Contract, error) {
-	row, err := r.q.GetContractByNumber(ctx, sqlc.GetContractByNumberParams{
+	row, err := r.queries(ctx).GetContractByNumber(ctx, sqlc.GetContractByNumberParams{
 		LegalEntityID:  toPgUUID(legalEntityID),
 		ContractNumber: number,
 	})
@@ -411,7 +411,7 @@ func (r *hrRepository) GetContractByNumber(ctx context.Context, legalEntityID uu
 }
 
 func (r *hrRepository) GetContractByEmployeeID(ctx context.Context, legalEntityID, employeeID uuid.UUID) (*domain.Contract, error) {
-	row, err := r.q.GetContractByEmployeeID(ctx, sqlc.GetContractByEmployeeIDParams{
+	row, err := r.queries(ctx).GetContractByEmployeeID(ctx, sqlc.GetContractByEmployeeIDParams{
 		EmployeeID:    toPgUUID(employeeID),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -425,7 +425,7 @@ func (r *hrRepository) GetContractByEmployeeID(ctx context.Context, legalEntityI
 }
 
 func (r *hrRepository) ListContracts(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.Contract, error) {
-	rows, err := r.q.ListContracts(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListContracts(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +437,7 @@ func (r *hrRepository) ListContracts(ctx context.Context, legalEntityID uuid.UUI
 }
 
 func (r *hrRepository) UpdateContractStatus(ctx context.Context, legalEntityID, id uuid.UUID, status domain.ContractStatus) (*domain.Contract, error) {
-	row, err := r.q.UpdateContractStatus(ctx, sqlc.UpdateContractStatusParams{
+	row, err := r.queries(ctx).UpdateContractStatus(ctx, sqlc.UpdateContractStatusParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 		Status:        string(status),
@@ -455,7 +455,7 @@ func (r *hrRepository) CreateContractVersion(ctx context.Context, v *domain.Cont
 	if v.GrossSalary.IsZero() {
 		v.GrossSalary = domain.CalculateGrossSalary(v.BasicSalary, v.HousingAllowance, v.TransportAllowance, v.OtherAllowances)
 	}
-	row, err := r.q.CreateContractVersion(ctx, sqlc.CreateContractVersionParams{
+	row, err := r.queries(ctx).CreateContractVersion(ctx, sqlc.CreateContractVersionParams{
 		ID:                 toPgUUID(v.ID),
 		ContractID:         toPgUUID(v.ContractID),
 		VersionNumber:      v.VersionNumber,
@@ -476,7 +476,7 @@ func (r *hrRepository) CreateContractVersion(ctx context.Context, v *domain.Cont
 }
 
 func (r *hrRepository) ListContractVersions(ctx context.Context, contractID uuid.UUID) ([]*domain.ContractVersion, error) {
-	rows, err := r.q.ListContractVersions(ctx, toPgUUID(contractID))
+	rows, err := r.queries(ctx).ListContractVersions(ctx, toPgUUID(contractID))
 	if err != nil {
 		return nil, err
 	}
@@ -488,7 +488,7 @@ func (r *hrRepository) ListContractVersions(ctx context.Context, contractID uuid
 }
 
 func (r *hrRepository) GetLatestContractVersion(ctx context.Context, contractID uuid.UUID) (*domain.ContractVersion, error) {
-	row, err := r.q.GetLatestContractVersion(ctx, toPgUUID(contractID))
+	row, err := r.queries(ctx).GetLatestContractVersion(ctx, toPgUUID(contractID))
 	if err != nil {
 		return nil, err
 	}
@@ -506,7 +506,7 @@ func (r *hrRepository) CreateBankAccount(ctx context.Context, a *domain.Employee
 	if a.IBANMasked == "" {
 		a.IBANMasked = domain.MaskIBAN(a.IBAN)
 	}
-	row, err := r.q.CreateEmployeeBankAccount(ctx, sqlc.CreateEmployeeBankAccountParams{
+	row, err := r.queries(ctx).CreateEmployeeBankAccount(ctx, sqlc.CreateEmployeeBankAccountParams{
 		ID:            toPgUUID(a.ID),
 		EmployeeID:    toPgUUID(a.EmployeeID),
 		BankNameEn:    a.BankNameEn,
@@ -524,7 +524,7 @@ func (r *hrRepository) CreateBankAccount(ctx context.Context, a *domain.Employee
 }
 
 func (r *hrRepository) ListBankAccounts(ctx context.Context, employeeID uuid.UUID) ([]*domain.EmployeeBankAccount, error) {
-	rows, err := r.q.ListEmployeeBankAccounts(ctx, toPgUUID(employeeID))
+	rows, err := r.queries(ctx).ListEmployeeBankAccounts(ctx, toPgUUID(employeeID))
 	if err != nil {
 		return nil, err
 	}

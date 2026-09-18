@@ -9,6 +9,7 @@ import (
 	"erp/internal/hr/ports"
 	"erp/internal/platform/database"
 	"erp/internal/platform/identifiers"
+	"erp/internal/platform/transaction"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -17,12 +18,14 @@ import (
 type hrService struct {
 	repo ports.HRRepository
 	db   *database.DB
+	tx   transaction.Manager
 }
 
 func NewHRService(repo ports.HRRepository, db *database.DB) ports.HRService {
 	return &hrService{
 		repo: repo,
 		db:   db,
+		tx:   transaction.NewManager(db.Pool),
 	}
 }
 
@@ -118,48 +121,50 @@ func (s *hrService) OnboardEmployee(
 		emp.MaritalStatus = domain.MaritalStatusSingle
 	}
 
-	createdEmp, err := s.repo.CreateEmployee(ctx, emp)
-	if err != nil {
-		return nil, err
-	}
+	var createdEmp *domain.Employee
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		createdEmp, err = s.repo.CreateEmployee(txCtx, emp)
+		if err != nil {
+			return err
+		}
 
-	// 1. Identifiers
-	if identifier != nil && identifier.IdentifierValue != "" {
-		identifier.EmployeeID = createdEmp.ID
-		if identifier.IdentifierType == "" {
-			if createdEmp.IsSaudiNational {
-				identifier.IdentifierType = domain.IdentifierNationalID
-			} else {
-				identifier.IdentifierType = domain.IdentifierIqama
+		if identifier != nil && identifier.IdentifierValue != "" {
+			identifier.EmployeeID = createdEmp.ID
+			if identifier.IdentifierType == "" {
+				if createdEmp.IsSaudiNational {
+					identifier.IdentifierType = domain.IdentifierNationalID
+				} else {
+					identifier.IdentifierType = domain.IdentifierIqama
+				}
+			}
+			if _, err := s.repo.CreateIdentifier(txCtx, identifier); err != nil {
+				return fmt.Errorf("failed to create employee identifier: %w", err)
 			}
 		}
-		if _, err := s.repo.CreateIdentifier(ctx, identifier); err != nil {
-			return nil, err
+
+		if contact != nil && contact.MobilePhone != "" {
+			contact.EmployeeID = createdEmp.ID
+			if _, err := s.repo.CreateContact(txCtx, contact); err != nil {
+				return fmt.Errorf("failed to create employee contact: %w", err)
+			}
 		}
-	}
 
-	// 2. Contacts
-	if contact != nil && contact.MobilePhone != "" {
-		contact.EmployeeID = createdEmp.ID
-		if _, err := s.repo.CreateContact(ctx, contact); err != nil {
-			return nil, err
+		if bankAccount != nil && bankAccount.IBAN != "" {
+			bankAccount.EmployeeID = createdEmp.ID
+			if _, err := s.repo.CreateBankAccount(txCtx, bankAccount); err != nil {
+				return fmt.Errorf("failed to create employee bank account: %w", err)
+			}
 		}
-	}
 
-	// 3. Bank Account
-	if bankAccount != nil && bankAccount.IBAN != "" {
-		bankAccount.EmployeeID = createdEmp.ID
-		if _, err := s.repo.CreateBankAccount(ctx, bankAccount); err != nil {
-			return nil, err
+		if createdEmp.PrimaryPositionID != nil {
+			if _, err := s.repo.UpdatePositionStatus(txCtx, createdEmp.LegalEntityID, *createdEmp.PrimaryPositionID, domain.PositionFilled); err != nil {
+				return fmt.Errorf("failed to mark employee position as filled: %w", err)
+			}
 		}
-	}
-
-	// 4. Update Position Status
-	if createdEmp.PrimaryPositionID != nil {
-		_, _ = s.repo.UpdatePositionStatus(ctx, createdEmp.LegalEntityID, *createdEmp.PrimaryPositionID, domain.PositionFilled)
-	}
-
-	return createdEmp, nil
+		return nil
+	})
+	return createdEmp, err
 }
 
 func (s *hrService) GetEmployee(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Employee, error) {
@@ -171,20 +176,25 @@ func (s *hrService) ListEmployees(ctx context.Context, legalEntityID uuid.UUID) 
 }
 
 func (s *hrService) TerminateEmployee(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Employee, error) {
-	emp, err := s.repo.GetEmployeeByID(ctx, legalEntityID, id)
-	if err != nil {
-		return nil, err
-	}
-	if emp.EmploymentStatus == domain.EmploymentStatusTerminated {
-		return emp, nil
-	}
-
-	// Mark position as VACANT if primary
-	if emp.PrimaryPositionID != nil {
-		_, _ = s.repo.UpdatePositionStatus(ctx, legalEntityID, *emp.PrimaryPositionID, domain.PositionVacant)
-	}
-
-	return s.repo.UpdateEmployeeStatus(ctx, legalEntityID, id, domain.EmploymentStatusTerminated)
+	var terminated *domain.Employee
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		emp, err := s.repo.GetEmployeeByID(txCtx, legalEntityID, id)
+		if err != nil {
+			return err
+		}
+		if emp.EmploymentStatus == domain.EmploymentStatusTerminated {
+			terminated = emp
+			return nil
+		}
+		if emp.PrimaryPositionID != nil {
+			if _, err := s.repo.UpdatePositionStatus(txCtx, legalEntityID, *emp.PrimaryPositionID, domain.PositionVacant); err != nil {
+				return fmt.Errorf("failed to mark terminated employee position as vacant: %w", err)
+			}
+		}
+		terminated, err = s.repo.UpdateEmployeeStatus(txCtx, legalEntityID, id, domain.EmploymentStatusTerminated)
+		return err
+	})
+	return terminated, err
 }
 
 // ============================================================================
@@ -214,13 +224,17 @@ func (s *hrService) CreateContract(ctx context.Context, contract *domain.Contrac
 		contract.Status = domain.ContractActive
 	}
 
-	createdContract, err := s.repo.CreateContract(ctx, contract)
-	if err != nil {
-		return nil, nil, err
-	}
-
+	var createdContract *domain.Contract
 	var createdVer *domain.ContractVersion
-	if initialVersion != nil {
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		createdContract, err = s.repo.CreateContract(txCtx, contract)
+		if err != nil {
+			return err
+		}
+		if initialVersion == nil {
+			return nil
+		}
 		initialVersion.ContractID = createdContract.ID
 		initialVersion.VersionNumber = 1
 		if initialVersion.EffectiveFrom.IsZero() {
@@ -232,43 +246,56 @@ func (s *hrService) CreateContract(ctx context.Context, contract *domain.Contrac
 			initialVersion.TransportAllowance,
 			initialVersion.OtherAllowances,
 		)
-		createdVer, err = s.repo.CreateContractVersion(ctx, initialVersion)
+		createdVer, err = s.repo.CreateContractVersion(txCtx, initialVersion)
 		if err != nil {
-			return nil, nil, err
+			return fmt.Errorf("failed to create initial contract version: %w", err)
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 
 	return createdContract, createdVer, nil
 }
 
 func (s *hrService) AmendContractVersion(ctx context.Context, legalEntityID uuid.UUID, contractID uuid.UUID, newVersion *domain.ContractVersion) (*domain.ContractVersion, error) {
-	contract, err := s.repo.GetContractByID(ctx, legalEntityID, contractID)
-	if err != nil {
-		return nil, err
-	}
-	if contract.Status == domain.ContractTerminated || contract.Status == domain.ContractExpired {
-		return nil, domain.ErrInvalidStatusTransition
-	}
+	var created *domain.ContractVersion
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.db.DBTX(txCtx).QueryRow(txCtx,
+			"SELECT id FROM hr.contracts WHERE id = $1 AND legal_entity_id = $2 FOR UPDATE",
+			contractID, legalEntityID,
+		).Scan(&contractID); err != nil {
+			return domain.ErrContractNotFound
+		}
+		contract, err := s.repo.GetContractByID(txCtx, legalEntityID, contractID)
+		if err != nil {
+			return err
+		}
+		if contract.Status == domain.ContractTerminated || contract.Status == domain.ContractExpired {
+			return domain.ErrInvalidStatusTransition
+		}
 
-	latestVer, err := s.repo.GetLatestContractVersion(ctx, contractID)
-	nextVerNum := int32(1)
-	if err == nil && latestVer != nil {
-		nextVerNum = latestVer.VersionNumber + 1
-	}
-
-	newVersion.ContractID = contractID
-	newVersion.VersionNumber = nextVerNum
-	if newVersion.EffectiveFrom.IsZero() {
-		newVersion.EffectiveFrom = time.Now()
-	}
-	newVersion.GrossSalary = domain.CalculateGrossSalary(
-		newVersion.BasicSalary,
-		newVersion.HousingAllowance,
-		newVersion.TransportAllowance,
-		newVersion.OtherAllowances,
-	)
-
-	return s.repo.CreateContractVersion(ctx, newVersion)
+		latestVer, err := s.repo.GetLatestContractVersion(txCtx, contractID)
+		nextVerNum := int32(1)
+		if err == nil && latestVer != nil {
+			nextVerNum = latestVer.VersionNumber + 1
+		}
+		newVersion.ContractID = contractID
+		newVersion.VersionNumber = nextVerNum
+		if newVersion.EffectiveFrom.IsZero() {
+			newVersion.EffectiveFrom = time.Now()
+		}
+		newVersion.GrossSalary = domain.CalculateGrossSalary(
+			newVersion.BasicSalary,
+			newVersion.HousingAllowance,
+			newVersion.TransportAllowance,
+			newVersion.OtherAllowances,
+		)
+		created, err = s.repo.CreateContractVersion(txCtx, newVersion)
+		return err
+	})
+	return created, err
 }
 
 func (s *hrService) ActivateContract(ctx context.Context, legalEntityID, contractID uuid.UUID) (*domain.Contract, error) {
@@ -288,7 +315,10 @@ func (s *hrService) GetEmployeeContract(ctx context.Context, legalEntityID, empl
 	if err != nil {
 		return nil, nil, err
 	}
-	version, _ := s.repo.GetLatestContractVersion(ctx, contract.ID)
+	version, err := s.repo.GetLatestContractVersion(ctx, contract.ID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get latest contract version: %w", err)
+	}
 	return contract, version, nil
 }
 

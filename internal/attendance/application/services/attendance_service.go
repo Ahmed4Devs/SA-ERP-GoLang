@@ -8,6 +8,7 @@ import (
 	"erp/internal/attendance/domain"
 	"erp/internal/attendance/ports"
 	"erp/internal/platform/database"
+	"erp/internal/platform/transaction"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -16,12 +17,14 @@ import (
 type attendanceService struct {
 	repo ports.AttendanceRepository
 	db   *database.DB
+	tx   transaction.Manager
 }
 
 func NewAttendanceService(repo ports.AttendanceRepository, db *database.DB) ports.AttendanceService {
 	return &attendanceService{
 		repo: repo,
 		db:   db,
+		tx:   transaction.NewManager(db.Pool),
 	}
 }
 
@@ -256,19 +259,27 @@ func (s *attendanceService) SubmitAdjustment(ctx context.Context, adj *domain.At
 }
 
 func (s *attendanceService) ApproveAdjustment(ctx context.Context, id uuid.UUID, approverUserID uuid.UUID, notes string) (*domain.AttendanceAdjustment, error) {
-	adj, err := s.repo.GetAttendanceAdjustmentByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
+	var updatedAdj *domain.AttendanceAdjustment
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.db.DBTX(txCtx).QueryRow(txCtx, "SELECT id FROM attendance.adjustments WHERE id = $1 FOR UPDATE", id).Scan(&id); err != nil {
+			return fmt.Errorf("failed to lock attendance adjustment: %w", err)
+		}
+		adj, err := s.repo.GetAttendanceAdjustmentByID(txCtx, id)
+		if err != nil {
+			return err
+		}
+		if adj.Status != domain.StatusPending {
+			return fmt.Errorf("attendance adjustment has already been processed")
+		}
+		record, err := s.repo.GetAttendanceRecordByID(txCtx, adj.AttendanceRecordID)
+		if err != nil {
+			return fmt.Errorf("failed to load attendance record: %w", err)
+		}
+		updatedAdj, err = s.repo.UpdateAdjustmentStatus(txCtx, id, domain.StatusApproved, approverUserID, notes)
+		if err != nil {
+			return err
+		}
 
-	updatedAdj, err := s.repo.UpdateAdjustmentStatus(ctx, id, domain.StatusApproved, approverUserID, notes)
-	if err != nil {
-		return nil, err
-	}
-
-	// Update attendance record with adjusted times
-	record, err := s.repo.GetAttendanceRecordByID(ctx, adj.AttendanceRecordID)
-	if err == nil && record != nil {
 		record.ClockIn = &adj.AdjustedClockIn
 		record.ClockOut = &adj.AdjustedClockOut
 		actualHours, earlyMin, otMin := domain.CalculateHoursAndEarlyDeparture(
@@ -278,8 +289,10 @@ func (s *attendanceService) ApproveAdjustment(ctx context.Context, id uuid.UUID,
 		record.EarlyDepartureMinutes = earlyMin
 		record.OvertimeMinutes = otMin
 		record.Status = domain.StatusPresent
-		_, _ = s.repo.UpdateAttendanceRecordClockOut(ctx, record)
-	}
-
-	return updatedAdj, nil
+		if _, err := s.repo.UpdateAttendanceRecordClockOut(txCtx, record); err != nil {
+			return fmt.Errorf("failed to apply approved attendance adjustment: %w", err)
+		}
+		return nil
+	})
+	return updatedAdj, err
 }

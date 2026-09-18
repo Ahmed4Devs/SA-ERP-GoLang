@@ -9,6 +9,7 @@ import (
 	"erp/internal/leave/ports"
 	"erp/internal/platform/database"
 	"erp/internal/platform/identifiers"
+	"erp/internal/platform/transaction"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -17,13 +18,23 @@ import (
 type leaveService struct {
 	repo ports.LeaveRepository
 	db   *database.DB
+	tx   transaction.Manager
 }
 
 func NewLeaveService(repo ports.LeaveRepository, db *database.DB) ports.LeaveService {
 	return &leaveService{
 		repo: repo,
 		db:   db,
+		tx:   transaction.NewManager(db.Pool),
 	}
+}
+
+func (s *leaveService) lockBalance(ctx context.Context, employeeID, leaveTypeID uuid.UUID, fiscalYear int32) error {
+	key := fmt.Sprintf("leave-balance:%s:%s:%d", employeeID, leaveTypeID, fiscalYear)
+	if _, err := s.db.DBTX(ctx).Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", key); err != nil {
+		return fmt.Errorf("failed to lock leave balance: %w", err)
+	}
+	return nil
 }
 
 // ============================================================================
@@ -90,43 +101,37 @@ func (s *leaveService) AccrueLeave(
 		fiscalYear = int32(time.Now().Year())
 	}
 
-	balance, err := s.repo.GetEmployeeLeaveBalance(ctx, employeeID, leaveTypeID, fiscalYear)
-	if err != nil {
-		return nil, err
-	}
-	if balance == nil {
-		balance = &domain.EmployeeLeaveBalance{
-			EmployeeID:     employeeID,
-			LeaveTypeID:    leaveTypeID,
-			FiscalYear:     fiscalYear,
-			AllocatedDays:  decimal.Zero,
-			AccruedDays:    days,
-			TakenDays:      decimal.Zero,
-			PendingDays:    decimal.Zero,
-			CarryoverDays:  decimal.Zero,
-			ClosingBalance: days,
+	var updated *domain.EmployeeLeaveBalance
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.lockBalance(txCtx, employeeID, leaveTypeID, fiscalYear); err != nil {
+			return err
 		}
-	} else {
-		balance.AccruedDays = balance.AccruedDays.Add(days)
-		balance.ClosingBalance = balance.ClosingBalance.Add(days)
-	}
-
-	updated, err := s.repo.UpsertEmployeeLeaveBalance(ctx, balance)
-	if err != nil {
-		return nil, err
-	}
-
-	// Record transaction ledger entry
-	_, _ = s.repo.CreateLeaveTransaction(ctx, &domain.LeaveTransaction{
-		EmployeeID:      employeeID,
-		LeaveTypeID:     leaveTypeID,
-		FiscalYear:      fiscalYear,
-		TransactionType: domain.TxAccrual,
-		Days:            days,
-		Notes:           &reason,
+		balance, err := s.repo.GetEmployeeLeaveBalance(txCtx, employeeID, leaveTypeID, fiscalYear)
+		if err != nil {
+			return err
+		}
+		if balance == nil {
+			balance = &domain.EmployeeLeaveBalance{
+				EmployeeID: employeeID, LeaveTypeID: leaveTypeID, FiscalYear: fiscalYear,
+				AccruedDays: days, ClosingBalance: days,
+			}
+		} else {
+			balance.AccruedDays = balance.AccruedDays.Add(days)
+			balance.ClosingBalance = balance.ClosingBalance.Add(days)
+		}
+		updated, err = s.repo.UpsertEmployeeLeaveBalance(txCtx, balance)
+		if err != nil {
+			return err
+		}
+		if _, err := s.repo.CreateLeaveTransaction(txCtx, &domain.LeaveTransaction{
+			EmployeeID: employeeID, LeaveTypeID: leaveTypeID, FiscalYear: fiscalYear,
+			TransactionType: domain.TxAccrual, Days: days, Notes: &reason,
+		}); err != nil {
+			return fmt.Errorf("failed to record leave accrual transaction: %w", err)
+		}
+		return nil
 	})
-
-	return updated, nil
+	return updated, err
 }
 
 // ============================================================================
@@ -160,91 +165,116 @@ func (s *leaveService) SubmitLeaveRequest(ctx context.Context, req *domain.Leave
 		req.RequestNumber = identifiers.NewDocumentNumber("LR", time.Now())
 	}
 
-	// 2. Validate leave balance
-	fiscalYear := int32(req.StartDate.Year())
-	balance, err := s.repo.GetEmployeeLeaveBalance(ctx, req.EmployeeID, req.LeaveTypeID, fiscalYear)
-	if err != nil {
-		return nil, err
-	}
-
-	// For annual/paid leave, check sufficiency
-	lt, _ := s.repo.GetLeaveTypeByID(ctx, req.LegalEntityID, req.LeaveTypeID)
-	if lt != nil && lt.Code == "ANNUAL" {
-		if balance == nil || balance.ClosingBalance.LessThan(totalDays) {
-			return nil, domain.ErrInsufficientBalance
-		}
-
-		// Reserve pending days
-		balance.PendingDays = balance.PendingDays.Add(totalDays)
-		balance.ClosingBalance = balance.ClosingBalance.Sub(totalDays)
-		_, err = s.repo.UpsertEmployeeLeaveBalance(ctx, balance)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	req.Status = domain.RequestPending
-	return s.repo.CreateLeaveRequest(ctx, req)
+	var created *domain.LeaveRequest
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		fiscalYear := int32(req.StartDate.Year())
+		lt, err := s.repo.GetLeaveTypeByID(txCtx, req.LegalEntityID, req.LeaveTypeID)
+		if err != nil {
+			return err
+		}
+		if lt.Code == "ANNUAL" {
+			if err := s.lockBalance(txCtx, req.EmployeeID, req.LeaveTypeID, fiscalYear); err != nil {
+				return err
+			}
+			balance, err := s.repo.GetEmployeeLeaveBalance(txCtx, req.EmployeeID, req.LeaveTypeID, fiscalYear)
+			if err != nil {
+				return err
+			}
+			if balance == nil || balance.ClosingBalance.LessThan(totalDays) {
+				return domain.ErrInsufficientBalance
+			}
+			balance.PendingDays = balance.PendingDays.Add(totalDays)
+			balance.ClosingBalance = balance.ClosingBalance.Sub(totalDays)
+			if _, err := s.repo.UpsertEmployeeLeaveBalance(txCtx, balance); err != nil {
+				return err
+			}
+		}
+		created, err = s.repo.CreateLeaveRequest(txCtx, req)
+		return err
+	})
+	return created, err
 }
 
 func (s *leaveService) ApproveLeaveRequest(ctx context.Context, legalEntityID, id uuid.UUID, approverUserID uuid.UUID, notes string) (*domain.LeaveRequest, error) {
-	req, err := s.repo.GetLeaveRequestByID(ctx, legalEntityID, id)
-	if err != nil {
-		return nil, err
-	}
-	if req.Status != domain.RequestPending {
-		return nil, domain.ErrAlreadyProcessed
-	}
-
-	fiscalYear := int32(req.StartDate.Year())
-	balance, _ := s.repo.GetEmployeeLeaveBalance(ctx, req.EmployeeID, req.LeaveTypeID, fiscalYear)
-	if balance != nil {
-		// Commit deduction: pending -> taken
-		balance.PendingDays = balance.PendingDays.Sub(req.TotalDays)
-		if balance.PendingDays.IsNegative() {
-			balance.PendingDays = decimal.Zero
+	var approved *domain.LeaveRequest
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.db.DBTX(txCtx).QueryRow(txCtx, "SELECT id FROM leave.requests WHERE id = $1 AND legal_entity_id = $2 FOR UPDATE", id, legalEntityID).Scan(&id); err != nil {
+			return domain.ErrLeaveRequestNotFound
 		}
-		balance.TakenDays = balance.TakenDays.Add(req.TotalDays)
-		_, _ = s.repo.UpsertEmployeeLeaveBalance(ctx, balance)
-
-		// Record immutable transaction
-		desc := fmt.Sprintf("Approved Leave Request %s (%s to %s)", req.RequestNumber, req.StartDate.Format("2006-01-02"), req.EndDate.Format("2006-01-02"))
-		_, _ = s.repo.CreateLeaveTransaction(ctx, &domain.LeaveTransaction{
-			EmployeeID:      req.EmployeeID,
-			LeaveTypeID:     req.LeaveTypeID,
-			FiscalYear:      fiscalYear,
-			TransactionType: domain.TxUsage,
-			Days:            req.TotalDays,
-			ReferenceID:     &req.ID,
-			Notes:           &desc,
-		})
-	}
-
-	return s.repo.UpdateLeaveRequestStatus(ctx, legalEntityID, id, domain.RequestApproved, approverUserID, notes)
+		req, err := s.repo.GetLeaveRequestByID(txCtx, legalEntityID, id)
+		if err != nil {
+			return err
+		}
+		if req.Status != domain.RequestPending {
+			return domain.ErrAlreadyProcessed
+		}
+		fiscalYear := int32(req.StartDate.Year())
+		if err := s.lockBalance(txCtx, req.EmployeeID, req.LeaveTypeID, fiscalYear); err != nil {
+			return err
+		}
+		balance, err := s.repo.GetEmployeeLeaveBalance(txCtx, req.EmployeeID, req.LeaveTypeID, fiscalYear)
+		if err != nil {
+			return err
+		}
+		if balance != nil {
+			balance.PendingDays = balance.PendingDays.Sub(req.TotalDays)
+			if balance.PendingDays.IsNegative() {
+				balance.PendingDays = decimal.Zero
+			}
+			balance.TakenDays = balance.TakenDays.Add(req.TotalDays)
+			if _, err := s.repo.UpsertEmployeeLeaveBalance(txCtx, balance); err != nil {
+				return err
+			}
+			desc := fmt.Sprintf("Approved Leave Request %s (%s to %s)", req.RequestNumber, req.StartDate.Format("2006-01-02"), req.EndDate.Format("2006-01-02"))
+			if _, err := s.repo.CreateLeaveTransaction(txCtx, &domain.LeaveTransaction{
+				EmployeeID: req.EmployeeID, LeaveTypeID: req.LeaveTypeID, FiscalYear: fiscalYear,
+				TransactionType: domain.TxUsage, Days: req.TotalDays, ReferenceID: &req.ID, Notes: &desc,
+			}); err != nil {
+				return fmt.Errorf("failed to record approved leave transaction: %w", err)
+			}
+		}
+		approved, err = s.repo.UpdateLeaveRequestStatus(txCtx, legalEntityID, id, domain.RequestApproved, approverUserID, notes)
+		return err
+	})
+	return approved, err
 }
 
 func (s *leaveService) RejectLeaveRequest(ctx context.Context, legalEntityID, id uuid.UUID, approverUserID uuid.UUID, notes string) (*domain.LeaveRequest, error) {
-	req, err := s.repo.GetLeaveRequestByID(ctx, legalEntityID, id)
-	if err != nil {
-		return nil, err
-	}
-	if req.Status != domain.RequestPending {
-		return nil, domain.ErrAlreadyProcessed
-	}
-
-	// Revert pending reservation
-	fiscalYear := int32(req.StartDate.Year())
-	balance, _ := s.repo.GetEmployeeLeaveBalance(ctx, req.EmployeeID, req.LeaveTypeID, fiscalYear)
-	if balance != nil {
-		balance.PendingDays = balance.PendingDays.Sub(req.TotalDays)
-		if balance.PendingDays.IsNegative() {
-			balance.PendingDays = decimal.Zero
+	var rejected *domain.LeaveRequest
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.db.DBTX(txCtx).QueryRow(txCtx, "SELECT id FROM leave.requests WHERE id = $1 AND legal_entity_id = $2 FOR UPDATE", id, legalEntityID).Scan(&id); err != nil {
+			return domain.ErrLeaveRequestNotFound
 		}
-		balance.ClosingBalance = balance.ClosingBalance.Add(req.TotalDays)
-		_, _ = s.repo.UpsertEmployeeLeaveBalance(ctx, balance)
-	}
-
-	return s.repo.UpdateLeaveRequestStatus(ctx, legalEntityID, id, domain.RequestRejected, approverUserID, notes)
+		req, err := s.repo.GetLeaveRequestByID(txCtx, legalEntityID, id)
+		if err != nil {
+			return err
+		}
+		if req.Status != domain.RequestPending {
+			return domain.ErrAlreadyProcessed
+		}
+		fiscalYear := int32(req.StartDate.Year())
+		if err := s.lockBalance(txCtx, req.EmployeeID, req.LeaveTypeID, fiscalYear); err != nil {
+			return err
+		}
+		balance, err := s.repo.GetEmployeeLeaveBalance(txCtx, req.EmployeeID, req.LeaveTypeID, fiscalYear)
+		if err != nil {
+			return err
+		}
+		if balance != nil {
+			balance.PendingDays = balance.PendingDays.Sub(req.TotalDays)
+			if balance.PendingDays.IsNegative() {
+				balance.PendingDays = decimal.Zero
+			}
+			balance.ClosingBalance = balance.ClosingBalance.Add(req.TotalDays)
+			if _, err := s.repo.UpsertEmployeeLeaveBalance(txCtx, balance); err != nil {
+				return err
+			}
+		}
+		rejected, err = s.repo.UpdateLeaveRequestStatus(txCtx, legalEntityID, id, domain.RequestRejected, approverUserID, notes)
+		return err
+	})
+	return rejected, err
 }
 
 func (s *leaveService) ListRequests(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.LeaveRequest, error) {

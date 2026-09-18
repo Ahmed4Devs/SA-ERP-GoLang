@@ -365,3 +365,67 @@ func TestLeave_RejectionAndBalanceReversion(t *testing.T) {
 		t.Errorf("expected closing balance restored to 10, got %s", bal.ClosingBalance.String())
 	}
 }
+
+func TestLeave_SubmitRollsBackReservedBalanceWhenRequestFails(t *testing.T) {
+	leaveMod, _, db, leID, empID, _, ctx := setupLeaveTest(t)
+	defer db.Close()
+
+	if err := leaveMod.SeedDefaultLeaveData(ctx, leID); err != nil {
+		t.Fatalf("failed to seed leave data: %v", err)
+	}
+	annual, err := leaveMod.Repo.GetLeaveTypeByCode(ctx, leID, "ANNUAL")
+	if err != nil {
+		t.Fatalf("failed to load annual leave type: %v", err)
+	}
+	year := int32(2027)
+	if _, err := leaveMod.LeaveService.AccrueLeave(ctx, empID, annual.ID, year, decimal.NewFromInt(10), "rollback baseline"); err != nil {
+		t.Fatalf("failed to accrue baseline leave: %v", err)
+	}
+
+	_, err = db.Pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION leave.fail_test_request_insert()
+		RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+			IF NEW.request_number LIKE 'ROLLBACK-LR-%' THEN
+				RAISE EXCEPTION 'forced leave request failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$;
+		DROP TRIGGER IF EXISTS trg_fail_test_request_insert ON leave.requests;
+		CREATE TRIGGER trg_fail_test_request_insert
+		BEFORE INSERT ON leave.requests
+		FOR EACH ROW EXECUTE FUNCTION leave.fail_test_request_insert();
+	`)
+	if err != nil {
+		t.Fatalf("failed to install rollback test trigger: %v", err)
+	}
+	defer func() {
+		_, _ = db.Pool.Exec(ctx, `
+			DROP TRIGGER IF EXISTS trg_fail_test_request_insert ON leave.requests;
+			DROP FUNCTION IF EXISTS leave.fail_test_request_insert();
+		`)
+	}()
+
+	requestNumber := "ROLLBACK-LR-" + uuid.New().String()[:8]
+	_, err = leaveMod.LeaveService.SubmitLeaveRequest(ctx, &domain.LeaveRequest{
+		LegalEntityID: leID,
+		EmployeeID:    empID,
+		LeaveTypeID:   annual.ID,
+		RequestNumber: requestNumber,
+		StartDate:     time.Date(int(year), 5, 9, 0, 0, 0, 0, time.UTC),
+		EndDate:       time.Date(int(year), 5, 10, 0, 0, 0, 0, time.UTC),
+		Reason:        "forced rollback",
+	})
+	if err == nil {
+		t.Fatal("expected forced leave request failure")
+	}
+
+	balance, err := leaveMod.Repo.GetEmployeeLeaveBalance(ctx, empID, annual.ID, year)
+	if err != nil {
+		t.Fatalf("failed to reload leave balance: %v", err)
+	}
+	if !balance.ClosingBalance.Equal(decimal.NewFromInt(10)) || !balance.PendingDays.IsZero() {
+		t.Fatalf("expected leave reservation rollback, closing=%s pending=%s", balance.ClosingBalance, balance.PendingDays)
+	}
+}

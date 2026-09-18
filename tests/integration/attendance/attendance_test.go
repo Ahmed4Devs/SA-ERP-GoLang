@@ -304,3 +304,65 @@ func TestAttendance_SeedDefaultData(t *testing.T) {
 		t.Errorf("expected at least 2 seeded shifts, got %d", len(shifts))
 	}
 }
+
+func TestAttendance_AdjustmentApprovalRollsBackWhenRecordUpdateFails(t *testing.T) {
+	attMod, _, db, leID, empID, adminID, ctx := setupAttendanceTest(t)
+	defer db.Close()
+
+	now := time.Now().AddDate(0, 0, -3)
+	clockIn := time.Date(now.Year(), now.Month(), now.Day(), 8, 0, 0, 0, time.UTC)
+	note := "ROLLBACK-ADJUSTMENT"
+	record, err := attMod.Repo.CreateAttendanceRecord(ctx, &domain.AttendanceRecord{
+		LegalEntityID: leID, EmployeeID: empID, WorkDate: clockIn,
+		ClockIn: &clockIn, CheckInMethod: domain.MethodManual,
+		ExpectedWorkHours: decimal.NewFromInt(8), Status: domain.StatusPresent, Notes: &note,
+	})
+	if err != nil {
+		t.Fatalf("failed to create attendance record: %v", err)
+	}
+	clockOut := clockIn.Add(9 * time.Hour)
+	adjustment, err := attMod.AttendanceService.SubmitAdjustment(ctx, &domain.AttendanceAdjustment{
+		AttendanceRecordID: record.ID, RequestedByEmployeeID: empID,
+		OriginalClockIn: &clockIn, AdjustedClockIn: clockIn, AdjustedClockOut: clockOut,
+		Reason: "forced rollback",
+	})
+	if err != nil {
+		t.Fatalf("failed to create attendance adjustment: %v", err)
+	}
+
+	_, err = db.Pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION attendance.fail_test_record_update()
+		RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+			IF OLD.notes = 'ROLLBACK-ADJUSTMENT' THEN
+				RAISE EXCEPTION 'forced attendance record failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$;
+		DROP TRIGGER IF EXISTS trg_fail_test_record_update ON attendance.records;
+		CREATE TRIGGER trg_fail_test_record_update
+		BEFORE UPDATE ON attendance.records
+		FOR EACH ROW EXECUTE FUNCTION attendance.fail_test_record_update();
+	`)
+	if err != nil {
+		t.Fatalf("failed to install rollback test trigger: %v", err)
+	}
+	defer func() {
+		_, _ = db.Pool.Exec(ctx, `
+			DROP TRIGGER IF EXISTS trg_fail_test_record_update ON attendance.records;
+			DROP FUNCTION IF EXISTS attendance.fail_test_record_update();
+		`)
+	}()
+
+	if _, err := attMod.AttendanceService.ApproveAdjustment(ctx, adjustment.ID, adminID, "forced rollback"); err == nil {
+		t.Fatal("expected forced attendance record update failure")
+	}
+	reloaded, err := attMod.Repo.GetAttendanceAdjustmentByID(ctx, adjustment.ID)
+	if err != nil {
+		t.Fatalf("failed to reload attendance adjustment: %v", err)
+	}
+	if reloaded.Status != domain.StatusPending {
+		t.Fatalf("expected adjustment status rollback to PENDING, got %s", reloaded.Status)
+	}
+}

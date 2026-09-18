@@ -15,14 +15,14 @@ import (
 
 type leaveRepository struct {
 	db *database.DB
-	q  *sqlc.Queries
 }
 
 func NewLeaveRepository(db *database.DB) ports.LeaveRepository {
-	return &leaveRepository{
-		db: db,
-		q:  sqlc.New(db.Pool),
-	}
+	return &leaveRepository{db: db}
+}
+
+func (r *leaveRepository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 // ============================================================================
@@ -33,7 +33,7 @@ func (r *leaveRepository) CreateLeaveType(ctx context.Context, lt *domain.LeaveT
 	if lt.ID == uuid.Nil {
 		lt.ID = uuid.New()
 	}
-	row, err := r.q.CreateLeaveType(ctx, sqlc.CreateLeaveTypeParams{
+	row, err := r.queries(ctx).CreateLeaveType(ctx, sqlc.CreateLeaveTypeParams{
 		ID:                 toPgUUID(lt.ID),
 		LegalEntityID:      toPgUUID(lt.LegalEntityID),
 		Code:               lt.Code,
@@ -52,7 +52,7 @@ func (r *leaveRepository) CreateLeaveType(ctx context.Context, lt *domain.LeaveT
 }
 
 func (r *leaveRepository) GetLeaveTypeByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.LeaveType, error) {
-	row, err := r.q.GetLeaveTypeByID(ctx, sqlc.GetLeaveTypeByIDParams{
+	row, err := r.queries(ctx).GetLeaveTypeByID(ctx, sqlc.GetLeaveTypeByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -66,7 +66,7 @@ func (r *leaveRepository) GetLeaveTypeByID(ctx context.Context, legalEntityID, i
 }
 
 func (r *leaveRepository) GetLeaveTypeByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.LeaveType, error) {
-	row, err := r.q.GetLeaveTypeByCode(ctx, sqlc.GetLeaveTypeByCodeParams{
+	row, err := r.queries(ctx).GetLeaveTypeByCode(ctx, sqlc.GetLeaveTypeByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Code:          code,
 	})
@@ -80,7 +80,7 @@ func (r *leaveRepository) GetLeaveTypeByCode(ctx context.Context, legalEntityID 
 }
 
 func (r *leaveRepository) ListLeaveTypes(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.LeaveType, error) {
-	rows, err := r.q.ListLeaveTypes(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListLeaveTypes(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (r *leaveRepository) CreateLeavePolicy(ctx context.Context, p *domain.Leave
 	if p.ID == uuid.Nil {
 		p.ID = uuid.New()
 	}
-	row, err := r.q.CreateLeavePolicy(ctx, sqlc.CreateLeavePolicyParams{
+	row, err := r.queries(ctx).CreateLeavePolicy(ctx, sqlc.CreateLeavePolicyParams{
 		ID:                     toPgUUID(p.ID),
 		LegalEntityID:          toPgUUID(p.LegalEntityID),
 		LeaveTypeID:            toPgUUID(p.LeaveTypeID),
@@ -118,7 +118,7 @@ func (r *leaveRepository) CreateLeavePolicy(ctx context.Context, p *domain.Leave
 }
 
 func (r *leaveRepository) GetLeavePolicyByType(ctx context.Context, legalEntityID, leaveTypeID uuid.UUID) (*domain.LeavePolicy, error) {
-	row, err := r.q.GetLeavePolicyByType(ctx, sqlc.GetLeavePolicyByTypeParams{
+	row, err := r.queries(ctx).GetLeavePolicyByType(ctx, sqlc.GetLeavePolicyByTypeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		LeaveTypeID:   toPgUUID(leaveTypeID),
 	})
@@ -132,7 +132,7 @@ func (r *leaveRepository) GetLeavePolicyByType(ctx context.Context, legalEntityI
 }
 
 func (r *leaveRepository) ListLeavePolicies(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.LeavePolicy, error) {
-	rows, err := r.q.ListLeavePolicies(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListLeavePolicies(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (r *leaveRepository) ListLeavePolicies(ctx context.Context, legalEntityID u
 // ============================================================================
 
 func (r *leaveRepository) GetEmployeeLeaveBalance(ctx context.Context, employeeID, leaveTypeID uuid.UUID, fiscalYear int32) (*domain.EmployeeLeaveBalance, error) {
-	row, err := r.q.GetEmployeeLeaveBalance(ctx, sqlc.GetEmployeeLeaveBalanceParams{
+	row, err := r.queries(ctx).GetEmployeeLeaveBalance(ctx, sqlc.GetEmployeeLeaveBalanceParams{
 		EmployeeID:  toPgUUID(employeeID),
 		LeaveTypeID: toPgUUID(leaveTypeID),
 		FiscalYear:  fiscalYear,
@@ -186,7 +186,7 @@ func (r *leaveRepository) UpsertEmployeeLeaveBalance(ctx context.Context, b *dom
 	if b.ID == uuid.Nil {
 		b.ID = uuid.New()
 	}
-	row, err := r.q.UpsertEmployeeLeaveBalance(ctx, sqlc.UpsertEmployeeLeaveBalanceParams{
+	row, err := r.queries(ctx).UpsertEmployeeLeaveBalance(ctx, sqlc.UpsertEmployeeLeaveBalanceParams{
 		ID:             toPgUUID(b.ID),
 		EmployeeID:     toPgUUID(b.EmployeeID),
 		LeaveTypeID:    toPgUUID(b.LeaveTypeID),
@@ -205,7 +205,7 @@ func (r *leaveRepository) UpsertEmployeeLeaveBalance(ctx context.Context, b *dom
 }
 
 func (r *leaveRepository) ListEmployeeLeaveBalances(ctx context.Context, employeeID uuid.UUID, fiscalYear int32) ([]*domain.EmployeeLeaveBalance, error) {
-	rows, err := r.q.ListEmployeeLeaveBalances(ctx, sqlc.ListEmployeeLeaveBalancesParams{
+	rows, err := r.queries(ctx).ListEmployeeLeaveBalances(ctx, sqlc.ListEmployeeLeaveBalancesParams{
 		EmployeeID: toPgUUID(employeeID),
 		FiscalYear: fiscalYear,
 	})
@@ -246,7 +246,7 @@ func (r *leaveRepository) CreateLeaveTransaction(ctx context.Context, tx *domain
 	if tx.ID == uuid.Nil {
 		tx.ID = uuid.New()
 	}
-	row, err := r.q.CreateLeaveTransaction(ctx, sqlc.CreateLeaveTransactionParams{
+	row, err := r.queries(ctx).CreateLeaveTransaction(ctx, sqlc.CreateLeaveTransactionParams{
 		ID:              toPgUUID(tx.ID),
 		EmployeeID:      toPgUUID(tx.EmployeeID),
 		LeaveTypeID:     toPgUUID(tx.LeaveTypeID),
@@ -263,7 +263,7 @@ func (r *leaveRepository) CreateLeaveTransaction(ctx context.Context, tx *domain
 }
 
 func (r *leaveRepository) ListLeaveTransactions(ctx context.Context, employeeID, leaveTypeID uuid.UUID, fiscalYear int32) ([]*domain.LeaveTransaction, error) {
-	rows, err := r.q.ListLeaveTransactions(ctx, sqlc.ListLeaveTransactionsParams{
+	rows, err := r.queries(ctx).ListLeaveTransactions(ctx, sqlc.ListLeaveTransactionsParams{
 		EmployeeID:  toPgUUID(employeeID),
 		LeaveTypeID: toPgUUID(leaveTypeID),
 		FiscalYear:  fiscalYear,
@@ -286,7 +286,7 @@ func (r *leaveRepository) CreateLeaveRequest(ctx context.Context, req *domain.Le
 	if req.ID == uuid.Nil {
 		req.ID = uuid.New()
 	}
-	row, err := r.q.CreateLeaveRequest(ctx, sqlc.CreateLeaveRequestParams{
+	row, err := r.queries(ctx).CreateLeaveRequest(ctx, sqlc.CreateLeaveRequestParams{
 		ID:                    toPgUUID(req.ID),
 		LegalEntityID:         toPgUUID(req.LegalEntityID),
 		EmployeeID:            toPgUUID(req.EmployeeID),
@@ -308,7 +308,7 @@ func (r *leaveRepository) CreateLeaveRequest(ctx context.Context, req *domain.Le
 }
 
 func (r *leaveRepository) GetLeaveRequestByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.LeaveRequest, error) {
-	row, err := r.q.GetLeaveRequestByID(ctx, sqlc.GetLeaveRequestByIDParams{
+	row, err := r.queries(ctx).GetLeaveRequestByID(ctx, sqlc.GetLeaveRequestByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -322,7 +322,7 @@ func (r *leaveRepository) GetLeaveRequestByID(ctx context.Context, legalEntityID
 }
 
 func (r *leaveRepository) GetLeaveRequestByNumber(ctx context.Context, legalEntityID uuid.UUID, requestNumber string) (*domain.LeaveRequest, error) {
-	row, err := r.q.GetLeaveRequestByNumber(ctx, sqlc.GetLeaveRequestByNumberParams{
+	row, err := r.queries(ctx).GetLeaveRequestByNumber(ctx, sqlc.GetLeaveRequestByNumberParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		RequestNumber: requestNumber,
 	})
@@ -336,7 +336,7 @@ func (r *leaveRepository) GetLeaveRequestByNumber(ctx context.Context, legalEnti
 }
 
 func (r *leaveRepository) ListLeaveRequests(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.LeaveRequest, error) {
-	rows, err := r.q.ListLeaveRequests(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListLeaveRequests(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -381,7 +381,7 @@ func (r *leaveRepository) ListLeaveRequests(ctx context.Context, legalEntityID u
 }
 
 func (r *leaveRepository) ListEmployeeLeaveRequests(ctx context.Context, employeeID uuid.UUID) ([]*domain.LeaveRequest, error) {
-	rows, err := r.q.ListEmployeeLeaveRequests(ctx, toPgUUID(employeeID))
+	rows, err := r.queries(ctx).ListEmployeeLeaveRequests(ctx, toPgUUID(employeeID))
 	if err != nil {
 		return nil, err
 	}
@@ -419,7 +419,7 @@ func (r *leaveRepository) ListEmployeeLeaveRequests(ctx context.Context, employe
 }
 
 func (r *leaveRepository) UpdateLeaveRequestStatus(ctx context.Context, legalEntityID, id uuid.UUID, status domain.LeaveStatusCode, reviewedBy uuid.UUID, notes string) (*domain.LeaveRequest, error) {
-	row, err := r.q.UpdateLeaveRequestStatus(ctx, sqlc.UpdateLeaveRequestStatusParams{
+	row, err := r.queries(ctx).UpdateLeaveRequestStatus(ctx, sqlc.UpdateLeaveRequestStatusParams{
 		ID:               toPgUUID(id),
 		LegalEntityID:    toPgUUID(legalEntityID),
 		Status:           string(status),
