@@ -476,3 +476,291 @@ func TestProducts_ItemTaxProfile(t *testing.T) {
 		t.Fatalf("expected tax code %s, got %s", taxCode.Code, fetched.TaxCode)
 	}
 }
+
+func TestProducts_ItemCreationRollsBackWhenRootSKUFails(t *testing.T) {
+	prodMod, _, db, leID, ctx := setupProductTest(t)
+	uoms, err := prodMod.ProductService.ListUOMs(ctx)
+	if err != nil || len(uoms) == 0 {
+		t.Fatalf("failed to load UOMs: %v", err)
+	}
+	code := "ITEM-RB-SKU-" + strings.ToUpper(uuid.NewString()[:6])
+
+	_, err = db.Pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION products.fail_test_root_sku()
+		RETURNS trigger AS $$
+		BEGIN
+			RAISE EXCEPTION 'forced root SKU failure';
+		END;
+		$$ LANGUAGE plpgsql;
+		DROP TRIGGER IF EXISTS trg_fail_test_root_sku ON products.skus;
+		CREATE TRIGGER trg_fail_test_root_sku
+		BEFORE INSERT ON products.skus
+		FOR EACH ROW EXECUTE FUNCTION products.fail_test_root_sku();
+	`)
+	if err != nil {
+		t.Fatalf("failed to install rollback test trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.Pool.Exec(context.Background(), `
+			DROP TRIGGER IF EXISTS trg_fail_test_root_sku ON products.skus;
+			DROP FUNCTION IF EXISTS products.fail_test_root_sku();
+		`)
+	})
+
+	_, err = prodMod.ProductService.CreateItem(ctx, ports.CreateItemRequest{
+		LegalEntityID: leID,
+		Code:          code,
+		NameEn:        "Rollback root SKU item",
+		NameAr:        "صنف اختبار تراجع الرمز",
+		ItemType:      domain.ItemTypeStock,
+		TrackingType:  domain.TrackingTypeNone,
+		BaseUOMID:     uoms[0].ID,
+		CostPrice:     decimal.NewFromInt(10),
+		ListPrice:     decimal.NewFromInt(20),
+	})
+	if err == nil {
+		t.Fatal("expected forced root SKU failure")
+	}
+
+	var items, itemUOMs int
+	if err := db.Pool.QueryRow(ctx,
+		"SELECT count(*) FROM products.items WHERE legal_entity_id = $1 AND code = $2", leID, code,
+	).Scan(&items); err != nil {
+		t.Fatalf("failed to verify item rollback: %v", err)
+	}
+	if err := db.Pool.QueryRow(ctx, `
+		SELECT count(*)
+		FROM products.item_uoms iu
+		JOIN products.items i ON i.id = iu.item_id
+		WHERE i.legal_entity_id = $1 AND i.code = $2`, leID, code,
+	).Scan(&itemUOMs); err != nil {
+		t.Fatalf("failed to verify item UOM rollback: %v", err)
+	}
+	if items != 0 || itemUOMs != 0 {
+		t.Fatalf("expected item and UOM rollback, got items=%d item_uoms=%d", items, itemUOMs)
+	}
+}
+
+func TestProducts_ItemCreationRollsBackWhenBarcodeFails(t *testing.T) {
+	prodMod, _, db, leID, ctx := setupProductTest(t)
+	uoms, _ := prodMod.ProductService.ListUOMs(ctx)
+	code := "ITEM-RB-BC-" + strings.ToUpper(uuid.NewString()[:6])
+	barcode := "ROLLBACK-" + uuid.NewString()
+
+	_, err := db.Pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION products.fail_test_default_barcode()
+		RETURNS trigger AS $$
+		BEGIN
+			RAISE EXCEPTION 'forced barcode failure';
+		END;
+		$$ LANGUAGE plpgsql;
+		DROP TRIGGER IF EXISTS trg_fail_test_default_barcode ON products.barcodes;
+		CREATE TRIGGER trg_fail_test_default_barcode
+		BEFORE INSERT ON products.barcodes
+		FOR EACH ROW EXECUTE FUNCTION products.fail_test_default_barcode();
+	`)
+	if err != nil {
+		t.Fatalf("failed to install rollback test trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.Pool.Exec(context.Background(), `
+			DROP TRIGGER IF EXISTS trg_fail_test_default_barcode ON products.barcodes;
+			DROP FUNCTION IF EXISTS products.fail_test_default_barcode();
+		`)
+	})
+
+	_, err = prodMod.ProductService.CreateItem(ctx, ports.CreateItemRequest{
+		LegalEntityID:  leID,
+		Code:           code,
+		NameEn:         "Rollback barcode item",
+		NameAr:         "صنف اختبار تراجع الباركود",
+		ItemType:       domain.ItemTypeStock,
+		TrackingType:   domain.TrackingTypeNone,
+		BaseUOMID:      uoms[0].ID,
+		CostPrice:      decimal.NewFromInt(10),
+		ListPrice:      decimal.NewFromInt(20),
+		DefaultBarcode: barcode,
+	})
+	if err == nil {
+		t.Fatal("expected forced barcode failure")
+	}
+
+	var items, skus int
+	if err := db.Pool.QueryRow(ctx,
+		"SELECT count(*) FROM products.items WHERE legal_entity_id = $1 AND code = $2", leID, code,
+	).Scan(&items); err != nil {
+		t.Fatalf("failed to verify item rollback: %v", err)
+	}
+	if err := db.Pool.QueryRow(ctx,
+		"SELECT count(*) FROM products.skus WHERE legal_entity_id = $1 AND sku_code = $2", leID, code,
+	).Scan(&skus); err != nil {
+		t.Fatalf("failed to verify SKU rollback: %v", err)
+	}
+	if items != 0 || skus != 0 {
+		t.Fatalf("expected item and SKU rollback, got items=%d skus=%d", items, skus)
+	}
+}
+
+func TestProducts_VariantCreationRollsBackWhenSKUFails(t *testing.T) {
+	prodMod, _, db, leID, ctx := setupProductTest(t)
+	uoms, _ := prodMod.ProductService.ListUOMs(ctx)
+	item, err := prodMod.ProductService.CreateItem(ctx, ports.CreateItemRequest{
+		LegalEntityID: leID,
+		Code:          "ITEM-VAR-RB-" + strings.ToUpper(uuid.NewString()[:6]),
+		NameEn:        "Variant rollback base",
+		NameAr:        "صنف أساس لاختبار التراجع",
+		ItemType:      domain.ItemTypeStock,
+		TrackingType:  domain.TrackingTypeNone,
+		BaseUOMID:     uoms[0].ID,
+		CostPrice:     decimal.NewFromInt(10),
+		ListPrice:     decimal.NewFromInt(20),
+	})
+	if err != nil {
+		t.Fatalf("failed to create base item: %v", err)
+	}
+	variantCode := item.Code + "-RB"
+
+	_, err = db.Pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION products.fail_test_variant_sku()
+		RETURNS trigger AS $$
+		BEGIN
+			IF NEW.variant_id IS NOT NULL THEN
+				RAISE EXCEPTION 'forced variant SKU failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		DROP TRIGGER IF EXISTS trg_fail_test_variant_sku ON products.skus;
+		CREATE TRIGGER trg_fail_test_variant_sku
+		BEFORE INSERT ON products.skus
+		FOR EACH ROW EXECUTE FUNCTION products.fail_test_variant_sku();
+	`)
+	if err != nil {
+		t.Fatalf("failed to install rollback test trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.Pool.Exec(context.Background(), `
+			DROP TRIGGER IF EXISTS trg_fail_test_variant_sku ON products.skus;
+			DROP FUNCTION IF EXISTS products.fail_test_variant_sku();
+		`)
+	})
+
+	_, _, err = prodMod.ProductService.CreateVariantWithSKU(
+		ctx, leID, item.ID, variantCode, "Rollback variant", "متغير اختبار التراجع",
+		map[string]any{"color": "red"}, decimal.NewFromInt(11), decimal.NewFromInt(22),
+	)
+	if err == nil {
+		t.Fatal("expected forced variant SKU failure")
+	}
+	var variants int
+	if err := db.Pool.QueryRow(ctx,
+		"SELECT count(*) FROM products.item_variants WHERE item_id = $1 AND variant_code = $2", item.ID, variantCode,
+	).Scan(&variants); err != nil {
+		t.Fatalf("failed to verify variant rollback: %v", err)
+	}
+	if variants != 0 {
+		t.Fatalf("expected variant rollback, found %d rows", variants)
+	}
+}
+
+func TestProducts_ItemCreationRollsBackWhenTaxProfileFails(t *testing.T) {
+	prodMod, taxMod, db, leID, ctx := setupProductTest(t)
+	uoms, _ := prodMod.ProductService.ListUOMs(ctx)
+	taxCodes, err := taxMod.TaxService.ListTaxCodes(ctx, leID)
+	if err != nil || len(taxCodes) == 0 {
+		t.Fatalf("failed to load tax codes: %v", err)
+	}
+	code := "ITEM-RB-TAX-" + strings.ToUpper(uuid.NewString()[:6])
+
+	_, err = db.Pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION products.fail_test_tax_profile()
+		RETURNS trigger AS $$
+		BEGIN
+			RAISE EXCEPTION 'forced tax profile failure';
+		END;
+		$$ LANGUAGE plpgsql;
+		DROP TRIGGER IF EXISTS trg_fail_test_tax_profile ON products.item_tax_profiles;
+		CREATE TRIGGER trg_fail_test_tax_profile
+		BEFORE INSERT ON products.item_tax_profiles
+		FOR EACH ROW EXECUTE FUNCTION products.fail_test_tax_profile();
+	`)
+	if err != nil {
+		t.Fatalf("failed to install rollback test trigger: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.Pool.Exec(context.Background(), `
+			DROP TRIGGER IF EXISTS trg_fail_test_tax_profile ON products.item_tax_profiles;
+			DROP FUNCTION IF EXISTS products.fail_test_tax_profile();
+		`)
+	})
+
+	_, err = prodMod.ProductService.CreateItem(ctx, ports.CreateItemRequest{
+		LegalEntityID:    leID,
+		Code:             code,
+		NameEn:           "Rollback tax profile item",
+		NameAr:           "صنف اختبار تراجع الضريبة",
+		ItemType:         domain.ItemTypeStock,
+		TrackingType:     domain.TrackingTypeNone,
+		BaseUOMID:        uoms[0].ID,
+		DefaultTaxCodeID: &taxCodes[0].ID,
+		CostPrice:        decimal.NewFromInt(10),
+		ListPrice:        decimal.NewFromInt(20),
+	})
+	if err == nil {
+		t.Fatal("expected forced tax-profile failure")
+	}
+
+	var items, skus int
+	if err := db.Pool.QueryRow(ctx,
+		"SELECT count(*) FROM products.items WHERE legal_entity_id = $1 AND code = $2", leID, code,
+	).Scan(&items); err != nil {
+		t.Fatalf("failed to verify item rollback: %v", err)
+	}
+	if err := db.Pool.QueryRow(ctx,
+		"SELECT count(*) FROM products.skus WHERE legal_entity_id = $1 AND sku_code = $2", leID, code,
+	).Scan(&skus); err != nil {
+		t.Fatalf("failed to verify SKU rollback: %v", err)
+	}
+	if items != 0 || skus != 0 {
+		t.Fatalf("expected item and SKU rollback, got items=%d skus=%d", items, skus)
+	}
+}
+
+func TestProducts_SharedPurchaseAndSalesUOMKeepsBothRoles(t *testing.T) {
+	prodMod, _, _, leID, ctx := setupProductTest(t)
+	uoms, err := prodMod.ProductService.ListUOMs(ctx)
+	if err != nil || len(uoms) < 2 {
+		t.Fatalf("expected at least two UOMs: %v", err)
+	}
+	baseID, sharedID := uoms[0].ID, uoms[1].ID
+	if baseID == sharedID {
+		t.Fatal("expected distinct base and shared UOMs")
+	}
+	item, err := prodMod.ProductService.CreateItem(ctx, ports.CreateItemRequest{
+		LegalEntityID: leID,
+		Code:          "ITEM-UOM-ROLE-" + strings.ToUpper(uuid.NewString()[:6]),
+		NameEn:        "Shared UOM role item",
+		NameAr:        "صنف وحدة بيع وشراء مشتركة",
+		ItemType:      domain.ItemTypeStock,
+		TrackingType:  domain.TrackingTypeNone,
+		BaseUOMID:     baseID,
+		PurchaseUOMID: &sharedID,
+		SalesUOMID:    &sharedID,
+	})
+	if err != nil {
+		t.Fatalf("failed to create item with shared UOM: %v", err)
+	}
+	itemUOMs, err := prodMod.ProductService.ListItemUOMs(ctx, item.ID)
+	if err != nil {
+		t.Fatalf("failed to list item UOMs: %v", err)
+	}
+	for _, itemUOM := range itemUOMs {
+		if itemUOM.UOMID == sharedID {
+			if !itemUOM.IsPurchaseUOM || !itemUOM.IsSalesUOM {
+				t.Fatalf("expected shared UOM to retain both roles: %+v", itemUOM)
+			}
+			return
+		}
+	}
+	t.Fatal("shared purchase/sales UOM was not created")
+}

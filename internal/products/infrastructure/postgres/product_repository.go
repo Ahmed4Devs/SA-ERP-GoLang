@@ -4,32 +4,33 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
+	"erp/internal/platform/database"
 	"erp/internal/platform/database/sqlc"
 	"erp/internal/products/domain"
 	"erp/internal/products/ports"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 )
 
 type productRepository struct {
-	pool    *pgxpool.Pool
-	queries *sqlc.Queries
+	db *database.DB
 }
 
-func NewProductRepository(pool *pgxpool.Pool) ports.ProductRepository {
-	return &productRepository{
-		pool:    pool,
-		queries: sqlc.New(pool),
-	}
+func NewProductRepository(db *database.DB) ports.ProductRepository {
+	return &productRepository{db: db}
+}
+
+func (r *productRepository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 // 1. Units of Measure
 func (r *productRepository) ListUnitsOfMeasure(ctx context.Context) ([]domain.UnitOfMeasure, error) {
-	rows, err := r.queries.ListUnitsOfMeasure(ctx)
+	rows, err := r.queries(ctx).ListUnitsOfMeasure(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +52,7 @@ func (r *productRepository) ListUnitsOfMeasure(ctx context.Context) ([]domain.Un
 }
 
 func (r *productRepository) GetUnitOfMeasureByID(ctx context.Context, id uuid.UUID) (*domain.UnitOfMeasure, error) {
-	row, err := r.queries.GetUnitOfMeasureByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetUnitOfMeasureByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrUOMNotFound
@@ -72,7 +73,7 @@ func (r *productRepository) GetUnitOfMeasureByID(ctx context.Context, id uuid.UU
 }
 
 func (r *productRepository) GetUnitOfMeasureByCode(ctx context.Context, code string) (*domain.UnitOfMeasure, error) {
-	row, err := r.queries.GetUnitOfMeasureByCode(ctx, code)
+	row, err := r.queries(ctx).GetUnitOfMeasureByCode(ctx, code)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrUOMNotFound
@@ -93,7 +94,7 @@ func (r *productRepository) GetUnitOfMeasureByCode(ctx context.Context, code str
 }
 
 func (r *productRepository) CreateUnitOfMeasure(ctx context.Context, uom *domain.UnitOfMeasure) (*domain.UnitOfMeasure, error) {
-	row, err := r.queries.CreateUnitOfMeasure(ctx, sqlc.CreateUnitOfMeasureParams{
+	row, err := r.queries(ctx).CreateUnitOfMeasure(ctx, sqlc.CreateUnitOfMeasureParams{
 		Code:     uom.Code,
 		NameEn:   uom.NameEn,
 		NameAr:   uom.NameAr,
@@ -112,7 +113,7 @@ func (r *productRepository) CreateUnitOfMeasure(ctx context.Context, uom *domain
 
 // 2. UOM Conversions
 func (r *productRepository) ListUOMConversions(ctx context.Context) ([]domain.UOMConversion, error) {
-	rows, err := r.queries.ListUOMConversions(ctx)
+	rows, err := r.queries(ctx).ListUOMConversions(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +138,7 @@ func (r *productRepository) GetUOMConversionRate(ctx context.Context, fromUOMID,
 	if fromUOMID == toUOMID {
 		return decimal.NewFromInt(1), nil
 	}
-	rate, err := r.queries.GetUOMConversionRate(ctx, sqlc.GetUOMConversionRateParams{
+	rate, err := r.queries(ctx).GetUOMConversionRate(ctx, sqlc.GetUOMConversionRateParams{
 		FromUomID: toPgUUID(fromUOMID),
 		ToUomID:   toPgUUID(toUOMID),
 	})
@@ -151,7 +152,7 @@ func (r *productRepository) GetUOMConversionRate(ctx context.Context, fromUOMID,
 }
 
 func (r *productRepository) CreateUOMConversion(ctx context.Context, conv *domain.UOMConversion) (*domain.UOMConversion, error) {
-	row, err := r.queries.CreateUOMConversion(ctx, sqlc.CreateUOMConversionParams{
+	row, err := r.queries(ctx).CreateUOMConversion(ctx, sqlc.CreateUOMConversionParams{
 		FromUomID:      toPgUUID(conv.FromUOMID),
 		ToUomID:        toPgUUID(conv.ToUOMID),
 		ConversionRate: toPgNumeric(conv.ConversionRate),
@@ -166,7 +167,7 @@ func (r *productRepository) CreateUOMConversion(ctx context.Context, conv *domai
 
 // 3. Categories
 func (r *productRepository) ListCategories(ctx context.Context, legalEntityID uuid.UUID) ([]domain.Category, error) {
-	rows, err := r.queries.ListCategoriesByEntity(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListCategoriesByEntity(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +192,7 @@ func (r *productRepository) ListCategories(ctx context.Context, legalEntityID uu
 }
 
 func (r *productRepository) GetCategoryByID(ctx context.Context, id uuid.UUID) (*domain.Category, error) {
-	row, err := r.queries.GetCategoryByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetCategoryByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrCategoryNotFound
@@ -213,7 +214,7 @@ func (r *productRepository) GetCategoryByID(ctx context.Context, id uuid.UUID) (
 }
 
 func (r *productRepository) GetCategoryByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.Category, error) {
-	row, err := r.queries.GetCategoryByCode(ctx, sqlc.GetCategoryByCodeParams{
+	row, err := r.queries(ctx).GetCategoryByCode(ctx, sqlc.GetCategoryByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Code:          code,
 	})
@@ -238,7 +239,7 @@ func (r *productRepository) GetCategoryByCode(ctx context.Context, legalEntityID
 }
 
 func (r *productRepository) CreateCategory(ctx context.Context, cat *domain.Category) (*domain.Category, error) {
-	row, err := r.queries.CreateCategory(ctx, sqlc.CreateCategoryParams{
+	row, err := r.queries(ctx).CreateCategory(ctx, sqlc.CreateCategoryParams{
 		LegalEntityID: toPgUUID(cat.LegalEntityID),
 		ParentID:      toPgUUIDPtr(cat.ParentID),
 		Code:          cat.Code,
@@ -257,7 +258,7 @@ func (r *productRepository) CreateCategory(ctx context.Context, cat *domain.Cate
 }
 
 func (r *productRepository) UpdateCategory(ctx context.Context, cat *domain.Category) (*domain.Category, error) {
-	row, err := r.queries.UpdateCategory(ctx, sqlc.UpdateCategoryParams{
+	row, err := r.queries(ctx).UpdateCategory(ctx, sqlc.UpdateCategoryParams{
 		ID:          toPgUUID(cat.ID),
 		ParentID:    toPgUUIDPtr(cat.ParentID),
 		NameEn:      cat.NameEn,
@@ -280,7 +281,7 @@ func (r *productRepository) ListItems(ctx context.Context, legalEntityID uuid.UU
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := r.queries.ListItemsByEntity(ctx, sqlc.ListItemsByEntityParams{
+	rows, err := r.queries(ctx).ListItemsByEntity(ctx, sqlc.ListItemsByEntityParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		ItemType:      toPgTextPtr(itemType),
 		CategoryID:    toPgUUIDPtr(categoryID),
@@ -327,7 +328,7 @@ func (r *productRepository) ListItems(ctx context.Context, legalEntityID uuid.UU
 }
 
 func (r *productRepository) GetItemByID(ctx context.Context, id uuid.UUID) (*domain.Item, error) {
-	row, err := r.queries.GetItemByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetItemByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrItemNotFound
@@ -338,7 +339,7 @@ func (r *productRepository) GetItemByID(ctx context.Context, id uuid.UUID) (*dom
 }
 
 func (r *productRepository) GetItemByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.Item, error) {
-	row, err := r.queries.GetItemByCode(ctx, sqlc.GetItemByCodeParams{
+	row, err := r.queries(ctx).GetItemByCode(ctx, sqlc.GetItemByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Code:          code,
 	})
@@ -352,7 +353,7 @@ func (r *productRepository) GetItemByCode(ctx context.Context, legalEntityID uui
 }
 
 func (r *productRepository) CreateItem(ctx context.Context, item *domain.Item) (*domain.Item, error) {
-	row, err := r.queries.CreateItem(ctx, sqlc.CreateItemParams{
+	row, err := r.queries(ctx).CreateItem(ctx, sqlc.CreateItemParams{
 		LegalEntityID:     toPgUUID(item.LegalEntityID),
 		CategoryID:        toPgUUIDPtr(item.CategoryID),
 		Code:              item.Code,
@@ -383,7 +384,7 @@ func (r *productRepository) CreateItem(ctx context.Context, item *domain.Item) (
 }
 
 func (r *productRepository) UpdateItem(ctx context.Context, item *domain.Item) (*domain.Item, error) {
-	row, err := r.queries.UpdateItem(ctx, sqlc.UpdateItemParams{
+	row, err := r.queries(ctx).UpdateItem(ctx, sqlc.UpdateItemParams{
 		ID:                toPgUUID(item.ID),
 		CategoryID:        toPgUUIDPtr(item.CategoryID),
 		NameEn:            item.NameEn,
@@ -413,7 +414,7 @@ func (r *productRepository) UpdateItem(ctx context.Context, item *domain.Item) (
 }
 
 func (r *productRepository) SearchItems(ctx context.Context, legalEntityID uuid.UUID, query string) ([]domain.Item, error) {
-	rows, err := r.queries.SearchItems(ctx, sqlc.SearchItemsParams{
+	rows, err := r.queries(ctx).SearchItems(ctx, sqlc.SearchItemsParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Query:         toPgText(query),
 	})
@@ -439,14 +440,16 @@ func (r *productRepository) SearchItems(ctx context.Context, legalEntityID uuid.
 
 // 5. Item Variants
 func (r *productRepository) ListVariants(ctx context.Context, itemID uuid.UUID) ([]domain.ItemVariant, error) {
-	rows, err := r.queries.ListVariantsByItem(ctx, toPgUUID(itemID))
+	rows, err := r.queries(ctx).ListVariantsByItem(ctx, toPgUUID(itemID))
 	if err != nil {
 		return nil, err
 	}
 	res := make([]domain.ItemVariant, 0, len(rows))
 	for _, row := range rows {
 		var attrs map[string]any
-		_ = json.Unmarshal(row.Attributes, &attrs)
+		if err := json.Unmarshal(row.Attributes, &attrs); err != nil {
+			return nil, fmt.Errorf("failed to decode attributes for variant %s: %w", toUUID(row.ID), err)
+		}
 		res = append(res, domain.ItemVariant{
 			ID:          toUUID(row.ID),
 			ItemID:      toUUID(row.ItemID),
@@ -463,7 +466,7 @@ func (r *productRepository) ListVariants(ctx context.Context, itemID uuid.UUID) 
 }
 
 func (r *productRepository) GetVariantByID(ctx context.Context, id uuid.UUID) (*domain.ItemVariant, error) {
-	row, err := r.queries.GetVariantByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetVariantByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrVariantNotFound
@@ -471,7 +474,9 @@ func (r *productRepository) GetVariantByID(ctx context.Context, id uuid.UUID) (*
 		return nil, err
 	}
 	var attrs map[string]any
-	_ = json.Unmarshal(row.Attributes, &attrs)
+	if err := json.Unmarshal(row.Attributes, &attrs); err != nil {
+		return nil, fmt.Errorf("failed to decode attributes for variant %s: %w", id, err)
+	}
 	return &domain.ItemVariant{
 		ID:          toUUID(row.ID),
 		ItemID:      toUUID(row.ItemID),
@@ -488,10 +493,10 @@ func (r *productRepository) GetVariantByID(ctx context.Context, id uuid.UUID) (*
 func (r *productRepository) CreateVariant(ctx context.Context, variant *domain.ItemVariant) (*domain.ItemVariant, error) {
 	attrsBytes, err := json.Marshal(variant.Attributes)
 	if err != nil {
-		attrsBytes = []byte("{}")
+		return nil, fmt.Errorf("failed to encode variant attributes: %w", err)
 	}
 
-	row, err := r.queries.CreateVariant(ctx, sqlc.CreateVariantParams{
+	row, err := r.queries(ctx).CreateVariant(ctx, sqlc.CreateVariantParams{
 		ItemID:      toPgUUID(variant.ItemID),
 		VariantCode: variant.VariantCode,
 		NameEn:      variant.NameEn,
@@ -510,7 +515,7 @@ func (r *productRepository) CreateVariant(ctx context.Context, variant *domain.I
 
 // 6. SKUs
 func (r *productRepository) ListSKUs(ctx context.Context, itemID uuid.UUID) ([]domain.SKU, error) {
-	rows, err := r.queries.ListSKUsByItem(ctx, toPgUUID(itemID))
+	rows, err := r.queries(ctx).ListSKUsByItem(ctx, toPgUUID(itemID))
 	if err != nil {
 		return nil, err
 	}
@@ -535,7 +540,7 @@ func (r *productRepository) ListSKUs(ctx context.Context, itemID uuid.UUID) ([]d
 }
 
 func (r *productRepository) GetSKUByID(ctx context.Context, id uuid.UUID) (*domain.SKU, error) {
-	row, err := r.queries.GetSKUByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetSKUByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrSKUNotFound
@@ -557,7 +562,7 @@ func (r *productRepository) GetSKUByID(ctx context.Context, id uuid.UUID) (*doma
 }
 
 func (r *productRepository) GetSKUByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.SKU, error) {
-	row, err := r.queries.GetSKUByCode(ctx, sqlc.GetSKUByCodeParams{
+	row, err := r.queries(ctx).GetSKUByCode(ctx, sqlc.GetSKUByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		SkuCode:       code,
 	})
@@ -582,7 +587,7 @@ func (r *productRepository) GetSKUByCode(ctx context.Context, legalEntityID uuid
 }
 
 func (r *productRepository) CreateSKU(ctx context.Context, sku *domain.SKU) (*domain.SKU, error) {
-	row, err := r.queries.CreateSKU(ctx, sqlc.CreateSKUParams{
+	row, err := r.queries(ctx).CreateSKU(ctx, sqlc.CreateSKUParams{
 		LegalEntityID: toPgUUID(sku.LegalEntityID),
 		ItemID:        toPgUUID(sku.ItemID),
 		VariantID:     toPgUUIDPtr(sku.VariantID),
@@ -601,7 +606,7 @@ func (r *productRepository) CreateSKU(ctx context.Context, sku *domain.SKU) (*do
 }
 
 func (r *productRepository) UpdateSKUPrices(ctx context.Context, id uuid.UUID, cost, selling decimal.Decimal, isActive bool) (*domain.SKU, error) {
-	row, err := r.queries.UpdateSKUPrices(ctx, sqlc.UpdateSKUPricesParams{
+	row, err := r.queries(ctx).UpdateSKUPrices(ctx, sqlc.UpdateSKUPricesParams{
 		ID:           toPgUUID(id),
 		CostPrice:    toPgNumeric(cost),
 		SellingPrice: toPgNumeric(selling),
@@ -629,7 +634,7 @@ func (r *productRepository) UpdateSKUPrices(ctx context.Context, id uuid.UUID, c
 
 // 7. Barcodes
 func (r *productRepository) ListBarcodes(ctx context.Context, itemID uuid.UUID) ([]domain.Barcode, error) {
-	rows, err := r.queries.ListBarcodesByItem(ctx, toPgUUID(itemID))
+	rows, err := r.queries(ctx).ListBarcodesByItem(ctx, toPgUUID(itemID))
 	if err != nil {
 		return nil, err
 	}
@@ -654,7 +659,7 @@ func (r *productRepository) ListBarcodes(ctx context.Context, itemID uuid.UUID) 
 }
 
 func (r *productRepository) GetBarcode(ctx context.Context, legalEntityID uuid.UUID, barcode string) (*domain.Barcode, error) {
-	row, err := r.queries.GetBarcodeByCode(ctx, sqlc.GetBarcodeByCodeParams{
+	row, err := r.queries(ctx).GetBarcodeByCode(ctx, sqlc.GetBarcodeByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Barcode:       barcode,
 	})
@@ -687,7 +692,7 @@ func (r *productRepository) GetBarcode(ctx context.Context, legalEntityID uuid.U
 }
 
 func (r *productRepository) CreateBarcode(ctx context.Context, bc *domain.Barcode) (*domain.Barcode, error) {
-	row, err := r.queries.CreateBarcode(ctx, sqlc.CreateBarcodeParams{
+	row, err := r.queries(ctx).CreateBarcode(ctx, sqlc.CreateBarcodeParams{
 		LegalEntityID: toPgUUID(bc.LegalEntityID),
 		ItemID:        toPgUUID(bc.ItemID),
 		SkuID:         toPgUUIDPtr(bc.SKUID),
@@ -705,12 +710,12 @@ func (r *productRepository) CreateBarcode(ctx context.Context, bc *domain.Barcod
 }
 
 func (r *productRepository) DeleteBarcode(ctx context.Context, id uuid.UUID) error {
-	return r.queries.DeleteBarcode(ctx, toPgUUID(id))
+	return r.queries(ctx).DeleteBarcode(ctx, toPgUUID(id))
 }
 
 // 8. Item UOMs
 func (r *productRepository) ListItemUOMs(ctx context.Context, itemID uuid.UUID) ([]domain.ItemUOM, error) {
-	rows, err := r.queries.ListItemUOMsByItem(ctx, toPgUUID(itemID))
+	rows, err := r.queries(ctx).ListItemUOMsByItem(ctx, toPgUUID(itemID))
 	if err != nil {
 		return nil, err
 	}
@@ -735,7 +740,7 @@ func (r *productRepository) ListItemUOMs(ctx context.Context, itemID uuid.UUID) 
 }
 
 func (r *productRepository) UpsertItemUOM(ctx context.Context, iu *domain.ItemUOM) (*domain.ItemUOM, error) {
-	row, err := r.queries.UpsertItemUOM(ctx, sqlc.UpsertItemUOMParams{
+	row, err := r.queries(ctx).UpsertItemUOM(ctx, sqlc.UpsertItemUOMParams{
 		ItemID:         toPgUUID(iu.ItemID),
 		UomID:          toPgUUID(iu.UOMID),
 		ConversionRate: toPgNumeric(iu.ConversionRate),
@@ -753,7 +758,7 @@ func (r *productRepository) UpsertItemUOM(ctx context.Context, iu *domain.ItemUO
 
 // 9. Item Tax Profiles
 func (r *productRepository) GetItemTaxProfile(ctx context.Context, itemID uuid.UUID) (*domain.ItemTaxProfile, error) {
-	row, err := r.queries.GetItemTaxProfile(ctx, toPgUUID(itemID))
+	row, err := r.queries(ctx).GetItemTaxProfile(ctx, toPgUUID(itemID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -775,7 +780,7 @@ func (r *productRepository) GetItemTaxProfile(ctx context.Context, itemID uuid.U
 }
 
 func (r *productRepository) UpsertItemTaxProfile(ctx context.Context, itp *domain.ItemTaxProfile) (*domain.ItemTaxProfile, error) {
-	row, err := r.queries.UpsertItemTaxProfile(ctx, sqlc.UpsertItemTaxProfileParams{
+	row, err := r.queries(ctx).UpsertItemTaxProfile(ctx, sqlc.UpsertItemTaxProfileParams{
 		ItemID:              toPgUUID(itp.ItemID),
 		TaxCodeID:           toPgUUID(itp.TaxCodeID),
 		ExemptionReasonCode: toPgTextPtr(itp.ExemptionReasonCode),

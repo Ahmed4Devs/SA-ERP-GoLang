@@ -2,8 +2,11 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
+	"erp/internal/platform/database"
+	"erp/internal/platform/transaction"
 	"erp/internal/products/domain"
 	"erp/internal/products/ports"
 
@@ -13,10 +16,11 @@ import (
 
 type ProductService struct {
 	repo ports.ProductRepository
+	tx   transaction.Manager
 }
 
-func NewProductService(repo ports.ProductRepository) ports.ProductService {
-	return &ProductService{repo: repo}
+func NewProductService(repo ports.ProductRepository, db *database.DB) ports.ProductService {
+	return &ProductService{repo: repo, tx: transaction.NewManager(db.Pool)}
 }
 
 // Units of Measure
@@ -84,6 +88,18 @@ func (s *ProductService) GetItemByCode(ctx context.Context, legalEntityID uuid.U
 }
 
 func (s *ProductService) CreateItem(ctx context.Context, req ports.CreateItemRequest) (*domain.Item, error) {
+	if req.LegalEntityID == uuid.Nil {
+		return nil, fmt.Errorf("legal_entity_id is required")
+	}
+	if strings.TrimSpace(req.Code) == "" || strings.TrimSpace(req.NameEn) == "" || strings.TrimSpace(req.NameAr) == "" {
+		return nil, fmt.Errorf("code and bilingual names are required")
+	}
+	if req.BaseUOMID == uuid.Nil {
+		return nil, fmt.Errorf("base_uom_id is required")
+	}
+	if req.CostPrice.IsNegative() || req.ListPrice.IsNegative() {
+		return nil, fmt.Errorf("item prices cannot be negative")
+	}
 	// Validate item type
 	switch req.ItemType {
 	case domain.ItemTypeStock, domain.ItemTypeService, domain.ItemTypeNonStock, domain.ItemTypeAsset:
@@ -120,96 +136,117 @@ func (s *ProductService) CreateItem(ctx context.Context, req ports.CreateItemReq
 		IsActive:          true,
 	}
 
-	created, err := s.repo.CreateItem(ctx, &item)
-	if err != nil {
-		return nil, err
-	}
+	var created *domain.Item
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		created, err = s.repo.CreateItem(txCtx, &item)
+		if err != nil {
+			return err
+		}
 
-	// 1. Automatically register Base UOM packaging entry
-	baseUOM := domain.ItemUOM{
-		ID:             uuid.New(),
-		ItemID:         created.ID,
-		UOMID:          req.BaseUOMID,
-		ConversionRate: decimal.NewFromInt(1),
-		IsBaseUOM:      true,
-		IsSalesUOM:     req.SalesUOMID == nil || *req.SalesUOMID == req.BaseUOMID,
-		IsPurchaseUOM:  req.PurchaseUOMID == nil || *req.PurchaseUOMID == req.BaseUOMID,
-	}
-	_, _ = s.repo.UpsertItemUOM(ctx, &baseUOM)
-
-	// 2. Register Purchase UOM if distinct from Base
-	if req.PurchaseUOMID != nil && *req.PurchaseUOMID != req.BaseUOMID {
-		purUOM := domain.ItemUOM{
+		uoms := []domain.ItemUOM{{
 			ID:             uuid.New(),
 			ItemID:         created.ID,
-			UOMID:          *req.PurchaseUOMID,
+			UOMID:          req.BaseUOMID,
 			ConversionRate: decimal.NewFromInt(1),
-			IsBaseUOM:      false,
-			IsSalesUOM:     false,
-			IsPurchaseUOM:  true,
+			IsBaseUOM:      true,
+			IsSalesUOM:     req.SalesUOMID == nil || *req.SalesUOMID == req.BaseUOMID,
+			IsPurchaseUOM:  req.PurchaseUOMID == nil || *req.PurchaseUOMID == req.BaseUOMID,
+		}}
+		if req.PurchaseUOMID != nil && *req.PurchaseUOMID != req.BaseUOMID {
+			uoms = append(uoms, domain.ItemUOM{
+				ID:             uuid.New(),
+				ItemID:         created.ID,
+				UOMID:          *req.PurchaseUOMID,
+				ConversionRate: decimal.NewFromInt(1),
+				IsPurchaseUOM:  true,
+				IsSalesUOM:     req.SalesUOMID != nil && *req.SalesUOMID == *req.PurchaseUOMID,
+			})
 		}
-		_, _ = s.repo.UpsertItemUOM(ctx, &purUOM)
-	}
-
-	// 3. Register Sales UOM if distinct from Base and Purchase
-	if req.SalesUOMID != nil && *req.SalesUOMID != req.BaseUOMID && (req.PurchaseUOMID == nil || *req.SalesUOMID != *req.PurchaseUOMID) {
-		saleUOM := domain.ItemUOM{
-			ID:             uuid.New(),
-			ItemID:         created.ID,
-			UOMID:          *req.SalesUOMID,
-			ConversionRate: decimal.NewFromInt(1),
-			IsBaseUOM:      false,
-			IsSalesUOM:     true,
-			IsPurchaseUOM:  false,
+		if req.SalesUOMID != nil && *req.SalesUOMID != req.BaseUOMID && (req.PurchaseUOMID == nil || *req.SalesUOMID != *req.PurchaseUOMID) {
+			uoms = append(uoms, domain.ItemUOM{
+				ID:             uuid.New(),
+				ItemID:         created.ID,
+				UOMID:          *req.SalesUOMID,
+				ConversionRate: decimal.NewFromInt(1),
+				IsSalesUOM:     true,
+			})
 		}
-		_, _ = s.repo.UpsertItemUOM(ctx, &saleUOM)
-	}
+		for i := range uoms {
+			if _, err := s.repo.UpsertItemUOM(txCtx, &uoms[i]); err != nil {
+				return fmt.Errorf("failed to register item UOM: %w", err)
+			}
+		}
 
-	// 4. Create default root SKU for this item
-	sku := domain.SKU{
-		ID:            uuid.New(),
-		LegalEntityID: req.LegalEntityID,
-		ItemID:        created.ID,
-		VariantID:     nil,
-		SKUCode:       created.Code,
-		CostPrice:     req.CostPrice,
-		SellingPrice:  req.ListPrice,
-		IsActive:      true,
-	}
-	createdSKU, _ := s.repo.CreateSKU(ctx, &sku)
-
-	// 5. Default barcode if provided
-	if trimmedBarcode := strings.TrimSpace(req.DefaultBarcode); trimmedBarcode != "" {
-		bc := domain.Barcode{
+		sku := domain.SKU{
 			ID:            uuid.New(),
 			LegalEntityID: req.LegalEntityID,
 			ItemID:        created.ID,
-			Barcode:       trimmedBarcode,
-			BarcodeFormat: "CUSTOM",
-			IsPrimary:     true,
+			SKUCode:       created.Code,
+			CostPrice:     req.CostPrice,
+			SellingPrice:  req.ListPrice,
+			IsActive:      true,
 		}
-		if createdSKU != nil {
-			bc.SKUID = &createdSKU.ID
+		createdSKU, err := s.repo.CreateSKU(txCtx, &sku)
+		if err != nil {
+			return fmt.Errorf("failed to create root SKU: %w", err)
 		}
-		bc.UOMID = &req.BaseUOMID
-		_, _ = s.repo.CreateBarcode(ctx, &bc)
-	}
 
-	// 6. Tax Profile if default tax code provided
-	if req.DefaultTaxCodeID != nil {
-		itp := domain.ItemTaxProfile{
-			ID:        uuid.New(),
-			ItemID:    created.ID,
-			TaxCodeID: *req.DefaultTaxCodeID,
-			IsActive:  true,
+		if trimmedBarcode := strings.TrimSpace(req.DefaultBarcode); trimmedBarcode != "" {
+			bc := domain.Barcode{
+				ID:            uuid.New(),
+				LegalEntityID: req.LegalEntityID,
+				ItemID:        created.ID,
+				SKUID:         &createdSKU.ID,
+				UOMID:         &req.BaseUOMID,
+				Barcode:       trimmedBarcode,
+				BarcodeFormat: "CUSTOM",
+				IsPrimary:     true,
+			}
+			if _, err := s.repo.CreateBarcode(txCtx, &bc); err != nil {
+				return fmt.Errorf("failed to create default barcode: %w", err)
+			}
 		}
-		_, _ = s.repo.UpsertItemTaxProfile(ctx, &itp)
-	}
 
+		if req.DefaultTaxCodeID != nil {
+			itp := domain.ItemTaxProfile{
+				ID:        uuid.New(),
+				ItemID:    created.ID,
+				TaxCodeID: *req.DefaultTaxCodeID,
+				IsActive:  true,
+			}
+			if _, err := s.repo.UpsertItemTaxProfile(txCtx, &itp); err != nil {
+				return fmt.Errorf("failed to create item tax profile: %w", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return created, nil
 }
 
 func (s *ProductService) UpdateItem(ctx context.Context, item domain.Item) (*domain.Item, error) {
+	if item.ID == uuid.Nil {
+		return nil, fmt.Errorf("item id is required")
+	}
+	if strings.TrimSpace(item.NameEn) == "" || strings.TrimSpace(item.NameAr) == "" {
+		return nil, fmt.Errorf("bilingual item names are required")
+	}
+	if item.CostPrice.IsNegative() || item.ListPrice.IsNegative() {
+		return nil, fmt.Errorf("item prices cannot be negative")
+	}
+	switch item.ItemType {
+	case domain.ItemTypeStock, domain.ItemTypeService, domain.ItemTypeNonStock, domain.ItemTypeAsset:
+	default:
+		return nil, domain.ErrInvalidItemType
+	}
+	switch item.TrackingType {
+	case domain.TrackingTypeNone, domain.TrackingTypeLot, domain.TrackingTypeSerial:
+	default:
+		return nil, domain.ErrInvalidTrackingType
+	}
 	return s.repo.UpdateItem(ctx, &item)
 }
 
@@ -219,6 +256,15 @@ func (s *ProductService) SearchItems(ctx context.Context, legalEntityID uuid.UUI
 
 // Variants & SKUs
 func (s *ProductService) CreateVariantWithSKU(ctx context.Context, legalEntityID uuid.UUID, itemID uuid.UUID, variantCode, nameEn, nameAr string, attrs map[string]any, cost, selling decimal.Decimal) (*domain.ItemVariant, *domain.SKU, error) {
+	if legalEntityID == uuid.Nil || itemID == uuid.Nil {
+		return nil, nil, fmt.Errorf("legal_entity_id and item_id are required")
+	}
+	if strings.TrimSpace(variantCode) == "" || strings.TrimSpace(nameEn) == "" || strings.TrimSpace(nameAr) == "" {
+		return nil, nil, fmt.Errorf("variant code and bilingual names are required")
+	}
+	if cost.IsNegative() || selling.IsNegative() {
+		return nil, nil, fmt.Errorf("variant prices cannot be negative")
+	}
 	v := domain.ItemVariant{
 		ID:          uuid.New(),
 		ItemID:      itemID,
@@ -228,22 +274,31 @@ func (s *ProductService) CreateVariantWithSKU(ctx context.Context, legalEntityID
 		Attributes:  attrs,
 		IsActive:    true,
 	}
-	createdV, err := s.repo.CreateVariant(ctx, &v)
-	if err != nil {
-		return nil, nil, err
-	}
+	var createdV *domain.ItemVariant
+	var createdSKU *domain.SKU
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		createdV, err = s.repo.CreateVariant(txCtx, &v)
+		if err != nil {
+			return err
+		}
 
-	sku := domain.SKU{
-		ID:            uuid.New(),
-		LegalEntityID: legalEntityID,
-		ItemID:        itemID,
-		VariantID:     &createdV.ID,
-		SKUCode:       createdV.VariantCode,
-		CostPrice:     cost,
-		SellingPrice:  selling,
-		IsActive:      true,
-	}
-	createdSKU, err := s.repo.CreateSKU(ctx, &sku)
+		sku := domain.SKU{
+			ID:            uuid.New(),
+			LegalEntityID: legalEntityID,
+			ItemID:        itemID,
+			VariantID:     &createdV.ID,
+			SKUCode:       createdV.VariantCode,
+			CostPrice:     cost,
+			SellingPrice:  selling,
+			IsActive:      true,
+		}
+		createdSKU, err = s.repo.CreateSKU(txCtx, &sku)
+		if err != nil {
+			return fmt.Errorf("failed to create variant SKU: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -265,10 +320,16 @@ func (s *ProductService) LookupBarcode(ctx context.Context, legalEntityID uuid.U
 }
 
 func (s *ProductService) AddBarcode(ctx context.Context, bc domain.Barcode) (*domain.Barcode, error) {
+	if bc.LegalEntityID == uuid.Nil || bc.ItemID == uuid.Nil {
+		return nil, fmt.Errorf("legal_entity_id and item_id are required")
+	}
 	if bc.ID == uuid.Nil {
 		bc.ID = uuid.New()
 	}
 	bc.Barcode = strings.TrimSpace(bc.Barcode)
+	if bc.Barcode == "" {
+		return nil, fmt.Errorf("barcode is required")
+	}
 	if bc.BarcodeFormat == "" {
 		bc.BarcodeFormat = "CUSTOM"
 	}
@@ -285,6 +346,12 @@ func (s *ProductService) ListItemUOMs(ctx context.Context, itemID uuid.UUID) ([]
 }
 
 func (s *ProductService) AddItemUOM(ctx context.Context, iu domain.ItemUOM) (*domain.ItemUOM, error) {
+	if iu.ItemID == uuid.Nil || iu.UOMID == uuid.Nil {
+		return nil, fmt.Errorf("item_id and uom_id are required")
+	}
+	if !iu.ConversionRate.IsPositive() {
+		return nil, fmt.Errorf("conversion rate must be greater than zero")
+	}
 	if iu.ID == uuid.Nil {
 		iu.ID = uuid.New()
 	}
@@ -297,6 +364,9 @@ func (s *ProductService) GetItemTaxProfile(ctx context.Context, itemID uuid.UUID
 }
 
 func (s *ProductService) SetItemTaxProfile(ctx context.Context, itp domain.ItemTaxProfile) (*domain.ItemTaxProfile, error) {
+	if itp.ItemID == uuid.Nil || itp.TaxCodeID == uuid.Nil {
+		return nil, fmt.Errorf("item_id and tax_code_id are required")
+	}
 	if itp.ID == uuid.Nil {
 		itp.ID = uuid.New()
 	}
