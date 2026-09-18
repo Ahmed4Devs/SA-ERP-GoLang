@@ -35,10 +35,14 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *database.DB) *Server
 	// 1. Canonical Middleware Chain in strict execution order
 	router.Use(middleware.RequestID)
 	router.Use(chimiddleware.RealIP)
+	router.Use(middleware.NewRateLimiter(middleware.DefaultRateLimiterConfig()).Middleware())
+	router.Use(middleware.RequestBodyLimit(middleware.DefaultBodyLimitConfig()))
 	router.Use(middleware.CORS(middleware.DefaultCORSConfig()))
+	router.Use(middleware.CSRFProtection(middleware.DefaultCSRFConfig()))
 	router.Use(observability.HTTPLoggingMiddleware(logger))
 	router.Use(metrics.HTTPMetricsMiddleware)
 	router.Use(middleware.SecurityHeaders(middleware.DefaultSecurityHeadersConfig(isProd)))
+	router.Use(middleware.TenantBoundaryGuard())
 	router.Use(middleware.Recovery(logger))
 	router.Use(chimiddleware.Timeout(60 * time.Second))
 
