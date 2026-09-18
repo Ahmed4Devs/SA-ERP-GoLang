@@ -1,65 +1,111 @@
 openapi: 3.1.0
 info:
-  title: Saudi ERP Platform API
-  description: Production-Grade Saudi ERP Platform REST API Specification
-  version: 0.1.0
+  title: Saudi Arabia Enterprise ERP Platform API
+  description: |
+    Production-Grade Saudi ERP Platform REST API Specification.
+    Compliant with ZATCA Phase 2 (FATOORA), Saudi Labor Law (Qiwa/Mudad WPS),
+    GOSI Social Insurance, and Saudi General Ledger Standards.
+  version: 1.0.0
+  contact:
+    name: ERP Engineering Team
+    email: dev@erp.example.sa
+servers:
+  - url: https://erp.example.sa
+    description: Production Server
+  - url: http://localhost:8080
+    description: Local Development Server
+
+tags:
+  - name: Core
+    description: Health, readiness, and telemetry probes
+  - name: IAM & Auth
+    description: Identity, authentication, and session control
+  - name: Organization
+    description: Multi-tenant legal entities, branches, and cost centers
+  - name: Authorization
+    description: Roles, permissions, and RBAC matrix
+  - name: General Ledger
+    description: Chart of Accounts, fiscal calendars, and journal entries
+  - name: Tax & VAT
+    description: Saudi VAT rates, tax categories, and tax returns
+  - name: ZATCA Phase 2
+    description: E-Invoicing clearance, reporting, and cryptographic compliance
+  - name: Sales & AR
+    description: Customer master, quotations, sales orders, and invoices
+  - name: Purchasing & AP
+    description: Suppliers, purchase requests, purchase orders, and invoices
+  - name: Inventory & Warehouses
+    description: Catalog, stock movements ledger, and bin locations
+  - name: Treasury & Banking
+    description: Cash liquidity, bank accounts, statements, and reconciliation
+  - name: HR & Attendance
+    description: Employee master, Qiwa contracts, rosters, and timesheets
+  - name: Leave Management
+    description: Statutory leave balances, accruals, and requests ledger
+  - name: Payroll & WPS
+    description: Deterministic payroll engine, WPS/Mudad SIF generator, and payslips
+  - name: GOSI
+    description: Social insurance contribution rules and monthly calculation
+  - name: Fixed Assets
+    description: Asset registration, locations, and straight-line depreciation
+  - name: Budgeting
+    description: Annual operating budgets, revisions, and budget vs actual
+  - name: Workflows
+    description: Approval workflows and state transition requests
+  - name: Audit Trail
+    description: Tamper-evident cryptographic audit logs
+  - name: Documents
+    description: Secure entity file attachments and blob storage
+  - name: Notifications
+    description: In-app alerts, email dispatch, and alert preferences
+  - name: Reporting & BI
+    description: Financial statements (Balance Sheet, P&L) and analytics
+  - name: Executive Dashboard
+    description: Unified KPI aggregation and real-time business metrics
+
 paths:
   /:
     get:
+      tags: [Core]
       summary: Root service information
       responses:
         "200":
-          description: Service welcome message
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                  version:
-                    type: string
-                  status:
-                    type: string
+          description: Welcome message and version status
   /healthz:
     get:
-      summary: Liveness probe
+      tags: [Core]
+      summary: Liveness health check
       responses:
         "200":
-          description: Service is alive
+          description: Service is healthy
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
   /readyz:
     get:
-      summary: Readiness probe
+      tags: [Core]
+      summary: Readiness probe (DB & Cache connectivity)
       responses:
         "200":
           description: Service is ready to accept traffic
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthResponse"
         "503":
-          description: Service is not ready
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthResponse"
+          description: Service is initializing or dependent system unavailable
   /metrics:
     get:
-      summary: Prometheus metrics
+      tags: [Core]
+      summary: Prometheus metrics endpoint
       responses:
         "200":
-          description: Prometheus formatted metric collection
-          content:
-            text/plain:
-              schema:
-                type: string
+          description: Metrics in OpenMetrics text format
+
+  # ----------------------------------------------------------------------------
+  # IAM & Authentication
+  # ----------------------------------------------------------------------------
   /api/v1/auth/login:
     post:
-      summary: Authenticate user and issue session cookie
+      tags: [IAM & Auth]
+      summary: Authenticate user and issue secure HTTP-only session cookie
       requestBody:
         required: true
         content:
@@ -70,38 +116,352 @@ paths:
               properties:
                 identifier:
                   type: string
+                  example: admin@erp.sa
                 password:
                   type: string
+                  format: password
+                  example: Admin@ERP123!
       responses:
         "200":
-          description: Login successful, returns user and sets erp_session cookie
+          description: Authentication successful
         "401":
-          description: Invalid username or password
+          description: Invalid credentials
         "429":
-          description: Too many failed attempts
+          description: Rate limit exceeded
   /api/v1/auth/logout:
     post:
-      summary: Terminate current session
+      tags: [IAM & Auth]
+      summary: Terminate current authenticated session
       responses:
         "200":
-          description: Logged out
-  /api/v1/auth/logout-all:
-    post:
-      summary: Terminate all active sessions for current user
-      responses:
-        "200":
-          description: All sessions terminated
-        "401":
-          description: Authentication required
+          description: Logged out successfully
   /api/v1/auth/me:
     get:
-      summary: Get currently authenticated user profile
+      tags: [IAM & Auth]
+      summary: Get authenticated user profile and permissions
       responses:
         "200":
-          description: Current user profile
-        "401":
-          description: Authentication required
+          description: Profile retrieved
+
+  # ----------------------------------------------------------------------------
+  # Organization & Legal Entities
+  # ----------------------------------------------------------------------------
+  /api/v1/organizations:
+    get:
+      tags: [Organization]
+      summary: List legal entities
+      responses:
+        "200":
+          description: List of organizations
+    post:
+      tags: [Organization]
+      summary: Register new legal entity
+      responses:
+        "201":
+          description: Organization created
+  /api/v1/branches:
+    get:
+      tags: [Organization]
+      summary: List organizational branches
+      responses:
+        "200":
+          description: List of branches
+
+  # ----------------------------------------------------------------------------
+  # General Ledger & Accounting
+  # ----------------------------------------------------------------------------
+  /api/v1/accounting/accounts:
+    get:
+      tags: [General Ledger]
+      summary: Get Chart of Accounts hierarchy
+      responses:
+        "200":
+          description: Hierarchical accounts list
+    post:
+      tags: [General Ledger]
+      summary: Create general ledger account
+      responses:
+        "201":
+          description: Account created
+  /api/v1/accounting/journals:
+    get:
+      tags: [General Ledger]
+      summary: List journal entries
+      responses:
+        "200":
+          description: Journal entries list
+    post:
+      tags: [General Ledger]
+      summary: Post atomic journal entry (Balanced debits & credits required)
+      responses:
+        "201":
+          description: Journal entry posted
+  /api/v1/accounting/fiscal-years:
+    get:
+      tags: [General Ledger]
+      summary: List fiscal years and periods
+      responses:
+        "200":
+          description: Fiscal calendar retrieved
+
+  # ----------------------------------------------------------------------------
+  # Tax & VAT
+  # ----------------------------------------------------------------------------
+  /api/v1/tax/vat-rates:
+    get:
+      tags: [Tax & VAT]
+      summary: List effective-dated Saudi VAT rates (Standard 15%, Zero, Exempt)
+      responses:
+        "200":
+          description: VAT rate configurations
+  /api/v1/tax/returns:
+    get:
+      tags: [Tax & VAT]
+      summary: Generate ZATCA VAT Return (Boxes 1-16)
+      responses:
+        "200":
+          description: Tax return calculations
+
+  # ----------------------------------------------------------------------------
+  # ZATCA Phase 2 E-Invoicing
+  # ----------------------------------------------------------------------------
+  /api/v1/zatca/egs:
+    get:
+      tags: [ZATCA Phase 2]
+      summary: List registered Electronic Generation Solution (EGS) units
+      responses:
+        "200":
+          description: Registered EGS units
+  /api/v1/zatca/invoices/clearance:
+    post:
+      tags: [ZATCA Phase 2]
+      summary: Submit Standard Tax Invoice for real-time B2B Clearance
+      responses:
+        "200":
+          description: Invoice cleared by ZATCA with clearance stamp
+        "422":
+          description: Invoice rejected with BR-KSA validation errors
+  /api/v1/zatca/invoices/reporting:
+    post:
+      tags: [ZATCA Phase 2]
+      summary: Report Simplified Tax Invoice within 24 hours (B2C)
+      responses:
+        "200":
+          description: Invoice reported successfully
+
+  # ----------------------------------------------------------------------------
+  # Sales & Customers
+  # ----------------------------------------------------------------------------
+  /api/v1/sales/customers:
+    get:
+      tags: [Sales & AR]
+      summary: List customers with credit limits and payment terms
+      responses:
+        "200":
+          description: Customers list
+  /api/v1/sales/invoices:
+    get:
+      tags: [Sales & AR]
+      summary: List sales invoices
+      responses:
+        "200":
+          description: Sales invoices list
+    post:
+      tags: [Sales & AR]
+      summary: Create and post sales invoice with automated tax calculation
+      responses:
+        "201":
+          description: Sales invoice created
+
+  # ----------------------------------------------------------------------------
+  # Purchasing & Payables
+  # ----------------------------------------------------------------------------
+  /api/v1/purchasing/suppliers:
+    get:
+      tags: [Purchasing & AP]
+      summary: List approved suppliers
+      responses:
+        "200":
+          description: Suppliers list
+  /api/v1/purchasing/orders:
+    get:
+      tags: [Purchasing & AP]
+      summary: List purchase orders
+      responses:
+        "200":
+          description: Purchase orders list
+
+  # ----------------------------------------------------------------------------
+  # Inventory & Warehouses
+  # ----------------------------------------------------------------------------
+  /api/v1/inventory/items:
+    get:
+      tags: [Inventory & Warehouses]
+      summary: List product master catalog, SKUs, and stock units
+      responses:
+        "200":
+          description: Catalog items
+  /api/v1/inventory/movements:
+    get:
+      tags: [Inventory & Warehouses]
+      summary: Query immutable stock movement ledger
+      responses:
+        "200":
+          description: Stock movement transactions
+
+  # ----------------------------------------------------------------------------
+  # Treasury & Banking
+  # ----------------------------------------------------------------------------
+  /api/v1/treasury/cash-accounts:
+    get:
+      tags: [Treasury & Banking]
+      summary: List cash and petty cash accounts
+      responses:
+        "200":
+          description: Accounts list
+  /api/v1/banking/accounts:
+    get:
+      tags: [Treasury & Banking]
+      summary: List corporate bank accounts
+      responses:
+        "200":
+          description: Bank accounts list
+  /api/v1/banking/reconciliation:
+    post:
+      tags: [Treasury & Banking]
+      summary: Execute automated bank statement reconciliation
+      responses:
+        "200":
+          description: Reconciliation report
+
+  # ----------------------------------------------------------------------------
+  # HR, Attendance & Leave
+  # ----------------------------------------------------------------------------
+  /api/v1/hr/employees:
+    get:
+      tags: [HR & Attendance]
+      summary: List employees with Qiwa contract and Saudization status
+      responses:
+        "200":
+          description: Employees list
+  /api/v1/attendance/timesheets:
+    get:
+      tags: [HR & Attendance]
+      summary: List daily attendance and overtime records
+      responses:
+        "200":
+          description: Timesheets
+  /api/v1/leave/requests:
+    get:
+      tags: [Leave Management]
+      summary: List employee leave requests
+      responses:
+        "200":
+          description: Leave requests
+
+  # ----------------------------------------------------------------------------
+  # Payroll & GOSI
+  # ----------------------------------------------------------------------------
+  /api/v1/payroll/runs:
+    get:
+      tags: [Payroll & WPS]
+      summary: List monthly payroll processing runs
+      responses:
+        "200":
+          description: Payroll runs list
+    post:
+      tags: [Payroll & WPS]
+      summary: Execute deterministic monthly payroll calculation
+      responses:
+        "201":
+          description: Payroll calculated and payslips generated
+  /api/v1/payroll/wps:
+    get:
+      tags: [Payroll & WPS]
+      summary: Generate Saudi Wages Protection System (Mudad SIF) file
+      responses:
+        "200":
+          description: Mudad SIF formatted export file
+  /api/v1/gosi/contributions:
+    get:
+      tags: [GOSI]
+      summary: Query monthly GOSI social insurance contributions
+      responses:
+        "200":
+          description: GOSI contribution statements
+
+  # ----------------------------------------------------------------------------
+  # Fixed Assets & Budgeting
+  # ----------------------------------------------------------------------------
+  /api/v1/fixed-assets/assets:
+    get:
+      tags: [Fixed Assets]
+      summary: List fixed assets and depreciation status
+      responses:
+        "200":
+          description: Fixed assets catalog
+  /api/v1/budgeting/budgets:
+    get:
+      tags: [Budgeting]
+      summary: List annual operating and capital budgets
+      responses:
+        "200":
+          description: Budgets
+
+  # ----------------------------------------------------------------------------
+  # Workflows & Audit
+  # ----------------------------------------------------------------------------
+  /api/v1/workflows/instances:
+    get:
+      tags: [Workflows]
+      summary: List active approval workflows
+      responses:
+        "200":
+          description: Workflow instances
+  /api/v1/audit/logs:
+    get:
+      tags: [Audit Trail]
+      summary: Query immutable audit logs
+      responses:
+        "200":
+          description: Audit logs list
+
+  # ----------------------------------------------------------------------------
+  # Reporting & Dashboard
+  # ----------------------------------------------------------------------------
+  /api/v1/reports/balance-sheet:
+    get:
+      tags: [Reporting & BI]
+      summary: Generate Balance Sheet financial statement
+      responses:
+        "200":
+          description: Balance sheet statement
+  /api/v1/reports/income-statement:
+    get:
+      tags: [Reporting & BI]
+      summary: Generate Income Statement (Profit & Loss)
+      responses:
+        "200":
+          description: Income statement
+  /api/v1/dashboard/metrics:
+    get:
+      tags: [Executive Dashboard]
+      summary: Unified real-time executive dashboard KPIs
+      responses:
+        "200":
+          description: Consolidated financial, sales, inventory, and HR metrics
+
 components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: erp_session
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthResponse:
       type: object
@@ -127,3 +487,7 @@ components:
         timestamp:
           type: string
           format: date-time
+
+security:
+  - SessionCookie: []
+  - BearerAuth: []
