@@ -9,6 +9,7 @@ import (
 	"erp/internal/budgeting/ports"
 	"erp/internal/platform/database"
 	"erp/internal/platform/identifiers"
+	"erp/internal/platform/transaction"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -17,12 +18,14 @@ import (
 type BudgetingService struct {
 	repo ports.Repository
 	db   *database.DB
+	tx   transaction.Manager
 }
 
 func NewBudgetingService(repo ports.Repository, db *database.DB) *BudgetingService {
 	return &BudgetingService{
 		repo: repo,
 		db:   db,
+		tx:   transaction.NewManager(db.Pool),
 	}
 }
 
@@ -67,24 +70,28 @@ func (s *BudgetingService) CreateBudget(ctx context.Context, req ports.CreateBud
 		CreatedByUserID:      req.CreatedBy,
 	}
 
-	createdBudget, err := s.repo.CreateBudget(ctx, b)
-	if err != nil {
-		return nil, err
-	}
-
-	// Automatically initialize Version 1
-	v1 := &domain.BudgetVersion{
-		ID:              uuid.New(),
-		BudgetID:        createdBudget.ID,
-		VersionNumber:   1,
-		VersionName:     "Initial Working Budget v1.0",
-		Status:          domain.VersionStatusDraft,
-		Notes:           "Baseline draft version initialized with budget creation",
-		CreatedByUserID: req.CreatedBy,
-	}
-	_, _ = s.repo.CreateBudgetVersion(ctx, v1)
-
-	return createdBudget, nil
+	var createdBudget *domain.Budget
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		createdBudget, err = s.repo.CreateBudget(txCtx, b)
+		if err != nil {
+			return err
+		}
+		_, err = s.repo.CreateBudgetVersion(txCtx, &domain.BudgetVersion{
+			ID:              uuid.New(),
+			BudgetID:        createdBudget.ID,
+			VersionNumber:   1,
+			VersionName:     "Initial Working Budget v1.0",
+			Status:          domain.VersionStatusDraft,
+			Notes:           "Baseline draft version initialized with budget creation",
+			CreatedByUserID: req.CreatedBy,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to initialize budget version: %w", err)
+		}
+		return nil
+	})
+	return createdBudget, err
 }
 
 func (s *BudgetingService) GetBudget(ctx context.Context, id, legalEntityID uuid.UUID) (*domain.Budget, error) {
@@ -112,23 +119,32 @@ func (s *BudgetingService) SubmitBudget(ctx context.Context, id, legalEntityID u
 }
 
 func (s *BudgetingService) ApproveBudget(ctx context.Context, id, legalEntityID, approverID uuid.UUID) (*domain.Budget, error) {
-	b, err := s.repo.GetBudgetByID(ctx, id, legalEntityID)
-	if err != nil {
-		return nil, domain.ErrBudgetNotFound
-	}
-	if b.Status == domain.BudgetStatusClosed {
-		return nil, domain.ErrCannotModifyClosed
-	}
+	var approved *domain.Budget
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		b, err := s.repo.GetBudgetByID(txCtx, id, legalEntityID)
+		if err != nil {
+			return domain.ErrBudgetNotFound
+		}
+		if b.Status == domain.BudgetStatusClosed {
+			return domain.ErrCannotModifyClosed
+		}
 
-	now := time.Now()
-	// Approve active version or version 1
-	versions, err := s.repo.GetBudgetVersions(ctx, id)
-	if err == nil && len(versions) > 0 {
+		now := time.Now()
+		versions, err := s.repo.GetBudgetVersions(txCtx, id)
+		if err != nil {
+			return fmt.Errorf("failed to list budget versions: %w", err)
+		}
+		if len(versions) == 0 {
+			return domain.ErrBudgetVersionNotFound
+		}
 		latest := versions[len(versions)-1]
-		_, _ = s.repo.UpdateBudgetVersionStatus(ctx, latest.ID, domain.VersionStatusActive, &approverID, &now)
-	}
-
-	return s.repo.UpdateBudgetStatus(ctx, id, legalEntityID, domain.BudgetStatusActive, &approverID, &now)
+		if _, err := s.repo.UpdateBudgetVersionStatus(txCtx, latest.ID, domain.VersionStatusActive, &approverID, &now); err != nil {
+			return fmt.Errorf("failed to activate budget version: %w", err)
+		}
+		approved, err = s.repo.UpdateBudgetStatus(txCtx, id, legalEntityID, domain.BudgetStatusActive, &approverID, &now)
+		return err
+	})
+	return approved, err
 }
 
 func (s *BudgetingService) CreateVersion(ctx context.Context, req ports.CreateVersionRequest) (*domain.BudgetVersion, error) {
@@ -190,15 +206,19 @@ func (s *BudgetingService) AddBudgetLine(ctx context.Context, req ports.AddBudge
 		LineDescriptionAr: req.LineDescriptionAr,
 	}
 
-	created, err := s.repo.CreateBudgetLine(ctx, line)
-	if err != nil {
-		return nil, err
-	}
-
-	// Recalculate totals
-	_ = s.repo.RecalculateBudgetTotals(ctx, req.BudgetID, req.LegalEntityID, req.BudgetVersionID)
-
-	return created, nil
+	var created *domain.BudgetLine
+	err = s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		created, err = s.repo.CreateBudgetLine(txCtx, line)
+		if err != nil {
+			return err
+		}
+		if err := s.repo.RecalculateBudgetTotals(txCtx, req.BudgetID, req.LegalEntityID, req.BudgetVersionID); err != nil {
+			return fmt.Errorf("failed to recalculate budget totals: %w", err)
+		}
+		return nil
+	})
+	return created, err
 }
 
 func (s *BudgetingService) ListBudgetLines(ctx context.Context, versionID uuid.UUID) ([]*domain.BudgetLine, error) {
@@ -209,51 +229,61 @@ func (s *BudgetingService) TransferBudget(ctx context.Context, req ports.Transfe
 	if req.Amount.LessThanOrEqual(decimal.Zero) {
 		return nil, domain.ErrNegativeAmount
 	}
-
-	src, err := s.repo.GetBudgetLineByID(ctx, req.SourceLineID)
-	if err != nil {
-		return nil, domain.ErrBudgetLineNotFound
-	}
-
-	tgt, err := s.repo.GetBudgetLineByID(ctx, req.TargetLineID)
-	if err != nil {
-		return nil, domain.ErrBudgetLineNotFound
-	}
-
-	if src.BudgetVersionID != tgt.BudgetVersionID {
+	if req.SourceLineID == req.TargetLineID {
 		return nil, domain.ErrInvalidTransferLines
 	}
 
-	// Verify source has enough allocated amount
-	if src.Amount.LessThan(req.Amount) {
-		return nil, domain.ErrInsufficientBudgetFunds
-	}
+	var created *domain.BudgetTransfer
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		// Lock in deterministic order to prevent concurrent transfers from
+		// overspending a source line or deadlocking each other.
+		first, second := req.SourceLineID, req.TargetLineID
+		if first.String() > second.String() {
+			first, second = second, first
+		}
+		for _, id := range []uuid.UUID{first, second} {
+			if err := s.db.DBTX(txCtx).QueryRow(txCtx, "SELECT id FROM budgeting.budget_lines WHERE id = $1 FOR UPDATE", id).Scan(&id); err != nil {
+				return domain.ErrBudgetLineNotFound
+			}
+		}
 
-	// Execute transfer
-	src.Amount = src.Amount.Sub(req.Amount)
-	tgt.Amount = tgt.Amount.Add(req.Amount)
+		src, err := s.repo.GetBudgetLineByID(txCtx, req.SourceLineID)
+		if err != nil {
+			return domain.ErrBudgetLineNotFound
+		}
+		tgt, err := s.repo.GetBudgetLineByID(txCtx, req.TargetLineID)
+		if err != nil {
+			return domain.ErrBudgetLineNotFound
+		}
+		if src.BudgetVersionID != tgt.BudgetVersionID {
+			return domain.ErrInvalidTransferLines
+		}
+		if src.Amount.LessThan(req.Amount) {
+			return domain.ErrInsufficientBudgetFunds
+		}
 
-	if _, err := s.repo.UpdateBudgetLine(ctx, src); err != nil {
-		return nil, err
-	}
-	if _, err := s.repo.UpdateBudgetLine(ctx, tgt); err != nil {
-		return nil, err
-	}
-
-	trfNumber := identifiers.NewDocumentNumber("TRF", time.Now())
-	transfer := &domain.BudgetTransfer{
-		ID:                  uuid.New(),
-		LegalEntityID:       req.LegalEntityID,
-		TransferNumber:      trfNumber,
-		SourceLineID:        req.SourceLineID,
-		TargetLineID:        req.TargetLineID,
-		Amount:              req.Amount,
-		Reason:              req.Reason,
-		Status:              domain.TransferStatusCompleted,
-		TransferredByUserID: req.TransferredBy,
-	}
-
-	return s.repo.CreateBudgetTransfer(ctx, transfer)
+		src.Amount = src.Amount.Sub(req.Amount)
+		tgt.Amount = tgt.Amount.Add(req.Amount)
+		if _, err := s.repo.UpdateBudgetLine(txCtx, src); err != nil {
+			return err
+		}
+		if _, err := s.repo.UpdateBudgetLine(txCtx, tgt); err != nil {
+			return err
+		}
+		created, err = s.repo.CreateBudgetTransfer(txCtx, &domain.BudgetTransfer{
+			ID:                  uuid.New(),
+			LegalEntityID:       req.LegalEntityID,
+			TransferNumber:      identifiers.NewDocumentNumber("TRF", time.Now()),
+			SourceLineID:        req.SourceLineID,
+			TargetLineID:        req.TargetLineID,
+			Amount:              req.Amount,
+			Reason:              req.Reason,
+			Status:              domain.TransferStatusCompleted,
+			TransferredByUserID: req.TransferredBy,
+		})
+		return err
+	})
+	return created, err
 }
 
 func (s *BudgetingService) ListTransfers(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.BudgetTransfer, error) {

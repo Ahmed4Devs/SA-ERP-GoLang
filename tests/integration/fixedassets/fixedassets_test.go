@@ -446,3 +446,68 @@ func TestFixedAssets_AssetDisposal(t *testing.T) {
 		t.Errorf("expected TotalHistoricalCost > 0")
 	}
 }
+
+func TestFixedAssets_RegisterRollsBackWhenScheduleFails(t *testing.T) {
+	faMod, _, db, leID, _, _, ctx := setupFixedAssetsTest(t)
+	defer db.Close()
+
+	_, err := db.Pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION fixedassets.fail_test_schedule_insert()
+		RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+			IF EXISTS (
+				SELECT 1 FROM fixedassets.assets
+				WHERE id = NEW.asset_id AND asset_number LIKE 'ROLLBACK-AST-%'
+			) THEN
+				RAISE EXCEPTION 'forced depreciation schedule failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$;
+		DROP TRIGGER IF EXISTS trg_fail_test_schedule_insert ON fixedassets.depreciation_schedules;
+		CREATE TRIGGER trg_fail_test_schedule_insert
+		BEFORE INSERT ON fixedassets.depreciation_schedules
+		FOR EACH ROW EXECUTE FUNCTION fixedassets.fail_test_schedule_insert();
+	`)
+	if err != nil {
+		t.Fatalf("failed to install rollback test trigger: %v", err)
+	}
+	defer func() {
+		_, _ = db.Pool.Exec(ctx, `
+			DROP TRIGGER IF EXISTS trg_fail_test_schedule_insert ON fixedassets.depreciation_schedules;
+			DROP FUNCTION IF EXISTS fixedassets.fail_test_schedule_insert();
+		`)
+	}()
+
+	categories, err := faMod.Service.ListAssetCategories(ctx, leID)
+	if err != nil || len(categories) == 0 {
+		t.Fatalf("failed to load asset categories: %v", err)
+	}
+	assetNumber := "ROLLBACK-AST-" + uuid.New().String()[:8]
+	_, err = faMod.Service.RegisterAsset(ctx, domain.Asset{
+		LegalEntityID:      leID,
+		CategoryID:         categories[0].ID,
+		AssetNumber:        assetNumber,
+		NameEn:             "Rollback asset",
+		NameAr:             "أصل اختبار التراجع",
+		AcquisitionDate:    time.Now(),
+		InServiceDate:      time.Now(),
+		AcquisitionCost:    decimal.NewFromInt(12000),
+		UsefulLifeMonths:   12,
+		DepreciationMethod: "STRAIGHT_LINE",
+	})
+	if err == nil {
+		t.Fatal("expected forced depreciation schedule failure")
+	}
+
+	var count int
+	if err := db.Pool.QueryRow(ctx,
+		"SELECT COUNT(*) FROM fixedassets.assets WHERE legal_entity_id = $1 AND asset_number = $2",
+		leID, assetNumber,
+	).Scan(&count); err != nil {
+		t.Fatalf("failed to verify asset rollback: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected asset header rollback, found %d rows", count)
+	}
+}

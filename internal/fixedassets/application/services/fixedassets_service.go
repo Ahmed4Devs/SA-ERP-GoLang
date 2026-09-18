@@ -9,6 +9,7 @@ import (
 	"erp/internal/fixedassets/ports"
 	"erp/internal/platform/database"
 	"erp/internal/platform/identifiers"
+	"erp/internal/platform/transaction"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -17,12 +18,14 @@ import (
 type FixedAssetsService struct {
 	repo ports.Repository
 	db   *database.DB
+	tx   transaction.Manager
 }
 
 func NewFixedAssetsService(repo ports.Repository, db *database.DB) ports.Service {
 	return &FixedAssetsService{
 		repo: repo,
 		db:   db,
+		tx:   transaction.NewManager(db.Pool),
 	}
 }
 
@@ -92,32 +95,38 @@ func (s *FixedAssetsService) RegisterAsset(ctx context.Context, asset domain.Ass
 		asset.InServiceDate = asset.AcquisitionDate
 	}
 
-	savedAsset, err := s.repo.CreateFixedAsset(ctx, asset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to register fixed asset: %w", err)
-	}
+	var savedAsset *domain.Asset
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		savedAsset, err = s.repo.CreateFixedAsset(txCtx, asset)
+		if err != nil {
+			return fmt.Errorf("failed to register fixed asset: %w", err)
+		}
 
-	// Auto-generate depreciation schedule for primary COMMERCIAL book
-	books, err := s.repo.ListDepreciationBooks(ctx, asset.LegalEntityID)
-	if err == nil && len(books) > 0 {
-		var primaryBook *domain.DepreciationBook
-		for _, b := range books {
-			if b.IsPrimary {
-				primaryBook = &b
+		// Auto-generate depreciation schedule for the primary book.
+		books, err := s.repo.ListDepreciationBooks(txCtx, asset.LegalEntityID)
+		if err != nil {
+			return fmt.Errorf("failed to list depreciation books: %w", err)
+		}
+		if len(books) == 0 {
+			return nil
+		}
+		primaryBook := &books[0]
+		for i := range books {
+			if books[i].IsPrimary {
+				primaryBook = &books[i]
 				break
 			}
 		}
-		if primaryBook == nil {
-			primaryBook = &books[0]
-		}
 
-		schedules := domain.GenerateDepreciationSchedule(*savedAsset, primaryBook.ID, savedAsset.InServiceDate)
-		for _, sched := range schedules {
-			_, _ = s.repo.CreateDepreciationSchedule(ctx, sched)
+		for _, sched := range domain.GenerateDepreciationSchedule(*savedAsset, primaryBook.ID, savedAsset.InServiceDate) {
+			if _, err := s.repo.CreateDepreciationSchedule(txCtx, sched); err != nil {
+				return fmt.Errorf("failed to create depreciation schedule: %w", err)
+			}
 		}
-	}
-
-	return savedAsset, nil
+		return nil
+	})
+	return savedAsset, err
 }
 
 func (s *FixedAssetsService) GetAsset(ctx context.Context, id uuid.UUID) (*domain.Asset, error) {
@@ -129,11 +138,17 @@ func (s *FixedAssetsService) ListAssets(ctx context.Context, legalEntityID uuid.
 }
 
 func (s *FixedAssetsService) AssignAsset(ctx context.Context, assignment domain.AssetAssignment) (*domain.AssetAssignment, error) {
-	// End any active assignments for this asset
-	_ = s.repo.EndAssetAssignment(ctx, assignment.AssetID, assignment.AssignedDate)
-
-	assignment.IsCurrent = true
-	return s.repo.CreateAssetAssignment(ctx, assignment)
+	var saved *domain.AssetAssignment
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.repo.EndAssetAssignment(txCtx, assignment.AssetID, assignment.AssignedDate); err != nil {
+			return fmt.Errorf("failed to end current asset assignment: %w", err)
+		}
+		assignment.IsCurrent = true
+		var err error
+		saved, err = s.repo.CreateAssetAssignment(txCtx, assignment)
+		return err
+	})
+	return saved, err
 }
 
 // ----------------------------------------------------------------------
@@ -203,57 +218,65 @@ func (s *FixedAssetsService) RunMonthlyDepreciation(
 		CreatedBy:               runBy,
 	}
 
-	savedRun, err := s.repo.CreateDepreciationRun(ctx, run)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create depreciation run: %w", err)
-	}
-
+	var savedRun *domain.DepreciationRun
 	var savedLines []domain.DepreciationLine
-	for _, l := range linesToCreate {
-		l.RunID = savedRun.ID
-		savedLine, err := s.repo.CreateDepreciationLine(ctx, l)
+	err = s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		savedRun, err = s.repo.CreateDepreciationRun(txCtx, run)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create depreciation line: %w", err)
+			return fmt.Errorf("failed to create depreciation run: %w", err)
 		}
-		savedLine.AssetNameEn = l.AssetNameEn
-		savedLine.AssetNameAr = l.AssetNameAr
-		savedLines = append(savedLines, *savedLine)
+		for _, line := range linesToCreate {
+			line.RunID = savedRun.ID
+			savedLine, err := s.repo.CreateDepreciationLine(txCtx, line)
+			if err != nil {
+				return fmt.Errorf("failed to create depreciation line: %w", err)
+			}
+			savedLine.AssetNameEn = line.AssetNameEn
+			savedLine.AssetNameAr = line.AssetNameAr
+			savedLines = append(savedLines, *savedLine)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 
 	return savedRun, savedLines, nil
 }
 
 func (s *FixedAssetsService) PostDepreciationRun(ctx context.Context, runID uuid.UUID, approvedBy *uuid.UUID) (*domain.DepreciationRun, error) {
-	run, err := s.repo.GetDepreciationRunByID(ctx, runID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch depreciation run: %w", err)
-	}
-	if run.Status == "POSTED" {
-		return run, nil
-	}
-
-	lines, err := s.repo.ListDepreciationLinesByRun(ctx, runID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch depreciation lines: %w", err)
-	}
-
-	// Update each asset's NBV, accumulated depreciation, and schedule
-	for _, line := range lines {
-		_, err := s.repo.UpdateFixedAssetBookValue(ctx, line.AssetID, line.NetBookValueAfter, line.AccumulatedAfter)
+	var postedRun *domain.DepreciationRun
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		run, err := s.repo.GetDepreciationRunByID(txCtx, runID)
 		if err != nil {
-			return nil, fmt.Errorf("failed updating asset %s book value: %w", line.AssetID, err)
+			return fmt.Errorf("failed to fetch depreciation run: %w", err)
+		}
+		if run.Status == "POSTED" {
+			postedRun = run
+			return nil
 		}
 
-		_ = s.repo.MarkSchedulePosted(ctx, line.AssetID, run.BookID, run.ID, run.PeriodYear, run.PeriodMonth)
-	}
+		lines, err := s.repo.ListDepreciationLinesByRun(txCtx, runID)
+		if err != nil {
+			return fmt.Errorf("failed to fetch depreciation lines: %w", err)
+		}
+		for _, line := range lines {
+			if _, err := s.repo.UpdateFixedAssetBookValue(txCtx, line.AssetID, line.NetBookValueAfter, line.AccumulatedAfter); err != nil {
+				return fmt.Errorf("failed updating asset %s book value: %w", line.AssetID, err)
+			}
+			if err := s.repo.MarkSchedulePosted(txCtx, line.AssetID, run.BookID, run.ID, run.PeriodYear, run.PeriodMonth); err != nil {
+				return fmt.Errorf("failed marking asset %s schedule as posted: %w", line.AssetID, err)
+			}
+		}
 
-	// Update run status to POSTED
-	postedRun, err := s.repo.UpdateDepreciationRunStatus(ctx, runID, "POSTED", nil, approvedBy)
-	if err != nil {
-		return nil, fmt.Errorf("failed updating depreciation run status to POSTED: %w", err)
-	}
-
-	return postedRun, nil
+		postedRun, err = s.repo.UpdateDepreciationRunStatus(txCtx, runID, "POSTED", nil, approvedBy)
+		if err != nil {
+			return fmt.Errorf("failed updating depreciation run status to POSTED: %w", err)
+		}
+		return nil
+	})
+	return postedRun, err
 }
 
 func (s *FixedAssetsService) GetDepreciationRun(ctx context.Context, runID uuid.UUID) (*domain.DepreciationRun, []domain.DepreciationLine, error) {
@@ -289,21 +312,23 @@ func (s *FixedAssetsService) TransferAsset(ctx context.Context, transfer domain.
 	}
 	transfer.Status = "COMPLETED"
 
-	saved, err := s.repo.CreateAssetTransfer(ctx, transfer)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create asset transfer: %w", err)
-	}
-
-	// Update asset location
-	_, err = s.repo.UpdateFixedAssetLocation(ctx, transfer.AssetID, transfer.ToLocationID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update asset location: %w", err)
-	}
-
-	// Reassign custodian if changed
-	if transfer.ToEmployeeID != nil {
-		_ = s.repo.EndAssetAssignment(ctx, transfer.AssetID, transfer.TransferDate)
-		_, _ = s.repo.CreateAssetAssignment(ctx, domain.AssetAssignment{
+	var saved *domain.Transfer
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		saved, err = s.repo.CreateAssetTransfer(txCtx, transfer)
+		if err != nil {
+			return fmt.Errorf("failed to create asset transfer: %w", err)
+		}
+		if _, err = s.repo.UpdateFixedAssetLocation(txCtx, transfer.AssetID, transfer.ToLocationID); err != nil {
+			return fmt.Errorf("failed to update asset location: %w", err)
+		}
+		if transfer.ToEmployeeID == nil {
+			return nil
+		}
+		if err := s.repo.EndAssetAssignment(txCtx, transfer.AssetID, transfer.TransferDate); err != nil {
+			return fmt.Errorf("failed to end current asset assignment: %w", err)
+		}
+		if _, err := s.repo.CreateAssetAssignment(txCtx, domain.AssetAssignment{
 			ID:             uuid.New(),
 			AssetID:        transfer.AssetID,
 			AssignedToType: "EMPLOYEE",
@@ -311,10 +336,12 @@ func (s *FixedAssetsService) TransferAsset(ctx context.Context, transfer domain.
 			AssignedDate:   transfer.TransferDate,
 			Notes:          "Transferred via " + transfer.TransferNumber,
 			IsCurrent:      true,
-		})
-	}
-
-	return saved, nil
+		}); err != nil {
+			return fmt.Errorf("failed to create transferred asset assignment: %w", err)
+		}
+		return nil
+	})
+	return saved, err
 }
 
 func (s *FixedAssetsService) ListTransfers(ctx context.Context, legalEntityID uuid.UUID) ([]domain.Transfer, error) {
@@ -322,37 +349,38 @@ func (s *FixedAssetsService) ListTransfers(ctx context.Context, legalEntityID uu
 }
 
 func (s *FixedAssetsService) DisposeAsset(ctx context.Context, disposal domain.Disposal) (*domain.Disposal, error) {
-	asset, err := s.repo.GetFixedAssetByID(ctx, disposal.AssetID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch asset for disposal: %w", err)
-	}
+	var saved *domain.Disposal
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		asset, err := s.repo.GetFixedAssetByID(txCtx, disposal.AssetID)
+		if err != nil {
+			return fmt.Errorf("failed to fetch asset for disposal: %w", err)
+		}
 
-	if disposal.DisposalNumber == "" {
-		disposal.DisposalNumber = identifiers.NewDocumentNumber("DISP", time.Now())
-	}
-	if disposal.DisposalDate.IsZero() {
-		disposal.DisposalDate = time.Now()
-	}
+		if disposal.DisposalNumber == "" {
+			disposal.DisposalNumber = identifiers.NewDocumentNumber("DISP", time.Now())
+		}
+		if disposal.DisposalDate.IsZero() {
+			disposal.DisposalDate = time.Now()
+		}
+		disposal.CostAtDisposal = asset.AcquisitionCost
+		disposal.AccumulatedDepreciationAtDisposal = asset.AccumulatedDepreciation
+		disposal.NetBookValueAtDisposal = asset.CurrentNetBookValue
+		disposal.GainOrLossAmount = disposal.ProceedsAmount.Sub(asset.CurrentNetBookValue)
+		disposal.Status = "POSTED"
 
-	disposal.CostAtDisposal = asset.AcquisitionCost
-	disposal.AccumulatedDepreciationAtDisposal = asset.AccumulatedDepreciation
-	disposal.NetBookValueAtDisposal = asset.CurrentNetBookValue
-	disposal.GainOrLossAmount = disposal.ProceedsAmount.Sub(asset.CurrentNetBookValue)
-	disposal.Status = "POSTED"
-
-	saved, err := s.repo.CreateAssetDisposal(ctx, disposal)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create asset disposal: %w", err)
-	}
-
-	// Update asset book value and set status to DISPOSED
-	_, _ = s.repo.UpdateFixedAssetBookValue(ctx, asset.ID, decimal.Zero, asset.AccumulatedDepreciation)
-	_, err = s.repo.UpdateFixedAssetStatus(ctx, asset.ID, "DISPOSED")
-	if err != nil {
-		return nil, fmt.Errorf("failed to update asset status to DISPOSED: %w", err)
-	}
-
-	return saved, nil
+		saved, err = s.repo.CreateAssetDisposal(txCtx, disposal)
+		if err != nil {
+			return fmt.Errorf("failed to create asset disposal: %w", err)
+		}
+		if _, err = s.repo.UpdateFixedAssetBookValue(txCtx, asset.ID, decimal.Zero, asset.AccumulatedDepreciation); err != nil {
+			return fmt.Errorf("failed to clear disposed asset book value: %w", err)
+		}
+		if _, err = s.repo.UpdateFixedAssetStatus(txCtx, asset.ID, "DISPOSED"); err != nil {
+			return fmt.Errorf("failed to update asset status to DISPOSED: %w", err)
+		}
+		return nil
+	})
+	return saved, err
 }
 
 // ----------------------------------------------------------------------

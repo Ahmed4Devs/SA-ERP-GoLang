@@ -16,14 +16,14 @@ import (
 
 type Repository struct {
 	db *database.DB
-	q  *sqlc.Queries
 }
 
 func NewRepository(db *database.DB) ports.Repository {
-	return &Repository{
-		db: db,
-		q:  sqlc.New(db.Pool),
-	}
+	return &Repository{db: db}
+}
+
+func (r *Repository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 // ----------------------------------------------------------------------
@@ -35,7 +35,7 @@ func (r *Repository) CreateAssetCategory(ctx context.Context, cat domain.AssetCa
 		cat.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateAssetCategory(ctx, sqlc.CreateAssetCategoryParams{
+	row, err := r.queries(ctx).CreateAssetCategory(ctx, sqlc.CreateAssetCategoryParams{
 		ID:                               toPgUUID(cat.ID),
 		LegalEntityID:                    toPgUUID(cat.LegalEntityID),
 		Code:                             cat.Code,
@@ -76,7 +76,7 @@ func (r *Repository) CreateAssetCategory(ctx context.Context, cat domain.AssetCa
 }
 
 func (r *Repository) ListAssetCategories(ctx context.Context, legalEntityID uuid.UUID) ([]domain.AssetCategory, error) {
-	rows, err := r.q.ListAssetCategories(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListAssetCategories(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list asset categories: %w", err)
 	}
@@ -106,7 +106,7 @@ func (r *Repository) ListAssetCategories(ctx context.Context, legalEntityID uuid
 }
 
 func (r *Repository) GetAssetCategoryByID(ctx context.Context, id uuid.UUID) (*domain.AssetCategory, error) {
-	row, err := r.q.GetAssetCategoryByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetAssetCategoryByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get asset category by id: %w", err)
 	}
@@ -136,7 +136,7 @@ func (r *Repository) CreateAssetLocation(ctx context.Context, loc domain.AssetLo
 		loc.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateAssetLocation(ctx, sqlc.CreateAssetLocationParams{
+	row, err := r.queries(ctx).CreateAssetLocation(ctx, sqlc.CreateAssetLocationParams{
 		ID:            toPgUUID(loc.ID),
 		LegalEntityID: toPgUUID(loc.LegalEntityID),
 		Code:          loc.Code,
@@ -166,7 +166,7 @@ func (r *Repository) CreateAssetLocation(ctx context.Context, loc domain.AssetLo
 }
 
 func (r *Repository) ListAssetLocations(ctx context.Context, legalEntityID uuid.UUID) ([]domain.AssetLocation, error) {
-	rows, err := r.q.ListAssetLocations(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListAssetLocations(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list asset locations: %w", err)
 	}
@@ -190,7 +190,7 @@ func (r *Repository) ListAssetLocations(ctx context.Context, legalEntityID uuid.
 }
 
 func (r *Repository) GetAssetLocationByID(ctx context.Context, id uuid.UUID) (*domain.AssetLocation, error) {
-	row, err := r.q.GetAssetLocationByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetAssetLocationByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get asset location by id: %w", err)
 	}
@@ -218,7 +218,7 @@ func (r *Repository) CreateDepreciationBook(ctx context.Context, book domain.Dep
 		book.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateDepreciationBook(ctx, sqlc.CreateDepreciationBookParams{
+	row, err := r.queries(ctx).CreateDepreciationBook(ctx, sqlc.CreateDepreciationBookParams{
 		ID:            toPgUUID(book.ID),
 		LegalEntityID: toPgUUID(book.LegalEntityID),
 		Code:          book.Code,
@@ -242,7 +242,7 @@ func (r *Repository) CreateDepreciationBook(ctx context.Context, book domain.Dep
 }
 
 func (r *Repository) ListDepreciationBooks(ctx context.Context, legalEntityID uuid.UUID) ([]domain.DepreciationBook, error) {
-	rows, err := r.q.ListDepreciationBooks(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListDepreciationBooks(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list depreciation books: %w", err)
 	}
@@ -263,7 +263,7 @@ func (r *Repository) ListDepreciationBooks(ctx context.Context, legalEntityID uu
 }
 
 func (r *Repository) GetDepreciationBookByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.DepreciationBook, error) {
-	row, err := r.q.GetDepreciationBookByCode(ctx, sqlc.GetDepreciationBookByCodeParams{
+	row, err := r.queries(ctx).GetDepreciationBookByCode(ctx, sqlc.GetDepreciationBookByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Code:          code,
 	})
@@ -291,7 +291,7 @@ func (r *Repository) CreateFixedAsset(ctx context.Context, asset domain.Asset) (
 		asset.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateFixedAsset(ctx, sqlc.CreateFixedAssetParams{
+	row, err := r.queries(ctx).CreateFixedAsset(ctx, sqlc.CreateFixedAssetParams{
 		ID:                      toPgUUID(asset.ID),
 		LegalEntityID:           toPgUUID(asset.LegalEntityID),
 		CategoryID:              toPgUUID(asset.CategoryID),
@@ -350,7 +350,7 @@ func (r *Repository) CreateFixedAsset(ctx context.Context, asset domain.Asset) (
 }
 
 func (r *Repository) GetFixedAssetByID(ctx context.Context, id uuid.UUID) (*domain.Asset, error) {
-	row, err := r.q.GetFixedAssetByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetFixedAssetByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get fixed asset by id: %w", err)
 	}
@@ -394,7 +394,7 @@ func (r *Repository) GetFixedAssetByID(ctx context.Context, id uuid.UUID) (*doma
 }
 
 func (r *Repository) GetFixedAssetByNumber(ctx context.Context, legalEntityID uuid.UUID, assetNumber string) (*domain.Asset, error) {
-	row, err := r.q.GetFixedAssetByNumber(ctx, sqlc.GetFixedAssetByNumberParams{
+	row, err := r.queries(ctx).GetFixedAssetByNumber(ctx, sqlc.GetFixedAssetByNumberParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		AssetNumber:   assetNumber,
 	})
@@ -441,7 +441,7 @@ func (r *Repository) GetFixedAssetByNumber(ctx context.Context, legalEntityID uu
 }
 
 func (r *Repository) ListFixedAssets(ctx context.Context, legalEntityID uuid.UUID) ([]domain.Asset, error) {
-	rows, err := r.q.ListFixedAssets(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListFixedAssets(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list fixed assets: %w", err)
 	}
@@ -486,7 +486,7 @@ func (r *Repository) ListFixedAssets(ctx context.Context, legalEntityID uuid.UUI
 }
 
 func (r *Repository) ListActiveFixedAssets(ctx context.Context, legalEntityID uuid.UUID) ([]domain.Asset, error) {
-	rows, err := r.q.ListActiveFixedAssets(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListActiveFixedAssets(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list active fixed assets: %w", err)
 	}
@@ -534,7 +534,7 @@ func (r *Repository) ListActiveFixedAssets(ctx context.Context, legalEntityID uu
 }
 
 func (r *Repository) UpdateFixedAssetStatus(ctx context.Context, id uuid.UUID, status string) (*domain.Asset, error) {
-	row, err := r.q.UpdateFixedAssetStatus(ctx, sqlc.UpdateFixedAssetStatusParams{
+	row, err := r.queries(ctx).UpdateFixedAssetStatus(ctx, sqlc.UpdateFixedAssetStatusParams{
 		ID:     toPgUUID(id),
 		Status: status,
 	})
@@ -570,7 +570,7 @@ func (r *Repository) UpdateFixedAssetStatus(ctx context.Context, id uuid.UUID, s
 }
 
 func (r *Repository) UpdateFixedAssetBookValue(ctx context.Context, id uuid.UUID, currentNBV, accumulatedDepr decimal.Decimal) (*domain.Asset, error) {
-	row, err := r.q.UpdateFixedAssetBookValue(ctx, sqlc.UpdateFixedAssetBookValueParams{
+	row, err := r.queries(ctx).UpdateFixedAssetBookValue(ctx, sqlc.UpdateFixedAssetBookValueParams{
 		ID:                      toPgUUID(id),
 		CurrentNetBookValue:     toPgNumeric(currentNBV),
 		AccumulatedDepreciation: toPgNumeric(accumulatedDepr),
@@ -607,7 +607,7 @@ func (r *Repository) UpdateFixedAssetBookValue(ctx context.Context, id uuid.UUID
 }
 
 func (r *Repository) UpdateFixedAssetLocation(ctx context.Context, id, locationID uuid.UUID) (*domain.Asset, error) {
-	row, err := r.q.UpdateFixedAssetLocation(ctx, sqlc.UpdateFixedAssetLocationParams{
+	row, err := r.queries(ctx).UpdateFixedAssetLocation(ctx, sqlc.UpdateFixedAssetLocationParams{
 		ID:         toPgUUID(id),
 		LocationID: toPgUUID(locationID),
 	})
@@ -631,7 +631,7 @@ func (r *Repository) CreateAssetAssignment(ctx context.Context, assignment domai
 		assignment.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateAssetAssignment(ctx, sqlc.CreateAssetAssignmentParams{
+	row, err := r.queries(ctx).CreateAssetAssignment(ctx, sqlc.CreateAssetAssignmentParams{
 		ID:             toPgUUID(assignment.ID),
 		AssetID:        toPgUUID(assignment.AssetID),
 		AssignedToType: assignment.AssignedToType,
@@ -661,7 +661,7 @@ func (r *Repository) CreateAssetAssignment(ctx context.Context, assignment domai
 }
 
 func (r *Repository) ListAssignmentsByAsset(ctx context.Context, assetID uuid.UUID) ([]domain.AssetAssignment, error) {
-	rows, err := r.q.ListAssignmentsByAsset(ctx, toPgUUID(assetID))
+	rows, err := r.queries(ctx).ListAssignmentsByAsset(ctx, toPgUUID(assetID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list assignments by asset: %w", err)
 	}
@@ -690,7 +690,7 @@ func (r *Repository) ListAssignmentsByAsset(ctx context.Context, assetID uuid.UU
 }
 
 func (r *Repository) EndAssetAssignment(ctx context.Context, assetID uuid.UUID, returnDate time.Time) error {
-	return r.q.EndAssetAssignment(ctx, sqlc.EndAssetAssignmentParams{
+	return r.queries(ctx).EndAssetAssignment(ctx, sqlc.EndAssetAssignmentParams{
 		AssetID:    toPgUUID(assetID),
 		ReturnDate: toPgDate(returnDate),
 	})
@@ -705,7 +705,7 @@ func (r *Repository) CreateDepreciationSchedule(ctx context.Context, sched domai
 		sched.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateDepreciationSchedule(ctx, sqlc.CreateDepreciationScheduleParams{
+	row, err := r.queries(ctx).CreateDepreciationSchedule(ctx, sqlc.CreateDepreciationScheduleParams{
 		ID:                      toPgUUID(sched.ID),
 		AssetID:                 toPgUUID(sched.AssetID),
 		BookID:                  toPgUUID(sched.BookID),
@@ -739,7 +739,7 @@ func (r *Repository) CreateDepreciationSchedule(ctx context.Context, sched domai
 }
 
 func (r *Repository) ListDepreciationSchedulesByAsset(ctx context.Context, assetID, bookID uuid.UUID) ([]domain.DepreciationSchedule, error) {
-	rows, err := r.q.ListDepreciationSchedulesByAsset(ctx, sqlc.ListDepreciationSchedulesByAssetParams{
+	rows, err := r.queries(ctx).ListDepreciationSchedulesByAsset(ctx, sqlc.ListDepreciationSchedulesByAssetParams{
 		AssetID: toPgUUID(assetID),
 		BookID:  toPgUUID(bookID),
 	})
@@ -768,7 +768,7 @@ func (r *Repository) ListDepreciationSchedulesByAsset(ctx context.Context, asset
 }
 
 func (r *Repository) MarkSchedulePosted(ctx context.Context, assetID, bookID, runID uuid.UUID, year, month int) error {
-	return r.q.MarkSchedulePosted(ctx, sqlc.MarkSchedulePostedParams{
+	return r.queries(ctx).MarkSchedulePosted(ctx, sqlc.MarkSchedulePostedParams{
 		AssetID:           toPgUUID(assetID),
 		BookID:            toPgUUID(bookID),
 		DepreciationRunID: toPgUUID(runID),
@@ -786,7 +786,7 @@ func (r *Repository) CreateDepreciationRun(ctx context.Context, run domain.Depre
 		run.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateDepreciationRun(ctx, sqlc.CreateDepreciationRunParams{
+	row, err := r.queries(ctx).CreateDepreciationRun(ctx, sqlc.CreateDepreciationRunParams{
 		ID:                      toPgUUID(run.ID),
 		LegalEntityID:           toPgUUID(run.LegalEntityID),
 		BookID:                  toPgUUID(run.BookID),
@@ -824,7 +824,7 @@ func (r *Repository) CreateDepreciationRun(ctx context.Context, run domain.Depre
 }
 
 func (r *Repository) GetDepreciationRunByID(ctx context.Context, id uuid.UUID) (*domain.DepreciationRun, error) {
-	row, err := r.q.GetDepreciationRunByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetDepreciationRunByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get depreciation run by id: %w", err)
 	}
@@ -852,7 +852,7 @@ func (r *Repository) GetDepreciationRunByID(ctx context.Context, id uuid.UUID) (
 }
 
 func (r *Repository) ListDepreciationRuns(ctx context.Context, legalEntityID uuid.UUID) ([]domain.DepreciationRun, error) {
-	rows, err := r.q.ListDepreciationRuns(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListDepreciationRuns(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list depreciation runs: %w", err)
 	}
@@ -884,7 +884,7 @@ func (r *Repository) ListDepreciationRuns(ctx context.Context, legalEntityID uui
 }
 
 func (r *Repository) UpdateDepreciationRunStatus(ctx context.Context, id uuid.UUID, status string, journalEntryID, approvedBy *uuid.UUID) (*domain.DepreciationRun, error) {
-	row, err := r.q.UpdateDepreciationRunStatus(ctx, sqlc.UpdateDepreciationRunStatusParams{
+	row, err := r.queries(ctx).UpdateDepreciationRunStatus(ctx, sqlc.UpdateDepreciationRunStatusParams{
 		Status:         status,
 		JournalEntryID: toPgUUIDPtr(journalEntryID),
 		ApprovedBy:     toPgUUIDPtr(approvedBy),
@@ -918,7 +918,7 @@ func (r *Repository) CreateDepreciationLine(ctx context.Context, line domain.Dep
 		line.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateDepreciationLine(ctx, sqlc.CreateDepreciationLineParams{
+	row, err := r.queries(ctx).CreateDepreciationLine(ctx, sqlc.CreateDepreciationLineParams{
 		ID:                   toPgUUID(line.ID),
 		RunID:                toPgUUID(line.RunID),
 		AssetID:              toPgUUID(line.AssetID),
@@ -952,7 +952,7 @@ func (r *Repository) CreateDepreciationLine(ctx context.Context, line domain.Dep
 }
 
 func (r *Repository) ListDepreciationLinesByRun(ctx context.Context, runID uuid.UUID) ([]domain.DepreciationLine, error) {
-	rows, err := r.q.ListDepreciationLinesByRun(ctx, toPgUUID(runID))
+	rows, err := r.queries(ctx).ListDepreciationLinesByRun(ctx, toPgUUID(runID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list depreciation lines by run: %w", err)
 	}
@@ -988,7 +988,7 @@ func (r *Repository) CreateAssetTransfer(ctx context.Context, transfer domain.Tr
 		transfer.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateAssetTransfer(ctx, sqlc.CreateAssetTransferParams{
+	row, err := r.queries(ctx).CreateAssetTransfer(ctx, sqlc.CreateAssetTransferParams{
 		ID:             toPgUUID(transfer.ID),
 		LegalEntityID:  toPgUUID(transfer.LegalEntityID),
 		AssetID:        toPgUUID(transfer.AssetID),
@@ -1024,7 +1024,7 @@ func (r *Repository) CreateAssetTransfer(ctx context.Context, transfer domain.Tr
 }
 
 func (r *Repository) ListAssetTransfers(ctx context.Context, legalEntityID uuid.UUID) ([]domain.Transfer, error) {
-	rows, err := r.q.ListAssetTransfers(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListAssetTransfers(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list asset transfers: %w", err)
 	}
@@ -1063,7 +1063,7 @@ func (r *Repository) CreateAssetImpairment(ctx context.Context, impairment domai
 		impairment.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateAssetImpairment(ctx, sqlc.CreateAssetImpairmentParams{
+	row, err := r.queries(ctx).CreateAssetImpairment(ctx, sqlc.CreateAssetImpairmentParams{
 		ID:                   toPgUUID(impairment.ID),
 		LegalEntityID:        toPgUUID(impairment.LegalEntityID),
 		AssetID:              toPgUUID(impairment.AssetID),
@@ -1105,7 +1105,7 @@ func (r *Repository) CreateAssetDisposal(ctx context.Context, disposal domain.Di
 		disposal.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateAssetDisposal(ctx, sqlc.CreateAssetDisposalParams{
+	row, err := r.queries(ctx).CreateAssetDisposal(ctx, sqlc.CreateAssetDisposalParams{
 		ID:                                toPgUUID(disposal.ID),
 		LegalEntityID:                     toPgUUID(disposal.LegalEntityID),
 		AssetID:                           toPgUUID(disposal.AssetID),
@@ -1149,7 +1149,7 @@ func (r *Repository) CreateAssetDisposal(ctx context.Context, disposal domain.Di
 }
 
 func (r *Repository) GetAssetDisposalByID(ctx context.Context, id uuid.UUID) (*domain.Disposal, error) {
-	row, err := r.q.GetAssetDisposalByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetAssetDisposalByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get asset disposal by id: %w", err)
 	}

@@ -15,18 +15,18 @@ import (
 
 type Repository struct {
 	db *database.DB
-	q  *sqlc.Queries
 }
 
 func NewRepository(db *database.DB) *Repository {
-	return &Repository{
-		db: db,
-		q:  sqlc.New(db.Pool),
-	}
+	return &Repository{db: db}
+}
+
+func (r *Repository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 func (r *Repository) GetBudgetByID(ctx context.Context, id, legalEntityID uuid.UUID) (*domain.Budget, error) {
-	row, err := r.q.GetBudgetByID(ctx, sqlc.GetBudgetByIDParams{
+	row, err := r.queries(ctx).GetBudgetByID(ctx, sqlc.GetBudgetByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -37,7 +37,7 @@ func (r *Repository) GetBudgetByID(ctx context.Context, id, legalEntityID uuid.U
 }
 
 func (r *Repository) GetBudgetByCode(ctx context.Context, code string, legalEntityID uuid.UUID) (*domain.Budget, error) {
-	row, err := r.q.GetBudgetByCode(ctx, sqlc.GetBudgetByCodeParams{
+	row, err := r.queries(ctx).GetBudgetByCode(ctx, sqlc.GetBudgetByCodeParams{
 		Code:          code,
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -48,7 +48,7 @@ func (r *Repository) GetBudgetByCode(ctx context.Context, code string, legalEnti
 }
 
 func (r *Repository) ListBudgets(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.Budget, error) {
-	rows, err := r.q.ListBudgets(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListBudgets(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (r *Repository) ListBudgets(ctx context.Context, legalEntityID uuid.UUID) (
 }
 
 func (r *Repository) CreateBudget(ctx context.Context, b *domain.Budget) (*domain.Budget, error) {
-	row, err := r.q.CreateBudget(ctx, sqlc.CreateBudgetParams{
+	row, err := r.queries(ctx).CreateBudget(ctx, sqlc.CreateBudgetParams{
 		ID:                   toPgUUID(b.ID),
 		LegalEntityID:        toPgUUID(b.LegalEntityID),
 		Code:                 b.Code,
@@ -88,7 +88,7 @@ func (r *Repository) UpdateBudgetStatus(ctx context.Context, id, legalEntityID u
 	if approvedAt != nil {
 		appAt = *approvedAt
 	}
-	row, err := r.q.UpdateBudgetStatus(ctx, sqlc.UpdateBudgetStatusParams{
+	row, err := r.queries(ctx).UpdateBudgetStatus(ctx, sqlc.UpdateBudgetStatusParams{
 		ID:               toPgUUID(id),
 		LegalEntityID:    toPgUUID(legalEntityID),
 		Status:           string(status),
@@ -102,7 +102,7 @@ func (r *Repository) UpdateBudgetStatus(ctx context.Context, id, legalEntityID u
 }
 
 func (r *Repository) UpdateBudgetTotals(ctx context.Context, id, legalEntityID uuid.UUID, budgeted, actual, committed decimal.Decimal) (*domain.Budget, error) {
-	row, err := r.q.UpdateBudgetTotals(ctx, sqlc.UpdateBudgetTotalsParams{
+	row, err := r.queries(ctx).UpdateBudgetTotals(ctx, sqlc.UpdateBudgetTotalsParams{
 		ID:                   toPgUUID(id),
 		LegalEntityID:        toPgUUID(legalEntityID),
 		TotalBudgetedAmount:  toPgNumeric(budgeted),
@@ -116,14 +116,14 @@ func (r *Repository) UpdateBudgetTotals(ctx context.Context, id, legalEntityID u
 }
 
 func (r *Repository) DeleteBudget(ctx context.Context, id, legalEntityID uuid.UUID) error {
-	return r.q.DeleteBudget(ctx, sqlc.DeleteBudgetParams{
+	return r.queries(ctx).DeleteBudget(ctx, sqlc.DeleteBudgetParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
 }
 
 func (r *Repository) GetBudgetVersions(ctx context.Context, budgetID uuid.UUID) ([]*domain.BudgetVersion, error) {
-	rows, err := r.q.GetBudgetVersions(ctx, toPgUUID(budgetID))
+	rows, err := r.queries(ctx).GetBudgetVersions(ctx, toPgUUID(budgetID))
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (r *Repository) GetBudgetVersions(ctx context.Context, budgetID uuid.UUID) 
 }
 
 func (r *Repository) GetBudgetVersionByID(ctx context.Context, id uuid.UUID) (*domain.BudgetVersion, error) {
-	row, err := r.q.GetBudgetVersionByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetBudgetVersionByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (r *Repository) GetBudgetVersionByID(ctx context.Context, id uuid.UUID) (*d
 }
 
 func (r *Repository) GetActiveBudgetVersion(ctx context.Context, budgetID uuid.UUID) (*domain.BudgetVersion, error) {
-	row, err := r.q.GetActiveBudgetVersion(ctx, toPgUUID(budgetID))
+	row, err := r.queries(ctx).GetActiveBudgetVersion(ctx, toPgUUID(budgetID))
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (r *Repository) GetActiveBudgetVersion(ctx context.Context, budgetID uuid.U
 }
 
 func (r *Repository) CreateBudgetVersion(ctx context.Context, v *domain.BudgetVersion) (*domain.BudgetVersion, error) {
-	row, err := r.q.CreateBudgetVersion(ctx, sqlc.CreateBudgetVersionParams{
+	row, err := r.queries(ctx).CreateBudgetVersion(ctx, sqlc.CreateBudgetVersionParams{
 		ID:              toPgUUID(v.ID),
 		BudgetID:        toPgUUID(v.BudgetID),
 		VersionNumber:   v.VersionNumber,
@@ -171,7 +171,7 @@ func (r *Repository) UpdateBudgetVersionStatus(ctx context.Context, id uuid.UUID
 	if approvedAt != nil {
 		appAt = *approvedAt
 	}
-	row, err := r.q.UpdateBudgetVersionStatus(ctx, sqlc.UpdateBudgetVersionStatusParams{
+	row, err := r.queries(ctx).UpdateBudgetVersionStatus(ctx, sqlc.UpdateBudgetVersionStatusParams{
 		ID:               toPgUUID(id),
 		Status:           string(status),
 		ApprovedByUserID: toPgUUIDPtr(approverID),
@@ -184,7 +184,7 @@ func (r *Repository) UpdateBudgetVersionStatus(ctx context.Context, id uuid.UUID
 }
 
 func (r *Repository) ListBudgetLines(ctx context.Context, versionID uuid.UUID) ([]*domain.BudgetLine, error) {
-	rows, err := r.q.ListBudgetLines(ctx, toPgUUID(versionID))
+	rows, err := r.queries(ctx).ListBudgetLines(ctx, toPgUUID(versionID))
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +196,7 @@ func (r *Repository) ListBudgetLines(ctx context.Context, versionID uuid.UUID) (
 }
 
 func (r *Repository) GetBudgetLineByID(ctx context.Context, id uuid.UUID) (*domain.BudgetLine, error) {
-	row, err := r.q.GetBudgetLineByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetBudgetLineByID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func (r *Repository) GetBudgetLineByID(ctx context.Context, id uuid.UUID) (*doma
 }
 
 func (r *Repository) CreateBudgetLine(ctx context.Context, l *domain.BudgetLine) (*domain.BudgetLine, error) {
-	row, err := r.q.CreateBudgetLine(ctx, sqlc.CreateBudgetLineParams{
+	row, err := r.queries(ctx).CreateBudgetLine(ctx, sqlc.CreateBudgetLineParams{
 		ID:                toPgUUID(l.ID),
 		BudgetVersionID:   toPgUUID(l.BudgetVersionID),
 		AccountID:         toPgUUID(l.AccountID),
@@ -225,7 +225,7 @@ func (r *Repository) CreateBudgetLine(ctx context.Context, l *domain.BudgetLine)
 }
 
 func (r *Repository) UpdateBudgetLine(ctx context.Context, l *domain.BudgetLine) (*domain.BudgetLine, error) {
-	row, err := r.q.UpdateBudgetLine(ctx, sqlc.UpdateBudgetLineParams{
+	row, err := r.queries(ctx).UpdateBudgetLine(ctx, sqlc.UpdateBudgetLineParams{
 		ID:                toPgUUID(l.ID),
 		Amount:            toPgNumeric(l.Amount),
 		ActualAmount:      toPgNumeric(l.ActualAmount),
@@ -240,11 +240,11 @@ func (r *Repository) UpdateBudgetLine(ctx context.Context, l *domain.BudgetLine)
 }
 
 func (r *Repository) DeleteBudgetLine(ctx context.Context, id uuid.UUID) error {
-	return r.q.DeleteBudgetLine(ctx, toPgUUID(id))
+	return r.queries(ctx).DeleteBudgetLine(ctx, toPgUUID(id))
 }
 
 func (r *Repository) RecalculateBudgetTotals(ctx context.Context, budgetID, legalEntityID uuid.UUID, versionID uuid.UUID) error {
-	totals, err := r.q.SumBudgetLinesByVersion(ctx, toPgUUID(versionID))
+	totals, err := r.queries(ctx).SumBudgetLinesByVersion(ctx, toPgUUID(versionID))
 	if err != nil {
 		return err
 	}
@@ -258,7 +258,7 @@ func (r *Repository) RecalculateBudgetTotals(ctx context.Context, budgetID, lega
 }
 
 func (r *Repository) CreateBudgetTransfer(ctx context.Context, t *domain.BudgetTransfer) (*domain.BudgetTransfer, error) {
-	row, err := r.q.CreateBudgetTransfer(ctx, sqlc.CreateBudgetTransferParams{
+	row, err := r.queries(ctx).CreateBudgetTransfer(ctx, sqlc.CreateBudgetTransferParams{
 		ID:                  toPgUUID(t.ID),
 		LegalEntityID:       toPgUUID(t.LegalEntityID),
 		TransferNumber:      t.TransferNumber,
@@ -276,7 +276,7 @@ func (r *Repository) CreateBudgetTransfer(ctx context.Context, t *domain.BudgetT
 }
 
 func (r *Repository) ListBudgetTransfers(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.BudgetTransfer, error) {
-	rows, err := r.q.ListBudgetTransfers(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListBudgetTransfers(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}

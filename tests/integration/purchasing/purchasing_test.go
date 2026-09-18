@@ -354,6 +354,82 @@ func TestPurchaseOrder_CreationAndApproval(t *testing.T) {
 	}
 }
 
+func TestPurchaseOrder_RollsBackPRQuantityWhenLineInsertFails(t *testing.T) {
+	purchMod, _, db, leID, adminID, suppID, itemID, whID, ctx := setupPurchasingTest(t)
+	defer db.Close()
+
+	pr, err := purchMod.PurchasingService.CreatePurchaseRequest(ctx, ports.CreatePRCmd{
+		LegalEntityID:     leID,
+		RequestedByUserID: adminID,
+		RequestDate:       time.Now(),
+		CurrencyCode:      "SAR",
+		Lines: []ports.CreatePRLineCmd{{
+			ItemID:            &itemID,
+			Description:       "Rollback purchase request line",
+			UOM:               "EA",
+			Quantity:          decimal.NewFromInt(10),
+			EstimatedUnitCost: decimal.NewFromInt(5),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("failed to create purchase request: %v", err)
+	}
+
+	var poCountBefore int
+	if err := db.Pool.QueryRow(ctx,
+		"SELECT COUNT(*) FROM purchasing.purchase_orders WHERE legal_entity_id = $1",
+		leID,
+	).Scan(&poCountBefore); err != nil {
+		t.Fatalf("failed to count purchase orders: %v", err)
+	}
+
+	_, err = purchMod.PurchasingService.CreatePurchaseOrder(ctx, ports.CreatePOCmd{
+		LegalEntityID:       leID,
+		SupplierID:          suppID,
+		OrderDate:           time.Now(),
+		DeliveryWarehouseID: &whID,
+		CurrencyCode:        "SAR",
+		ExchangeRate:        decimal.NewFromInt(1),
+		CreatedByUserID:     &adminID,
+		Lines: []ports.CreatePOLineCmd{{
+			PRLineID:        &pr.Lines[0].ID,
+			ItemID:          uuid.New(), // Forces the PO line foreign-key failure.
+			Description:     "Invalid item rollback test",
+			UOM:             "EA",
+			Quantity:        decimal.NewFromInt(3),
+			UnitPrice:       decimal.NewFromInt(5),
+			TaxCode:         "VAT-15",
+			TaxRatePercent:  decimal.NewFromInt(15),
+			DiscountPercent: decimal.Zero,
+		}},
+	})
+	if err == nil {
+		t.Fatal("expected purchase-order line foreign-key failure")
+	}
+
+	var ordered decimal.Decimal
+	if err := db.Pool.QueryRow(ctx,
+		"SELECT ordered_quantity FROM purchasing.purchase_request_lines WHERE id = $1",
+		pr.Lines[0].ID,
+	).Scan(&ordered); err != nil {
+		t.Fatalf("failed to load purchase-request quantity: %v", err)
+	}
+	if !ordered.IsZero() {
+		t.Fatalf("expected ordered quantity rollback to zero, got %s", ordered)
+	}
+
+	var poCountAfter int
+	if err := db.Pool.QueryRow(ctx,
+		"SELECT COUNT(*) FROM purchasing.purchase_orders WHERE legal_entity_id = $1",
+		leID,
+	).Scan(&poCountAfter); err != nil {
+		t.Fatalf("failed to recount purchase orders: %v", err)
+	}
+	if poCountAfter != poCountBefore {
+		t.Fatalf("expected purchase-order header rollback: before=%d after=%d", poCountBefore, poCountAfter)
+	}
+}
+
 func TestGoodsReceipt_InspectionAndStockIncrement(t *testing.T) {
 	purchMod, _, db, leID, adminID, suppID, itemID, whID, ctx := setupPurchasingTest(t)
 	defer db.Close()

@@ -408,3 +408,61 @@ func TestBudget_HTTPTransport(t *testing.T) {
 		t.Fatalf("expected summary status 200, got %d: %s", wSum.Code, wSum.Body.String())
 	}
 }
+
+func TestBudget_CreateRollsBackWhenInitialVersionFails(t *testing.T) {
+	bMod, _, db, leID, fyID, adminID, ctx := setupBudgetingTest(t)
+	defer db.Close()
+
+	_, err := db.Pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION budgeting.fail_test_initial_version()
+		RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+			IF EXISTS (
+				SELECT 1 FROM budgeting.budgets
+				WHERE id = NEW.budget_id AND code LIKE 'ROLLBACK-BUD-%'
+			) THEN
+				RAISE EXCEPTION 'forced initial version failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$;
+		DROP TRIGGER IF EXISTS trg_fail_test_initial_version ON budgeting.budget_versions;
+		CREATE TRIGGER trg_fail_test_initial_version
+		BEFORE INSERT ON budgeting.budget_versions
+		FOR EACH ROW EXECUTE FUNCTION budgeting.fail_test_initial_version();
+	`)
+	if err != nil {
+		t.Fatalf("failed to install rollback test trigger: %v", err)
+	}
+	defer func() {
+		_, _ = db.Pool.Exec(ctx, `
+			DROP TRIGGER IF EXISTS trg_fail_test_initial_version ON budgeting.budget_versions;
+			DROP FUNCTION IF EXISTS budgeting.fail_test_initial_version();
+		`)
+	}()
+
+	code := "ROLLBACK-BUD-" + uuid.New().String()[:8]
+	_, err = bMod.Service.CreateBudget(ctx, ports.CreateBudgetRequest{
+		LegalEntityID: leID,
+		Code:          code,
+		NameEn:        "Rollback budget",
+		NameAr:        "ميزانية اختبار التراجع",
+		FiscalYearID:  fyID,
+		CurrencyCode:  "SAR",
+		CreatedBy:     &adminID,
+	})
+	if err == nil {
+		t.Fatal("expected forced budget-version failure")
+	}
+
+	var count int
+	if err := db.Pool.QueryRow(ctx,
+		"SELECT COUNT(*) FROM budgeting.budgets WHERE legal_entity_id = $1 AND code = $2",
+		leID, code,
+	).Scan(&count); err != nil {
+		t.Fatalf("failed to verify budget rollback: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected budget header rollback, found %d rows", count)
+	}
+}

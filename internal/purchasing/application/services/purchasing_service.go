@@ -81,7 +81,13 @@ func (s *purchasingService) CreatePurchaseRequest(ctx context.Context, cmd ports
 		})
 	}
 
-	return s.repo.CreatePurchaseRequest(ctx, pr)
+	var created *domain.PurchaseRequest
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		created, err = s.repo.CreatePurchaseRequest(txCtx, pr)
+		return err
+	})
+	return created, err
 }
 
 func (s *purchasingService) GetPurchaseRequest(ctx context.Context, id uuid.UUID) (*domain.PurchaseRequest, error) {
@@ -147,7 +153,13 @@ func (s *purchasingService) CreateRFQ(ctx context.Context, cmd ports.CreateRFQCm
 		})
 	}
 
-	return s.repo.CreateRFQ(ctx, rfq)
+	var created *domain.RFQ
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		created, err = s.repo.CreateRFQ(txCtx, rfq)
+		return err
+	})
+	return created, err
 }
 
 func (s *purchasingService) GetRFQ(ctx context.Context, id uuid.UUID) (*domain.RFQ, error) {
@@ -215,7 +227,13 @@ func (s *purchasingService) RecordSupplierQuote(ctx context.Context, cmd ports.R
 		})
 	}
 
-	return s.repo.CreateSupplierQuote(ctx, quote)
+	var created *domain.SupplierQuote
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		created, err = s.repo.CreateSupplierQuote(txCtx, quote)
+		return err
+	})
+	return created, err
 }
 
 func (s *purchasingService) GetSupplierQuote(ctx context.Context, id uuid.UUID) (*domain.SupplierQuote, error) {
@@ -230,16 +248,21 @@ func (s *purchasingService) ListSupplierQuotes(ctx context.Context, legalEntityI
 }
 
 func (s *purchasingService) AwardSupplierQuote(ctx context.Context, quoteID uuid.UUID) (*domain.SupplierQuote, error) {
-	quote, err := s.repo.GetSupplierQuote(ctx, quoteID)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, line := range quote.Lines {
-		_ = s.repo.AwardSupplierQuoteLine(ctx, line.ID, true)
-	}
-
-	return s.repo.UpdateSupplierQuoteStatus(ctx, quoteID, domain.QuoteStatusAccepted)
+	var awarded *domain.SupplierQuote
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		quote, err := s.repo.GetSupplierQuote(txCtx, quoteID)
+		if err != nil {
+			return err
+		}
+		for _, line := range quote.Lines {
+			if err := s.repo.AwardSupplierQuoteLine(txCtx, line.ID, true); err != nil {
+				return fmt.Errorf("failed to award supplier quote line %s: %w", line.ID, err)
+			}
+		}
+		awarded, err = s.repo.UpdateSupplierQuoteStatus(txCtx, quoteID, domain.QuoteStatusAccepted)
+		return err
+	})
+	return awarded, err
 }
 
 // ----------------------------------------------------------------------------
@@ -323,13 +346,22 @@ func (s *purchasingService) CreatePurchaseOrder(ctx context.Context, cmd ports.C
 			ExpenseAccountID: l.ExpenseAccountID,
 		})
 
-		// Track ordered quantity back on PR line if referenced
-		if l.PRLineID != nil {
-			_ = s.repo.UpdatePRLineOrderedQty(ctx, *l.PRLineID, l.Quantity)
-		}
 	}
 
-	return s.repo.CreatePurchaseOrder(ctx, po)
+	var created *domain.PurchaseOrder
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		for i, line := range po.Lines {
+			if line.PRLineID != nil {
+				if err := s.repo.UpdatePRLineOrderedQty(txCtx, *line.PRLineID, cmd.Lines[i].Quantity); err != nil {
+					return fmt.Errorf("failed to update purchase-request ordered quantity: %w", err)
+				}
+			}
+		}
+		var err error
+		created, err = s.repo.CreatePurchaseOrder(txCtx, po)
+		return err
+	})
+	return created, err
 }
 
 func (s *purchasingService) GetPurchaseOrder(ctx context.Context, id uuid.UUID) (*domain.PurchaseOrder, error) {
@@ -416,7 +448,13 @@ func (s *purchasingService) CreateGoodsReceipt(ctx context.Context, cmd ports.Cr
 		})
 	}
 
-	return s.repo.CreateGoodsReceipt(ctx, gr)
+	var created *domain.GoodsReceipt
+	err = s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		created, err = s.repo.CreateGoodsReceipt(txCtx, gr)
+		return err
+	})
+	return created, err
 }
 
 func (s *purchasingService) GetGoodsReceipt(ctx context.Context, id uuid.UUID) (*domain.GoodsReceipt, error) {
