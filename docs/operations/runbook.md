@@ -10,7 +10,7 @@ The production deployment orchestrates 7 primary containers via Docker Compose o
 - **`erp-api`**: Go core backend API service with GORM connection pooling (Port 8080).
 - **`erp-worker`**: Go background processing worker for ZATCA clearance, PDF generation, and notifications.
 - **`erp-migrate`**: Ephemeral schema migration runner executing Goose database migrations before API launch.
-- **`erp-postgres`**: PostgreSQL 16 relational database with Saudi localized schema (`Asia/Riyadh` TZ).
+- **`erp-postgres`**: PostgreSQL 18 relational database with Saudi localized schema (`Asia/Riyadh` TZ).
 - **`erp-redis`**: Redis 7 cache and high-throughput task queue broker.
 
 ---
@@ -85,7 +85,7 @@ docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
   docker compose -f docker-compose.prod.yml up -d --scale erp-worker=3
   ```
 
-### Database Tuning (PostgreSQL 16)
+### Database Tuning (PostgreSQL 18)
 Ensure `postgresql.conf` parameters match host hardware:
 - `max_connections = 200`
 - `shared_buffers = 25% of total RAM`

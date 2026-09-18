@@ -12,7 +12,7 @@ Under ZATCA (Zakat, Tax and Customs Authority) regulations and the Saudi Electro
 
 ```mermaid
 graph TD
-    DB[(PostgreSQL 16 Primary)] -->|Daily pg_dump| FullDump[Encrypted Full Dump .sql.gz.enc]
+    DB[(PostgreSQL 18 Primary)] -->|Daily pg_dump| FullDump[Encrypted Full Dump .sql.gz.enc]
     DB -->|Continuous pg_receivewal| WALArchive[WAL Archive Stream]
     FullDump --> S3Local[Primary Storage /backups]
     WALArchive --> S3Local

@@ -2,7 +2,7 @@
 ### منصة تخطيط الموارد المؤسسية للشركات السعودية
 
 [![Backend](https://img.shields.io/badge/Backend-Go%201.27+-00ADD8.svg?style=flat-square&logo=go)](https://go.dev/)
-[![Database](https://img.shields.io/badge/Database-PostgreSQL%2016+-336791.svg?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
+[![Database](https://img.shields.io/badge/Database-PostgreSQL%2018+-336791.svg?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![Frontend](https://img.shields.io/badge/Frontend-Next.js%2015%20%7C%20TypeScript-black.svg?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![ZATCA](https://img.shields.io/badge/ZATCA-Phase%202%20Compliant-006C35.svg?style=flat-square)](#zatca-phase-2-e-invoicing)
 [![Saudi Labor](https://img.shields.io/badge/HR-Qiwa%20%7C%20Mudad%20WPS-green.svg?style=flat-square)](#saudi-labor-law--payroll)
@@ -41,7 +41,7 @@ A mission-critical, production-grade Enterprise Resource Planning (ERP) platform
                                  │                  │
                                  ▼                  ▼
                     ┌─────────────────────┐  ┌────────────────┐
-                    │    PostgreSQL 16    │  │    Redis 7     │
+                    │    PostgreSQL 18    │  │    Redis 7     │
                     │                     │  │                │
                     │ pgx + Goose Migr.   │  │ Cache & Queues │
                     │ Exact Decimal (24,6)│  │ Rate Limiting  │
@@ -102,7 +102,7 @@ A mission-critical, production-grade Enterprise Resource Planning (ERP) platform
 - **Go**: >= 1.27
 - **Node.js**: >= 20 & npm
 - **Docker & Docker Compose**
-- **PostgreSQL**: 16+
+- **PostgreSQL**: 18+
 
 #### Running the Backend
 ```bash
