@@ -3,28 +3,34 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"erp/internal/inventory/domain"
 	"erp/internal/inventory/ports"
+	"erp/internal/platform/database"
 	"erp/internal/platform/database/sqlc"
+	"erp/internal/platform/transaction"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 )
 
 type inventoryRepository struct {
-	pool    *pgxpool.Pool
-	queries *sqlc.Queries
+	db *database.DB
+	tx transaction.Manager
 }
 
-func NewInventoryRepository(pool *pgxpool.Pool) ports.StockRepository {
+func NewInventoryRepository(db *database.DB) ports.StockRepository {
 	return &inventoryRepository{
-		pool:    pool,
-		queries: sqlc.New(pool),
+		db: db,
+		tx: transaction.NewManager(db.Pool),
 	}
+}
+
+func (r *inventoryRepository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 // 1. Canonical StockRepository Contract (Section 25)
@@ -41,7 +47,7 @@ func (r *inventoryRepository) LockBalance(
 			binID = defBin.ID
 		}
 	}
-	row, err := r.queries.LockBalance(ctx, sqlc.LockBalanceParams{
+	row, err := r.queries(ctx).LockBalance(ctx, sqlc.LockBalanceParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		ItemID:        toPgUUID(itemID),
 		WarehouseID:   toPgUUID(warehouseID),
@@ -73,7 +79,7 @@ func (r *inventoryRepository) InsertMovement(
 	ctx context.Context,
 	m *domain.StockMovement,
 ) (*domain.StockMovement, error) {
-	row, err := r.queries.InsertStockMovement(ctx, sqlc.InsertStockMovementParams{
+	row, err := r.queries(ctx).InsertStockMovement(ctx, sqlc.InsertStockMovementParams{
 		LegalEntityID:   toPgUUID(m.LegalEntityID),
 		MovementNumber:  m.MovementNumber,
 		MovementType:    string(m.MovementType),
@@ -103,7 +109,7 @@ func (r *inventoryRepository) InsertMovement(
 }
 
 func (r *inventoryRepository) GetItemBaseUOM(ctx context.Context, itemID uuid.UUID) (uuid.UUID, error) {
-	uomID, err := r.queries.GetItemBaseUOM(ctx, toPgUUID(itemID))
+	uomID, err := r.queries(ctx).GetItemBaseUOM(ctx, toPgUUID(itemID))
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -145,7 +151,7 @@ func (r *inventoryRepository) ApplyBalanceDelta(
 		}
 	}
 
-	row, err := r.queries.UpsertBalance(ctx, sqlc.UpsertBalanceParams{
+	row, err := r.queries(ctx).UpsertBalance(ctx, sqlc.UpsertBalanceParams{
 		LegalEntityID:    toPgUUID(key.LegalEntityID),
 		ItemID:           toPgUUID(key.ItemID),
 		WarehouseID:      toPgUUID(key.WarehouseID),
@@ -201,7 +207,7 @@ func (r *inventoryRepository) Reserve(
 
 	// Update balance reservation
 	newReserved := bal.QuantityReserved.Add(res.Quantity)
-	_, err = r.queries.UpsertBalance(ctx, sqlc.UpsertBalanceParams{
+	_, err = r.queries(ctx).UpsertBalance(ctx, sqlc.UpsertBalanceParams{
 		LegalEntityID:    toPgUUID(res.LegalEntityID),
 		ItemID:           toPgUUID(res.ItemID),
 		WarehouseID:      toPgUUID(res.WarehouseID),
@@ -216,7 +222,7 @@ func (r *inventoryRepository) Reserve(
 	}
 
 	// Insert reservation row
-	row, err := r.queries.CreateStockReservation(ctx, sqlc.CreateStockReservationParams{
+	row, err := r.queries(ctx).CreateStockReservation(ctx, sqlc.CreateStockReservationParams{
 		LegalEntityID:     toPgUUID(res.LegalEntityID),
 		ItemID:            toPgUUID(res.ItemID),
 		WarehouseID:       toPgUUID(res.WarehouseID),
@@ -242,7 +248,7 @@ func (r *inventoryRepository) ReleaseReservation(
 	ctx context.Context,
 	reservationID uuid.UUID,
 ) error {
-	row, err := r.queries.GetReservationByID(ctx, toPgUUID(reservationID))
+	row, err := r.queries(ctx).GetReservationByID(ctx, toPgUUID(reservationID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.ErrReservationNotFound
@@ -257,25 +263,31 @@ func (r *inventoryRepository) ReleaseReservation(
 	binID := toUUIDPtr(row.BinID)
 	if binID != nil {
 		bal, err := r.LockBalance(ctx, toUUID(row.LegalEntityID), toUUID(row.ItemID), toUUID(row.WarehouseID), *binID)
-		if err == nil && bal != nil {
-			newReserved := bal.QuantityReserved.Sub(fromPgNumeric(row.Quantity))
-			if newReserved.IsNegative() {
-				newReserved = decimal.Zero
-			}
-			_, _ = r.queries.UpsertBalance(ctx, sqlc.UpsertBalanceParams{
-				LegalEntityID:    toPgUUID(bal.LegalEntityID),
-				ItemID:           toPgUUID(bal.ItemID),
-				WarehouseID:      toPgUUID(bal.WarehouseID),
-				BinID:            toPgUUID(bal.BinID),
-				QuantityOnHand:   toPgNumeric(bal.QuantityOnHand),
-				QuantityReserved: toPgNumeric(newReserved),
-				AverageCost:      toPgNumeric(bal.AverageCost),
-				TotalValue:       toPgNumeric(bal.TotalValue),
-			})
+		if err != nil {
+			return err
+		}
+		if bal == nil {
+			return fmt.Errorf("stock balance for active reservation not found")
+		}
+		newReserved := bal.QuantityReserved.Sub(fromPgNumeric(row.Quantity))
+		if newReserved.IsNegative() {
+			return fmt.Errorf("stock reservation exceeds reserved balance")
+		}
+		if _, err := r.queries(ctx).UpsertBalance(ctx, sqlc.UpsertBalanceParams{
+			LegalEntityID:    toPgUUID(bal.LegalEntityID),
+			ItemID:           toPgUUID(bal.ItemID),
+			WarehouseID:      toPgUUID(bal.WarehouseID),
+			BinID:            toPgUUID(bal.BinID),
+			QuantityOnHand:   toPgNumeric(bal.QuantityOnHand),
+			QuantityReserved: toPgNumeric(newReserved),
+			AverageCost:      toPgNumeric(bal.AverageCost),
+			TotalValue:       toPgNumeric(bal.TotalValue),
+		}); err != nil {
+			return err
 		}
 	}
 
-	_, err = r.queries.ReleaseStockReservation(ctx, toPgUUID(reservationID))
+	_, err = r.queries(ctx).ReleaseStockReservation(ctx, toPgUUID(reservationID))
 	return err
 }
 
@@ -288,7 +300,7 @@ func (r *inventoryRepository) GetBalance(ctx context.Context, key domain.StockKe
 			binID = defBin.ID
 		}
 	}
-	row, err := r.queries.GetBalance(ctx, sqlc.GetBalanceParams{
+	row, err := r.queries(ctx).GetBalance(ctx, sqlc.GetBalanceParams{
 		LegalEntityID: toPgUUID(key.LegalEntityID),
 		ItemID:        toPgUUID(key.ItemID),
 		WarehouseID:   toPgUUID(key.WarehouseID),
@@ -326,7 +338,7 @@ func (r *inventoryRepository) ListBalances(ctx context.Context, legalEntityID uu
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := r.queries.ListBalancesByEntity(ctx, sqlc.ListBalancesByEntityParams{
+	rows, err := r.queries(ctx).ListBalancesByEntity(ctx, sqlc.ListBalancesByEntityParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		ItemID:        toPgUUIDPtr(itemID),
 		WarehouseID:   toPgUUIDPtr(warehouseID),
@@ -367,7 +379,7 @@ func (r *inventoryRepository) ListMovements(ctx context.Context, legalEntityID u
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := r.queries.ListMovementsByEntity(ctx, sqlc.ListMovementsByEntityParams{
+	rows, err := r.queries(ctx).ListMovementsByEntity(ctx, sqlc.ListMovementsByEntityParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		ItemID:        toPgUUIDPtr(itemID),
 		WarehouseID:   toPgUUIDPtr(warehouseID),
@@ -412,7 +424,7 @@ func (r *inventoryRepository) ListMovements(ctx context.Context, legalEntityID u
 }
 
 func (r *inventoryRepository) GetMovementByID(ctx context.Context, id uuid.UUID) (*domain.StockMovement, error) {
-	row, err := r.queries.GetMovementByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetMovementByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -452,7 +464,7 @@ func (r *inventoryRepository) GetMovementByID(ctx context.Context, id uuid.UUID)
 
 // 3. Warehouses & Bins
 func (r *inventoryRepository) ListWarehouses(ctx context.Context, legalEntityID uuid.UUID) ([]domain.Warehouse, error) {
-	rows, err := r.queries.ListWarehousesByEntity(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListWarehousesByEntity(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -478,7 +490,7 @@ func (r *inventoryRepository) ListWarehouses(ctx context.Context, legalEntityID 
 }
 
 func (r *inventoryRepository) GetWarehouseByID(ctx context.Context, id uuid.UUID) (*domain.Warehouse, error) {
-	row, err := r.queries.GetWarehouseByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetWarehouseByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrWarehouseNotFound
@@ -503,7 +515,7 @@ func (r *inventoryRepository) GetWarehouseByID(ctx context.Context, id uuid.UUID
 }
 
 func (r *inventoryRepository) GetWarehouseByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.Warehouse, error) {
-	row, err := r.queries.GetWarehouseByCode(ctx, sqlc.GetWarehouseByCodeParams{
+	row, err := r.queries(ctx).GetWarehouseByCode(ctx, sqlc.GetWarehouseByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Code:          code,
 	})
@@ -531,7 +543,7 @@ func (r *inventoryRepository) GetWarehouseByCode(ctx context.Context, legalEntit
 }
 
 func (r *inventoryRepository) CreateWarehouse(ctx context.Context, wh *domain.Warehouse) (*domain.Warehouse, error) {
-	row, err := r.queries.CreateWarehouse(ctx, sqlc.CreateWarehouseParams{
+	row, err := r.queries(ctx).CreateWarehouse(ctx, sqlc.CreateWarehouseParams{
 		LegalEntityID: toPgUUID(wh.LegalEntityID),
 		Code:          wh.Code,
 		NameEn:        wh.NameEn,
@@ -553,7 +565,7 @@ func (r *inventoryRepository) CreateWarehouse(ctx context.Context, wh *domain.Wa
 }
 
 func (r *inventoryRepository) UpdateWarehouse(ctx context.Context, wh *domain.Warehouse) (*domain.Warehouse, error) {
-	row, err := r.queries.UpdateWarehouse(ctx, sqlc.UpdateWarehouseParams{
+	row, err := r.queries(ctx).UpdateWarehouse(ctx, sqlc.UpdateWarehouseParams{
 		ID:            toPgUUID(wh.ID),
 		NameEn:        wh.NameEn,
 		NameAr:        wh.NameAr,
@@ -572,7 +584,7 @@ func (r *inventoryRepository) UpdateWarehouse(ctx context.Context, wh *domain.Wa
 }
 
 func (r *inventoryRepository) ListBins(ctx context.Context, warehouseID uuid.UUID) ([]domain.BinLocation, error) {
-	rows, err := r.queries.ListBinsByWarehouse(ctx, toPgUUID(warehouseID))
+	rows, err := r.queries(ctx).ListBinsByWarehouse(ctx, toPgUUID(warehouseID))
 	if err != nil {
 		return nil, err
 	}
@@ -596,7 +608,7 @@ func (r *inventoryRepository) ListBins(ctx context.Context, warehouseID uuid.UUI
 }
 
 func (r *inventoryRepository) GetBinByID(ctx context.Context, id uuid.UUID) (*domain.BinLocation, error) {
-	row, err := r.queries.GetBinByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetBinByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrBinNotFound
@@ -619,7 +631,7 @@ func (r *inventoryRepository) GetBinByID(ctx context.Context, id uuid.UUID) (*do
 }
 
 func (r *inventoryRepository) GetDefaultBin(ctx context.Context, warehouseID uuid.UUID) (*domain.BinLocation, error) {
-	row, err := r.queries.GetDefaultBinByWarehouse(ctx, toPgUUID(warehouseID))
+	row, err := r.queries(ctx).GetDefaultBinByWarehouse(ctx, toPgUUID(warehouseID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrBinNotFound
@@ -642,7 +654,7 @@ func (r *inventoryRepository) GetDefaultBin(ctx context.Context, warehouseID uui
 }
 
 func (r *inventoryRepository) CreateBin(ctx context.Context, bin *domain.BinLocation) (*domain.BinLocation, error) {
-	row, err := r.queries.CreateBin(ctx, sqlc.CreateBinParams{
+	row, err := r.queries(ctx).CreateBin(ctx, sqlc.CreateBinParams{
 		WarehouseID: toPgUUID(bin.WarehouseID),
 		Code:        bin.Code,
 		Aisle:       toPgText(bin.Aisle),
@@ -663,62 +675,56 @@ func (r *inventoryRepository) CreateBin(ctx context.Context, bin *domain.BinLoca
 
 // 4. Transfers
 func (r *inventoryRepository) CreateTransferOrder(ctx context.Context, order *domain.TransferOrder, lines []domain.TransferOrderLine) (*domain.TransferOrder, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
-	qtx := r.queries.WithTx(tx)
-
-	row, err := qtx.CreateTransferOrder(ctx, sqlc.CreateTransferOrderParams{
-		LegalEntityID:        toPgUUID(order.LegalEntityID),
-		OrderNumber:          order.OrderNumber,
-		FromWarehouseID:      toPgUUID(order.FromWarehouseID),
-		ToWarehouseID:        toPgUUID(order.ToWarehouseID),
-		Status:               string(order.Status),
-		ShippingDate:         toPgTimestamptz(order.ShippingDate),
-		ExpectedDeliveryDate: toPgTimestamptz(order.ExpectedDeliveryDate),
-		Notes:                toPgText(order.Notes),
-		CreatedBy:            toPgUUID(order.CreatedBy),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	order.ID = toUUID(row.ID)
-	order.CreatedAt = row.CreatedAt.Time
-	order.UpdatedAt = row.UpdatedAt.Time
-
-	createdLines := make([]domain.TransferOrderLine, 0, len(lines))
-	for _, l := range lines {
-		lRow, lErr := qtx.CreateTransferOrderLine(ctx, sqlc.CreateTransferOrderLineParams{
-			TransferOrderID:    toPgUUID(order.ID),
-			ItemID:             toPgUUID(l.ItemID),
-			SkuID:              toPgUUIDPtr(l.SKUID),
-			RequestedQuantity:  toPgNumeric(l.RequestedQuantity),
-			DispatchedQuantity: toPgNumeric(l.DispatchedQuantity),
-			ReceivedQuantity:   toPgNumeric(l.ReceivedQuantity),
-			UomID:              toPgUUID(l.UOMID),
-			Notes:              toPgText(l.Notes),
+	var result *domain.TransferOrder
+	err := r.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		qtx := r.queries(txCtx)
+		row, err := qtx.CreateTransferOrder(txCtx, sqlc.CreateTransferOrderParams{
+			LegalEntityID:        toPgUUID(order.LegalEntityID),
+			OrderNumber:          order.OrderNumber,
+			FromWarehouseID:      toPgUUID(order.FromWarehouseID),
+			ToWarehouseID:        toPgUUID(order.ToWarehouseID),
+			Status:               string(order.Status),
+			ShippingDate:         toPgTimestamptz(order.ShippingDate),
+			ExpectedDeliveryDate: toPgTimestamptz(order.ExpectedDeliveryDate),
+			Notes:                toPgText(order.Notes),
+			CreatedBy:            toPgUUID(order.CreatedBy),
 		})
-		if lErr != nil {
-			return nil, lErr
+		if err != nil {
+			return err
 		}
-		l.ID = toUUID(lRow.ID)
-		l.TransferOrderID = order.ID
-		createdLines = append(createdLines, l)
-	}
-	order.Lines = createdLines
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-	return order, nil
+		order.ID = toUUID(row.ID)
+		order.CreatedAt = row.CreatedAt.Time
+		order.UpdatedAt = row.UpdatedAt.Time
+
+		createdLines := make([]domain.TransferOrderLine, 0, len(lines))
+		for _, l := range lines {
+			lRow, lErr := qtx.CreateTransferOrderLine(txCtx, sqlc.CreateTransferOrderLineParams{
+				TransferOrderID:    toPgUUID(order.ID),
+				ItemID:             toPgUUID(l.ItemID),
+				SkuID:              toPgUUIDPtr(l.SKUID),
+				RequestedQuantity:  toPgNumeric(l.RequestedQuantity),
+				DispatchedQuantity: toPgNumeric(l.DispatchedQuantity),
+				ReceivedQuantity:   toPgNumeric(l.ReceivedQuantity),
+				UomID:              toPgUUID(l.UOMID),
+				Notes:              toPgText(l.Notes),
+			})
+			if lErr != nil {
+				return lErr
+			}
+			l.ID = toUUID(lRow.ID)
+			l.TransferOrderID = order.ID
+			createdLines = append(createdLines, l)
+		}
+		order.Lines = createdLines
+		result = order
+		return nil
+	})
+	return result, err
 }
 
 func (r *inventoryRepository) GetTransferOrder(ctx context.Context, id uuid.UUID) (*domain.TransferOrder, error) {
-	row, err := r.queries.GetTransferOrderByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetTransferOrderByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrTransferOrderNotFound
@@ -726,7 +732,7 @@ func (r *inventoryRepository) GetTransferOrder(ctx context.Context, id uuid.UUID
 		return nil, err
 	}
 
-	lineRows, err := r.queries.ListTransferOrderLines(ctx, toPgUUID(id))
+	lineRows, err := r.queries(ctx).ListTransferOrderLines(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -775,7 +781,7 @@ func (r *inventoryRepository) ListTransferOrders(ctx context.Context, legalEntit
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := r.queries.ListTransferOrdersByEntity(ctx, sqlc.ListTransferOrdersByEntityParams{
+	rows, err := r.queries(ctx).ListTransferOrdersByEntity(ctx, sqlc.ListTransferOrdersByEntityParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Status:        toPgTextPtr(status),
 		Limit:         limit,
@@ -808,7 +814,7 @@ func (r *inventoryRepository) ListTransferOrders(ctx context.Context, legalEntit
 }
 
 func (r *inventoryRepository) UpdateTransferOrderStatus(ctx context.Context, id uuid.UUID, status domain.TransferStatus) (*domain.TransferOrder, error) {
-	row, err := r.queries.UpdateTransferOrderStatus(ctx, sqlc.UpdateTransferOrderStatusParams{
+	row, err := r.queries(ctx).UpdateTransferOrderStatus(ctx, sqlc.UpdateTransferOrderStatusParams{
 		ID:     toPgUUID(id),
 		Status: string(status),
 	})
@@ -818,65 +824,68 @@ func (r *inventoryRepository) UpdateTransferOrderStatus(ctx context.Context, id 
 	return r.GetTransferOrder(ctx, toUUID(row.ID))
 }
 
+func (r *inventoryRepository) UpdateTransferLineQuantities(ctx context.Context, id uuid.UUID, dispatched, received decimal.Decimal) error {
+	_, err := r.queries(ctx).UpdateTransferOrderLineQuantities(ctx, sqlc.UpdateTransferOrderLineQuantitiesParams{
+		ID:                 toPgUUID(id),
+		DispatchedQuantity: toPgNumeric(dispatched),
+		ReceivedQuantity:   toPgNumeric(received),
+	})
+	return err
+}
+
 // 5. Adjustments
 func (r *inventoryRepository) CreateStockAdjustment(ctx context.Context, adj *domain.StockAdjustment, lines []domain.StockAdjustmentLine) (*domain.StockAdjustment, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
-	qtx := r.queries.WithTx(tx)
-
-	row, err := qtx.CreateStockAdjustment(ctx, sqlc.CreateStockAdjustmentParams{
-		LegalEntityID:    toPgUUID(adj.LegalEntityID),
-		AdjustmentNumber: adj.AdjustmentNumber,
-		WarehouseID:      toPgUUID(adj.WarehouseID),
-		AdjustmentType:   string(adj.AdjustmentType),
-		ReasonCode:       adj.ReasonCode,
-		Status:           string(adj.Status),
-		AdjustmentDate:   toPgDate(adj.AdjustmentDate),
-		Notes:            toPgText(adj.Notes),
-		CreatedBy:        toPgUUID(adj.CreatedBy),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	adj.ID = toUUID(row.ID)
-	adj.CreatedAt = row.CreatedAt.Time
-	adj.UpdatedAt = row.UpdatedAt.Time
-
-	createdLines := make([]domain.StockAdjustmentLine, 0, len(lines))
-	for _, l := range lines {
-		lRow, lErr := qtx.CreateStockAdjustmentLine(ctx, sqlc.CreateStockAdjustmentLineParams{
-			AdjustmentID: toPgUUID(adj.ID),
-			ItemID:       toPgUUID(l.ItemID),
-			BinID:        toPgUUIDPtr(l.BinID),
-			LotNumber:    toPgTextPtr(l.LotNumber),
-			SerialNumber: toPgTextPtr(l.SerialNumber),
-			Quantity:     toPgNumeric(l.Quantity),
-			UnitCost:     toPgNumeric(l.UnitCost),
-			TotalCost:    toPgNumeric(l.TotalCost),
-			Reason:       toPgText(l.Reason),
+	var result *domain.StockAdjustment
+	err := r.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		qtx := r.queries(txCtx)
+		row, err := qtx.CreateStockAdjustment(txCtx, sqlc.CreateStockAdjustmentParams{
+			LegalEntityID:    toPgUUID(adj.LegalEntityID),
+			AdjustmentNumber: adj.AdjustmentNumber,
+			WarehouseID:      toPgUUID(adj.WarehouseID),
+			AdjustmentType:   string(adj.AdjustmentType),
+			ReasonCode:       adj.ReasonCode,
+			Status:           string(adj.Status),
+			AdjustmentDate:   toPgDate(adj.AdjustmentDate),
+			Notes:            toPgText(adj.Notes),
+			CreatedBy:        toPgUUID(adj.CreatedBy),
 		})
-		if lErr != nil {
-			return nil, lErr
+		if err != nil {
+			return err
 		}
-		l.ID = toUUID(lRow.ID)
-		l.AdjustmentID = adj.ID
-		createdLines = append(createdLines, l)
-	}
-	adj.Lines = createdLines
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-	return adj, nil
+		adj.ID = toUUID(row.ID)
+		adj.CreatedAt = row.CreatedAt.Time
+		adj.UpdatedAt = row.UpdatedAt.Time
+
+		createdLines := make([]domain.StockAdjustmentLine, 0, len(lines))
+		for _, l := range lines {
+			lRow, lErr := qtx.CreateStockAdjustmentLine(txCtx, sqlc.CreateStockAdjustmentLineParams{
+				AdjustmentID: toPgUUID(adj.ID),
+				ItemID:       toPgUUID(l.ItemID),
+				BinID:        toPgUUIDPtr(l.BinID),
+				LotNumber:    toPgTextPtr(l.LotNumber),
+				SerialNumber: toPgTextPtr(l.SerialNumber),
+				Quantity:     toPgNumeric(l.Quantity),
+				UnitCost:     toPgNumeric(l.UnitCost),
+				TotalCost:    toPgNumeric(l.TotalCost),
+				Reason:       toPgText(l.Reason),
+			})
+			if lErr != nil {
+				return lErr
+			}
+			l.ID = toUUID(lRow.ID)
+			l.AdjustmentID = adj.ID
+			createdLines = append(createdLines, l)
+		}
+		adj.Lines = createdLines
+		result = adj
+		return nil
+	})
+	return result, err
 }
 
 func (r *inventoryRepository) GetStockAdjustment(ctx context.Context, id uuid.UUID) (*domain.StockAdjustment, error) {
-	row, err := r.queries.GetStockAdjustmentByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetStockAdjustmentByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrStockAdjustmentNotFound
@@ -884,7 +893,7 @@ func (r *inventoryRepository) GetStockAdjustment(ctx context.Context, id uuid.UU
 		return nil, err
 	}
 
-	lineRows, err := r.queries.ListStockAdjustmentLines(ctx, toPgUUID(id))
+	lineRows, err := r.queries(ctx).ListStockAdjustmentLines(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -934,7 +943,7 @@ func (r *inventoryRepository) ListStockAdjustments(ctx context.Context, legalEnt
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := r.queries.ListStockAdjustmentsByEntity(ctx, sqlc.ListStockAdjustmentsByEntityParams{
+	rows, err := r.queries(ctx).ListStockAdjustmentsByEntity(ctx, sqlc.ListStockAdjustmentsByEntityParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		WarehouseID:   toPgUUIDPtr(warehouseID),
 		Status:        toPgTextPtr(status),
@@ -967,7 +976,7 @@ func (r *inventoryRepository) ListStockAdjustments(ctx context.Context, legalEnt
 }
 
 func (r *inventoryRepository) UpdateStockAdjustmentStatus(ctx context.Context, id uuid.UUID, status domain.AdjustmentStatus, postedBy *uuid.UUID) (*domain.StockAdjustment, error) {
-	row, err := r.queries.UpdateStockAdjustmentStatus(ctx, sqlc.UpdateStockAdjustmentStatusParams{
+	row, err := r.queries(ctx).UpdateStockAdjustmentStatus(ctx, sqlc.UpdateStockAdjustmentStatusParams{
 		ID:       toPgUUID(id),
 		Status:   string(status),
 		PostedBy: toPgUUIDPtr(postedBy),
@@ -980,58 +989,52 @@ func (r *inventoryRepository) UpdateStockAdjustmentStatus(ctx context.Context, i
 
 // 6. Counts
 func (r *inventoryRepository) CreateStockCount(ctx context.Context, count *domain.StockCount, lines []domain.StockCountLine) (*domain.StockCount, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
-	qtx := r.queries.WithTx(tx)
-
-	row, err := qtx.CreateStockCount(ctx, sqlc.CreateStockCountParams{
-		LegalEntityID: toPgUUID(count.LegalEntityID),
-		CountNumber:   count.CountNumber,
-		WarehouseID:   toPgUUID(count.WarehouseID),
-		CountType:     string(count.CountType),
-		Status:        string(count.Status),
-		CountDate:     toPgDate(count.CountDate),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	count.ID = toUUID(row.ID)
-	count.CreatedAt = row.CreatedAt.Time
-	count.UpdatedAt = row.UpdatedAt.Time
-
-	createdLines := make([]domain.StockCountLine, 0, len(lines))
-	for _, l := range lines {
-		lRow, lErr := qtx.CreateStockCountLine(ctx, sqlc.CreateStockCountLineParams{
-			CountID:         toPgUUID(count.ID),
-			ItemID:          toPgUUID(l.ItemID),
-			BinID:           toPgUUIDPtr(l.BinID),
-			SystemQuantity:  toPgNumeric(l.SystemQuantity),
-			CountedQuantity: toPgNumeric(l.CountedQuantity),
-			Notes:           toPgText(l.Notes),
+	var result *domain.StockCount
+	err := r.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		qtx := r.queries(txCtx)
+		row, err := qtx.CreateStockCount(txCtx, sqlc.CreateStockCountParams{
+			LegalEntityID: toPgUUID(count.LegalEntityID),
+			CountNumber:   count.CountNumber,
+			WarehouseID:   toPgUUID(count.WarehouseID),
+			CountType:     string(count.CountType),
+			Status:        string(count.Status),
+			CountDate:     toPgDate(count.CountDate),
 		})
-		if lErr != nil {
-			return nil, lErr
+		if err != nil {
+			return err
 		}
-		l.ID = toUUID(lRow.ID)
-		l.CountID = count.ID
-		l.Variance = fromPgNumeric(lRow.Variance)
-		createdLines = append(createdLines, l)
-	}
-	count.Lines = createdLines
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-	return count, nil
+		count.ID = toUUID(row.ID)
+		count.CreatedAt = row.CreatedAt.Time
+		count.UpdatedAt = row.UpdatedAt.Time
+
+		createdLines := make([]domain.StockCountLine, 0, len(lines))
+		for _, l := range lines {
+			lRow, lErr := qtx.CreateStockCountLine(txCtx, sqlc.CreateStockCountLineParams{
+				CountID:         toPgUUID(count.ID),
+				ItemID:          toPgUUID(l.ItemID),
+				BinID:           toPgUUIDPtr(l.BinID),
+				SystemQuantity:  toPgNumeric(l.SystemQuantity),
+				CountedQuantity: toPgNumeric(l.CountedQuantity),
+				Notes:           toPgText(l.Notes),
+			})
+			if lErr != nil {
+				return lErr
+			}
+			l.ID = toUUID(lRow.ID)
+			l.CountID = count.ID
+			l.Variance = fromPgNumeric(lRow.Variance)
+			createdLines = append(createdLines, l)
+		}
+		count.Lines = createdLines
+		result = count
+		return nil
+	})
+	return result, err
 }
 
 func (r *inventoryRepository) GetStockCount(ctx context.Context, id uuid.UUID) (*domain.StockCount, error) {
-	row, err := r.queries.GetStockCountByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetStockCountByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrStockCountNotFound
@@ -1039,7 +1042,7 @@ func (r *inventoryRepository) GetStockCount(ctx context.Context, id uuid.UUID) (
 		return nil, err
 	}
 
-	lineRows, err := r.queries.ListStockCountLines(ctx, toPgUUID(id))
+	lineRows, err := r.queries(ctx).ListStockCountLines(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -1084,7 +1087,7 @@ func (r *inventoryRepository) ListStockCounts(ctx context.Context, legalEntityID
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := r.queries.ListStockCountsByEntity(ctx, sqlc.ListStockCountsByEntityParams{
+	rows, err := r.queries(ctx).ListStockCountsByEntity(ctx, sqlc.ListStockCountsByEntityParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		WarehouseID:   toPgUUIDPtr(warehouseID),
 		Status:        toPgTextPtr(status),
@@ -1115,7 +1118,7 @@ func (r *inventoryRepository) ListStockCounts(ctx context.Context, legalEntityID
 }
 
 func (r *inventoryRepository) UpdateStockCountStatus(ctx context.Context, id uuid.UUID, status domain.CountStatus, reconciledBy *uuid.UUID) (*domain.StockCount, error) {
-	row, err := r.queries.UpdateStockCountStatus(ctx, sqlc.UpdateStockCountStatusParams{
+	row, err := r.queries(ctx).UpdateStockCountStatus(ctx, sqlc.UpdateStockCountStatusParams{
 		ID:           toPgUUID(id),
 		Status:       string(status),
 		ReconciledBy: toPgUUIDPtr(reconciledBy),
@@ -1129,7 +1132,7 @@ func (r *inventoryRepository) UpdateStockCountStatus(ctx context.Context, id uui
 // 7. Costing & Valuation
 
 func (r *inventoryRepository) InsertCostLayer(ctx context.Context, layer *domain.CostLayer) (*domain.CostLayer, error) {
-	row, err := r.queries.InsertCostLayer(ctx, sqlc.InsertCostLayerParams{
+	row, err := r.queries(ctx).InsertCostLayer(ctx, sqlc.InsertCostLayerParams{
 		LegalEntityID:     toPgUUID(layer.LegalEntityID),
 		ItemID:            toPgUUID(layer.ItemID),
 		WarehouseID:       toPgUUID(layer.WarehouseID),
@@ -1149,7 +1152,7 @@ func (r *inventoryRepository) InsertCostLayer(ctx context.Context, layer *domain
 }
 
 func (r *inventoryRepository) GetActiveCostLayersForUpdate(ctx context.Context, entityID, itemID, warehouseID uuid.UUID) ([]domain.CostLayer, error) {
-	rows, err := r.queries.GetActiveCostLayersForUpdate(ctx, sqlc.GetActiveCostLayersForUpdateParams{
+	rows, err := r.queries(ctx).GetActiveCostLayersForUpdate(ctx, sqlc.GetActiveCostLayersForUpdateParams{
 		LegalEntityID: toPgUUID(entityID),
 		ItemID:        toPgUUID(itemID),
 		WarehouseID:   toPgUUID(warehouseID),
@@ -1177,7 +1180,7 @@ func (r *inventoryRepository) GetActiveCostLayersForUpdate(ctx context.Context, 
 }
 
 func (r *inventoryRepository) UpdateCostLayerRemaining(ctx context.Context, layerID uuid.UUID, remainingQty decimal.Decimal) (*domain.CostLayer, error) {
-	row, err := r.queries.UpdateCostLayerRemaining(ctx, sqlc.UpdateCostLayerRemainingParams{
+	row, err := r.queries(ctx).UpdateCostLayerRemaining(ctx, sqlc.UpdateCostLayerRemainingParams{
 		ID:                toPgUUID(layerID),
 		RemainingQuantity: toPgNumeric(remainingQty),
 	})
@@ -1200,7 +1203,7 @@ func (r *inventoryRepository) UpdateCostLayerRemaining(ctx context.Context, laye
 }
 
 func (r *inventoryRepository) InsertCostLayerConsumption(ctx context.Context, c *domain.CostLayerConsumption) (*domain.CostLayerConsumption, error) {
-	row, err := r.queries.InsertCostLayerConsumption(ctx, sqlc.InsertCostLayerConsumptionParams{
+	row, err := r.queries(ctx).InsertCostLayerConsumption(ctx, sqlc.InsertCostLayerConsumptionParams{
 		LegalEntityID:    toPgUUID(c.LegalEntityID),
 		CostLayerID:      toPgUUID(c.CostLayerID),
 		IssueMovementID:  toPgUUID(c.IssueMovementID),
@@ -1224,7 +1227,7 @@ func (r *inventoryRepository) ListCostLayers(ctx context.Context, entityID uuid.
 	if onlyActive != nil {
 		activeParam = pgtype.Bool{Bool: *onlyActive, Valid: true}
 	}
-	rows, err := r.queries.ListCostLayers(ctx, sqlc.ListCostLayersParams{
+	rows, err := r.queries(ctx).ListCostLayers(ctx, sqlc.ListCostLayersParams{
 		LegalEntityID: toPgUUID(entityID),
 		ItemID:        toPgUUIDPtr(itemID),
 		WarehouseID:   toPgUUIDPtr(warehouseID),
@@ -1260,7 +1263,7 @@ func (r *inventoryRepository) ListCostLayers(ctx context.Context, entityID uuid.
 }
 
 func (r *inventoryRepository) CreateInventoryRevaluation(ctx context.Context, rev *domain.InventoryRevaluation) (*domain.InventoryRevaluation, error) {
-	row, err := r.queries.CreateInventoryRevaluation(ctx, sqlc.CreateInventoryRevaluationParams{
+	row, err := r.queries(ctx).CreateInventoryRevaluation(ctx, sqlc.CreateInventoryRevaluationParams{
 		LegalEntityID:     toPgUUID(rev.LegalEntityID),
 		RevaluationNumber: rev.RevaluationNumber,
 		WarehouseID:       toPgUUID(rev.WarehouseID),
@@ -1287,7 +1290,7 @@ func (r *inventoryRepository) ListInventoryRevaluations(ctx context.Context, ent
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := r.queries.ListInventoryRevaluations(ctx, sqlc.ListInventoryRevaluationsParams{
+	rows, err := r.queries(ctx).ListInventoryRevaluations(ctx, sqlc.ListInventoryRevaluationsParams{
 		LegalEntityID: toPgUUID(entityID),
 		WarehouseID:   toPgUUIDPtr(warehouseID),
 		ItemID:        toPgUUIDPtr(itemID),
@@ -1326,7 +1329,7 @@ func (r *inventoryRepository) ListInventoryRevaluations(ctx context.Context, ent
 }
 
 func (r *inventoryRepository) GetValuationSummary(ctx context.Context, entityID uuid.UUID, warehouseID, itemID *uuid.UUID) ([]domain.ValuationSummaryItem, error) {
-	rows, err := r.queries.GetValuationSummary(ctx, sqlc.GetValuationSummaryParams{
+	rows, err := r.queries(ctx).GetValuationSummary(ctx, sqlc.GetValuationSummaryParams{
 		LegalEntityID: toPgUUID(entityID),
 		WarehouseID:   toPgUUIDPtr(warehouseID),
 		ItemID:        toPgUUIDPtr(itemID),
@@ -1358,7 +1361,7 @@ func (r *inventoryRepository) GetValuationSummary(ctx context.Context, entityID 
 }
 
 func (r *inventoryRepository) UpdateStockBalanceCostAndValue(ctx context.Context, entityID, itemID, warehouseID uuid.UUID, avgCost, totalValue decimal.Decimal) (*domain.StockBalance, error) {
-	row, err := r.queries.UpdateStockBalanceCostAndValue(ctx, sqlc.UpdateStockBalanceCostAndValueParams{
+	row, err := r.queries(ctx).UpdateStockBalanceCostAndValue(ctx, sqlc.UpdateStockBalanceCostAndValueParams{
 		LegalEntityID: toPgUUID(entityID),
 		ItemID:        toPgUUID(itemID),
 		WarehouseID:   toPgUUID(warehouseID),
@@ -1385,7 +1388,7 @@ func (r *inventoryRepository) UpdateStockBalanceCostAndValue(ctx context.Context
 }
 
 func (r *inventoryRepository) GetItemCostingDetails(ctx context.Context, itemID uuid.UUID) (*domain.ItemCostingInfo, error) {
-	row, err := r.queries.GetItemCostingDetails(ctx, toPgUUID(itemID))
+	row, err := r.queries(ctx).GetItemCostingDetails(ctx, toPgUUID(itemID))
 	if err != nil {
 		return nil, err
 	}

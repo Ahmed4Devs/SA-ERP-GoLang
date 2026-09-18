@@ -68,6 +68,7 @@ type StockRepository interface {
 	GetTransferOrder(ctx context.Context, id uuid.UUID) (*domain.TransferOrder, error)
 	ListTransferOrders(ctx context.Context, legalEntityID uuid.UUID, status *string, limit, offset int32) ([]domain.TransferOrder, error)
 	UpdateTransferOrderStatus(ctx context.Context, id uuid.UUID, status domain.TransferStatus) (*domain.TransferOrder, error)
+	UpdateTransferLineQuantities(ctx context.Context, id uuid.UUID, dispatched, received decimal.Decimal) error
 
 	// 5. Adjustments
 	CreateStockAdjustment(ctx context.Context, adj *domain.StockAdjustment, lines []domain.StockAdjustmentLine) (*domain.StockAdjustment, error)

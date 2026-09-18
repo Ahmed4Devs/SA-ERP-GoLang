@@ -9,7 +9,9 @@ import (
 	"erp/internal/inventory/application/costing"
 	"erp/internal/inventory/domain"
 	"erp/internal/inventory/ports"
+	"erp/internal/platform/database"
 	"erp/internal/platform/identifiers"
+	"erp/internal/platform/transaction"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -18,12 +20,16 @@ import (
 type InventoryService struct {
 	repo    ports.StockRepository
 	costing *costing.CostingService
+	db      *database.DB
+	tx      transaction.Manager
 }
 
-func NewInventoryService(repo ports.StockRepository) ports.InventoryService {
+func NewInventoryService(repo ports.StockRepository, db *database.DB) ports.InventoryService {
 	return &InventoryService{
 		repo:    repo,
 		costing: costing.NewCostingService(repo),
+		db:      db,
+		tx:      transaction.NewManager(db.Pool),
 	}
 }
 
@@ -42,22 +48,27 @@ func (s *InventoryService) CreateWarehouse(ctx context.Context, wh domain.Wareho
 	}
 	wh.Code = strings.ToUpper(strings.TrimSpace(wh.Code))
 	wh.IsActive = true
-	createdWh, err := s.repo.CreateWarehouse(ctx, &wh)
-	if err != nil {
-		return nil, err
-	}
+	var createdWh *domain.Warehouse
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		createdWh, err = s.repo.CreateWarehouse(txCtx, &wh)
+		if err != nil {
+			return err
+		}
 
-	// Auto-create default system bin for this warehouse
-	defaultBin := domain.BinLocation{
-		ID:          uuid.New(),
-		WarehouseID: createdWh.ID,
-		Code:        "DEFAULT",
-		IsDefault:   true,
-		IsActive:    true,
-	}
-	_, _ = s.repo.CreateBin(ctx, &defaultBin)
-
-	return createdWh, nil
+		defaultBin := domain.BinLocation{
+			ID:          uuid.New(),
+			WarehouseID: createdWh.ID,
+			Code:        "DEFAULT",
+			IsDefault:   true,
+			IsActive:    true,
+		}
+		if _, err := s.repo.CreateBin(txCtx, &defaultBin); err != nil {
+			return fmt.Errorf("failed to create default warehouse bin: %w", err)
+		}
+		return nil
+	})
+	return createdWh, err
 }
 
 func (s *InventoryService) ListBins(ctx context.Context, warehouseID uuid.UUID) ([]domain.BinLocation, error) {
@@ -75,6 +86,16 @@ func (s *InventoryService) CreateBin(ctx context.Context, bin domain.BinLocation
 
 // 2. Movements & Ledger
 func (s *InventoryService) PostStockMovement(ctx context.Context, req ports.PostMovementRequest) (*domain.StockMovement, error) {
+	var movement *domain.StockMovement
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		movement, err = s.postStockMovement(txCtx, req)
+		return err
+	})
+	return movement, err
+}
+
+func (s *InventoryService) postStockMovement(ctx context.Context, req ports.PostMovementRequest) (*domain.StockMovement, error) {
 	// Validate movement type
 	switch req.MovementType {
 	case domain.MovementTypeOpening, domain.MovementTypePurchaseReceipt, domain.MovementTypeSalesIssue,
@@ -85,6 +106,9 @@ func (s *InventoryService) PostStockMovement(ctx context.Context, req ports.Post
 		domain.MovementTypeReversal:
 	default:
 		return nil, domain.ErrInvalidMovementType
+	}
+	if req.Quantity.IsZero() {
+		return nil, fmt.Errorf("movement quantity must not be zero")
 	}
 
 	// Resolve Bin
@@ -124,12 +148,18 @@ func (s *InventoryService) PostStockMovement(ctx context.Context, req ports.Post
 			quantityDelta = req.Quantity.Abs().Neg()
 		}
 	}
+	if isIncoming && req.UnitCost.IsNegative() {
+		return nil, domain.ErrNegativeUnitCost
+	}
 
 	stockKey := domain.StockKey{
 		LegalEntityID: req.LegalEntityID,
 		ItemID:        req.ItemID,
 		WarehouseID:   req.WarehouseID,
 		BinID:         binID,
+	}
+	if err := s.lockStock(ctx, stockKey.LegalEntityID, stockKey.ItemID, stockKey.WarehouseID); err != nil {
+		return nil, err
 	}
 
 	var consumptions []domain.CostLayerConsumption
@@ -145,8 +175,11 @@ func (s *InventoryService) PostStockMovement(ctx context.Context, req ports.Post
 		}
 		// Calculate outgoing cost delta based on costing engine (Weighted Avg / FIFO / Standard)
 		costResult, err := s.costing.CalculateIssueCost(ctx, req.LegalEntityID, req.ItemID, req.WarehouseID, req.Quantity.Abs())
+		if err != nil {
+			return nil, fmt.Errorf("failed to calculate issue cost: %w", err)
+		}
 		unitCost := bal.AverageCost
-		if err == nil && costResult.TotalCost.IsPositive() {
+		if costResult.TotalCost.IsPositive() {
 			unitCost = costResult.UnitCost
 			costDelta = costResult.TotalCost.Neg()
 			consumptions = costResult.Consumptions
@@ -206,13 +239,17 @@ func (s *InventoryService) PostStockMovement(ctx context.Context, req ports.Post
 
 	// Inbound receipt: record cost layer
 	if isIncoming && req.UnitCost.IsPositive() {
-		_ = s.costing.RecordReceiptCost(ctx, req.LegalEntityID, req.ItemID, req.WarehouseID, quantityDelta, req.UnitCost, createdMov.ID)
+		if err := s.costing.RecordReceiptCost(ctx, req.LegalEntityID, req.ItemID, req.WarehouseID, quantityDelta, req.UnitCost, createdMov.ID); err != nil {
+			return nil, fmt.Errorf("failed to record receipt cost: %w", err)
+		}
 	}
 
 	// Outbound issue: persist FIFO layer consumptions if any
 	for _, cons := range consumptions {
 		cons.IssueMovementID = createdMov.ID
-		_, _ = s.repo.InsertCostLayerConsumption(ctx, &cons)
+		if _, err := s.repo.InsertCostLayerConsumption(ctx, &cons); err != nil {
+			return nil, fmt.Errorf("failed to record cost layer consumption: %w", err)
+		}
 	}
 
 	return createdMov, nil
@@ -246,11 +283,27 @@ func (s *InventoryService) ReserveStock(ctx context.Context, req ports.ReserveSt
 		DemandSourceType: req.DemandSourceType,
 		DemandSourceID:   req.DemandSourceID,
 	}
-	return s.repo.Reserve(ctx, &res)
+	var reservation *domain.StockReservation
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.lockStock(txCtx, req.LegalEntityID, req.ItemID, req.WarehouseID); err != nil {
+			return err
+		}
+		var err error
+		reservation, err = s.repo.Reserve(txCtx, &res)
+		return err
+	})
+	return reservation, err
 }
 
 func (s *InventoryService) ReleaseStock(ctx context.Context, reservationID uuid.UUID) error {
-	return s.repo.ReleaseReservation(ctx, reservationID)
+	return s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.db.DBTX(txCtx).QueryRow(txCtx,
+			"SELECT id FROM inventory.stock_reservations WHERE id = $1 FOR UPDATE", reservationID,
+		).Scan(&reservationID); err != nil {
+			return fmt.Errorf("failed to lock stock reservation: %w", err)
+		}
+		return s.repo.ReleaseReservation(txCtx, reservationID)
+	})
 }
 
 // 5. Transfers
@@ -285,69 +338,87 @@ func (s *InventoryService) CreateTransferOrder(ctx context.Context, req ports.Cr
 }
 
 func (s *InventoryService) DispatchTransfer(ctx context.Context, orderID uuid.UUID, userID uuid.UUID) (*domain.TransferOrder, error) {
-	order, err := s.repo.GetTransferOrder(ctx, orderID)
-	if err != nil {
-		return nil, err
-	}
-	if order.Status != domain.TransferStatusDraft && order.Status != domain.TransferStatusRequested && order.Status != domain.TransferStatusApproved {
-		return nil, domain.ErrInvalidTransferState
-	}
-
-	// Post TRANSFER_OUT movement for each line from the source warehouse
-	docType := "TRANSFER_ORDER"
-	for _, l := range order.Lines {
-		_, err := s.PostStockMovement(ctx, ports.PostMovementRequest{
-			LegalEntityID:   order.LegalEntityID,
-			MovementType:    domain.MovementTypeTransferOut,
-			ItemID:          l.ItemID,
-			SKUID:           l.SKUID,
-			WarehouseID:     order.FromWarehouseID,
-			Quantity:        l.RequestedQuantity,
-			UOMID:           l.UOMID,
-			SourceDocType:   &docType,
-			SourceDocID:     &order.ID,
-			SourceDocLineID: &l.ID,
-			CreatedBy:       userID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to dispatch line %s: %w", l.ItemCode, err)
+	var dispatched *domain.TransferOrder
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.lockRecord(txCtx, "inventory.transfer_orders", orderID); err != nil {
+			return fmt.Errorf("failed to lock transfer order: %w", err)
 		}
-	}
+		order, err := s.repo.GetTransferOrder(txCtx, orderID)
+		if err != nil {
+			return err
+		}
+		if order.Status != domain.TransferStatusDraft && order.Status != domain.TransferStatusRequested && order.Status != domain.TransferStatusApproved {
+			return domain.ErrInvalidTransferState
+		}
 
-	return s.repo.UpdateTransferOrderStatus(ctx, orderID, domain.TransferStatusDispatched)
+		docType := "TRANSFER_ORDER"
+		for _, l := range order.Lines {
+			_, err := s.postStockMovement(txCtx, ports.PostMovementRequest{
+				LegalEntityID:   order.LegalEntityID,
+				MovementType:    domain.MovementTypeTransferOut,
+				ItemID:          l.ItemID,
+				SKUID:           l.SKUID,
+				WarehouseID:     order.FromWarehouseID,
+				Quantity:        l.RequestedQuantity,
+				UOMID:           l.UOMID,
+				SourceDocType:   &docType,
+				SourceDocID:     &order.ID,
+				SourceDocLineID: &l.ID,
+				CreatedBy:       userID,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to dispatch line %s: %w", l.ItemCode, err)
+			}
+			if err := s.repo.UpdateTransferLineQuantities(txCtx, l.ID, l.RequestedQuantity, l.ReceivedQuantity); err != nil {
+				return fmt.Errorf("failed to update dispatched quantity for line %s: %w", l.ItemCode, err)
+			}
+		}
+		dispatched, err = s.repo.UpdateTransferOrderStatus(txCtx, orderID, domain.TransferStatusDispatched)
+		return err
+	})
+	return dispatched, err
 }
 
 func (s *InventoryService) ReceiveTransfer(ctx context.Context, orderID uuid.UUID, userID uuid.UUID) (*domain.TransferOrder, error) {
-	order, err := s.repo.GetTransferOrder(ctx, orderID)
-	if err != nil {
-		return nil, err
-	}
-	if order.Status != domain.TransferStatusDispatched {
-		return nil, domain.ErrInvalidTransferState
-	}
-
-	// Post TRANSFER_IN movement for each line into the destination warehouse
-	docType := "TRANSFER_ORDER"
-	for _, l := range order.Lines {
-		_, err := s.PostStockMovement(ctx, ports.PostMovementRequest{
-			LegalEntityID:   order.LegalEntityID,
-			MovementType:    domain.MovementTypeTransferIn,
-			ItemID:          l.ItemID,
-			SKUID:           l.SKUID,
-			WarehouseID:     order.ToWarehouseID,
-			Quantity:        l.RequestedQuantity,
-			UOMID:           l.UOMID,
-			SourceDocType:   &docType,
-			SourceDocID:     &order.ID,
-			SourceDocLineID: &l.ID,
-			CreatedBy:       userID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to receive line %s: %w", l.ItemCode, err)
+	var received *domain.TransferOrder
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.lockRecord(txCtx, "inventory.transfer_orders", orderID); err != nil {
+			return fmt.Errorf("failed to lock transfer order: %w", err)
 		}
-	}
+		order, err := s.repo.GetTransferOrder(txCtx, orderID)
+		if err != nil {
+			return err
+		}
+		if order.Status != domain.TransferStatusDispatched {
+			return domain.ErrInvalidTransferState
+		}
 
-	return s.repo.UpdateTransferOrderStatus(ctx, orderID, domain.TransferStatusReceived)
+		docType := "TRANSFER_ORDER"
+		for _, l := range order.Lines {
+			_, err := s.postStockMovement(txCtx, ports.PostMovementRequest{
+				LegalEntityID:   order.LegalEntityID,
+				MovementType:    domain.MovementTypeTransferIn,
+				ItemID:          l.ItemID,
+				SKUID:           l.SKUID,
+				WarehouseID:     order.ToWarehouseID,
+				Quantity:        l.RequestedQuantity,
+				UOMID:           l.UOMID,
+				SourceDocType:   &docType,
+				SourceDocID:     &order.ID,
+				SourceDocLineID: &l.ID,
+				CreatedBy:       userID,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to receive line %s: %w", l.ItemCode, err)
+			}
+			if err := s.repo.UpdateTransferLineQuantities(txCtx, l.ID, l.DispatchedQuantity, l.RequestedQuantity); err != nil {
+				return fmt.Errorf("failed to update received quantity for line %s: %w", l.ItemCode, err)
+			}
+		}
+		received, err = s.repo.UpdateTransferOrderStatus(txCtx, orderID, domain.TransferStatusReceived)
+		return err
+	})
+	return received, err
 }
 
 func (s *InventoryService) ListTransferOrders(ctx context.Context, legalEntityID uuid.UUID, status *string, limit, offset int32) ([]domain.TransferOrder, error) {
@@ -391,43 +462,51 @@ func (s *InventoryService) CreateAdjustment(ctx context.Context, req ports.Creat
 }
 
 func (s *InventoryService) PostAdjustment(ctx context.Context, adjustmentID uuid.UUID, userID uuid.UUID) (*domain.StockAdjustment, error) {
-	adj, err := s.repo.GetStockAdjustment(ctx, adjustmentID)
-	if err != nil {
-		return nil, err
-	}
-	if adj.Status == domain.AdjustmentStatusPosted {
-		return adj, nil
-	}
-
-	docType := "STOCK_ADJUSTMENT"
-	movType := domain.MovementTypeAdjustmentIn
-	if adj.AdjustmentType == domain.AdjustmentTypeDecrease || adj.AdjustmentType == domain.AdjustmentTypeScrap || adj.AdjustmentType == domain.AdjustmentTypeDamaged {
-		movType = domain.MovementTypeAdjustmentOut
-	}
-
-	for _, l := range adj.Lines {
-		_, err := s.PostStockMovement(ctx, ports.PostMovementRequest{
-			LegalEntityID:   adj.LegalEntityID,
-			MovementType:    movType,
-			ItemID:          l.ItemID,
-			WarehouseID:     adj.WarehouseID,
-			BinID:           l.BinID,
-			LotNumber:       l.LotNumber,
-			SerialNumber:    l.SerialNumber,
-			Quantity:        l.Quantity,
-			UOMID:           l.UOMID,
-			UnitCost:        l.UnitCost,
-			SourceDocType:   &docType,
-			SourceDocID:     &adj.ID,
-			SourceDocLineID: &l.ID,
-			CreatedBy:       userID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to post adjustment line: %w", err)
+	var posted *domain.StockAdjustment
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.lockRecord(txCtx, "inventory.stock_adjustments", adjustmentID); err != nil {
+			return fmt.Errorf("failed to lock stock adjustment: %w", err)
 		}
-	}
+		adj, err := s.repo.GetStockAdjustment(txCtx, adjustmentID)
+		if err != nil {
+			return err
+		}
+		if adj.Status == domain.AdjustmentStatusPosted {
+			posted = adj
+			return nil
+		}
 
-	return s.repo.UpdateStockAdjustmentStatus(ctx, adjustmentID, domain.AdjustmentStatusPosted, &userID)
+		docType := "STOCK_ADJUSTMENT"
+		movType := domain.MovementTypeAdjustmentIn
+		if adj.AdjustmentType == domain.AdjustmentTypeDecrease || adj.AdjustmentType == domain.AdjustmentTypeScrap || adj.AdjustmentType == domain.AdjustmentTypeDamaged {
+			movType = domain.MovementTypeAdjustmentOut
+		}
+
+		for _, l := range adj.Lines {
+			_, err := s.postStockMovement(txCtx, ports.PostMovementRequest{
+				LegalEntityID:   adj.LegalEntityID,
+				MovementType:    movType,
+				ItemID:          l.ItemID,
+				WarehouseID:     adj.WarehouseID,
+				BinID:           l.BinID,
+				LotNumber:       l.LotNumber,
+				SerialNumber:    l.SerialNumber,
+				Quantity:        l.Quantity,
+				UOMID:           l.UOMID,
+				UnitCost:        l.UnitCost,
+				SourceDocType:   &docType,
+				SourceDocID:     &adj.ID,
+				SourceDocLineID: &l.ID,
+				CreatedBy:       userID,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to post adjustment line: %w", err)
+			}
+		}
+		posted, err = s.repo.UpdateStockAdjustmentStatus(txCtx, adjustmentID, domain.AdjustmentStatusPosted, &userID)
+		return err
+	})
+	return posted, err
 }
 
 func (s *InventoryService) ListAdjustments(ctx context.Context, legalEntityID uuid.UUID, warehouseID *uuid.UUID, status *string, limit, offset int32) ([]domain.StockAdjustment, error) {
@@ -454,18 +533,22 @@ func (s *InventoryService) CreateStockCount(ctx context.Context, req ports.Creat
 			binID = *l.BinID
 		} else {
 			defBin, err := s.repo.GetDefaultBin(ctx, req.WarehouseID)
-			if err == nil && defBin != nil {
-				binID = defBin.ID
+			if err != nil {
+				return nil, fmt.Errorf("failed to get default warehouse bin: %w", err)
 			}
+			binID = defBin.ID
 		}
 
 		sysQty := decimal.Zero
-		bal, _ := s.repo.GetBalance(ctx, domain.StockKey{
+		bal, err := s.repo.GetBalance(ctx, domain.StockKey{
 			LegalEntityID: req.LegalEntityID,
 			ItemID:        l.ItemID,
 			WarehouseID:   req.WarehouseID,
 			BinID:         binID,
 		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get stock balance for count: %w", err)
+		}
 		if bal != nil {
 			sysQty = bal.QuantityOnHand
 		}
@@ -483,45 +566,53 @@ func (s *InventoryService) CreateStockCount(ctx context.Context, req ports.Creat
 }
 
 func (s *InventoryService) ReconcileStockCount(ctx context.Context, countID uuid.UUID, userID uuid.UUID) (*domain.StockCount, error) {
-	cnt, err := s.repo.GetStockCount(ctx, countID)
-	if err != nil {
-		return nil, err
-	}
-	if cnt.Status == domain.CountStatusPosted {
-		return cnt, nil
-	}
-
-	docType := "STOCK_COUNT"
-	for _, l := range cnt.Lines {
-		if l.Variance.IsZero() {
-			continue
+	var reconciled *domain.StockCount
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.lockRecord(txCtx, "inventory.stock_counts", countID); err != nil {
+			return fmt.Errorf("failed to lock stock count: %w", err)
 		}
-
-		movType := domain.MovementTypeAdjustmentIn
-		qty := l.Variance.Abs()
-		if l.Variance.IsNegative() {
-			movType = domain.MovementTypeAdjustmentOut
-		}
-
-		_, err := s.PostStockMovement(ctx, ports.PostMovementRequest{
-			LegalEntityID:   cnt.LegalEntityID,
-			MovementType:    movType,
-			ItemID:          l.ItemID,
-			WarehouseID:     cnt.WarehouseID,
-			BinID:           l.BinID,
-			Quantity:        qty,
-			UOMID:           l.UOMID,
-			SourceDocType:   &docType,
-			SourceDocID:     &cnt.ID,
-			SourceDocLineID: &l.ID,
-			CreatedBy:       userID,
-		})
+		cnt, err := s.repo.GetStockCount(txCtx, countID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to reconcile count variance for item %s: %w", l.ItemCode, err)
+			return err
 		}
-	}
+		if cnt.Status == domain.CountStatusPosted {
+			reconciled = cnt
+			return nil
+		}
 
-	return s.repo.UpdateStockCountStatus(ctx, countID, domain.CountStatusPosted, &userID)
+		docType := "STOCK_COUNT"
+		for _, l := range cnt.Lines {
+			if l.Variance.IsZero() {
+				continue
+			}
+
+			movType := domain.MovementTypeAdjustmentIn
+			qty := l.Variance.Abs()
+			if l.Variance.IsNegative() {
+				movType = domain.MovementTypeAdjustmentOut
+			}
+
+			_, err := s.postStockMovement(txCtx, ports.PostMovementRequest{
+				LegalEntityID:   cnt.LegalEntityID,
+				MovementType:    movType,
+				ItemID:          l.ItemID,
+				WarehouseID:     cnt.WarehouseID,
+				BinID:           l.BinID,
+				Quantity:        qty,
+				UOMID:           l.UOMID,
+				SourceDocType:   &docType,
+				SourceDocID:     &cnt.ID,
+				SourceDocLineID: &l.ID,
+				CreatedBy:       userID,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to reconcile count variance for item %s: %w", l.ItemCode, err)
+			}
+		}
+		reconciled, err = s.repo.UpdateStockCountStatus(txCtx, countID, domain.CountStatusPosted, &userID)
+		return err
+	})
+	return reconciled, err
 }
 
 func (s *InventoryService) ListStockCounts(ctx context.Context, legalEntityID uuid.UUID, warehouseID *uuid.UUID, status *string, limit, offset int32) ([]domain.StockCount, error) {
@@ -538,15 +629,47 @@ func (s *InventoryService) ListCostLayers(ctx context.Context, entityID uuid.UUI
 }
 
 func (s *InventoryService) ExecuteRevaluation(ctx context.Context, req ports.ExecuteRevaluationRequest) (*domain.InventoryRevaluation, error) {
-	return s.costing.ExecuteRevaluation(ctx, costing.ExecuteRevaluationRequest{
-		LegalEntityID:  req.LegalEntityID,
-		WarehouseID:    req.WarehouseID,
-		ItemID:         req.ItemID,
-		NewUnitCost:    req.NewUnitCost,
-		Reason:         req.Reason,
-		JournalEntryID: req.JournalEntryID,
-		CreatedBy:      req.CreatedBy,
+	var revaluation *domain.InventoryRevaluation
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.lockStock(txCtx, req.LegalEntityID, req.ItemID, req.WarehouseID); err != nil {
+			return err
+		}
+		var err error
+		revaluation, err = s.costing.ExecuteRevaluation(txCtx, costing.ExecuteRevaluationRequest{
+			LegalEntityID:  req.LegalEntityID,
+			WarehouseID:    req.WarehouseID,
+			ItemID:         req.ItemID,
+			NewUnitCost:    req.NewUnitCost,
+			Reason:         req.Reason,
+			JournalEntryID: req.JournalEntryID,
+			CreatedBy:      req.CreatedBy,
+		})
+		return err
 	})
+	return revaluation, err
+}
+
+func (s *InventoryService) lockStock(ctx context.Context, entityID, itemID, warehouseID uuid.UUID) error {
+	key := entityID.String() + ":" + itemID.String() + ":" + warehouseID.String()
+	if _, err := s.db.DBTX(ctx).Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", key); err != nil {
+		return fmt.Errorf("failed to lock stock position: %w", err)
+	}
+	return nil
+}
+
+func (s *InventoryService) lockRecord(ctx context.Context, table string, id uuid.UUID) error {
+	var query string
+	switch table {
+	case "inventory.transfer_orders":
+		query = "SELECT id FROM inventory.transfer_orders WHERE id = $1 FOR UPDATE"
+	case "inventory.stock_adjustments":
+		query = "SELECT id FROM inventory.stock_adjustments WHERE id = $1 FOR UPDATE"
+	case "inventory.stock_counts":
+		query = "SELECT id FROM inventory.stock_counts WHERE id = $1 FOR UPDATE"
+	default:
+		return fmt.Errorf("unsupported inventory lock target %q", table)
+	}
+	return s.db.DBTX(ctx).QueryRow(ctx, query, id).Scan(&id)
 }
 
 func (s *InventoryService) ListRevaluations(ctx context.Context, entityID uuid.UUID, warehouseID, itemID *uuid.UUID, limit, offset int32) ([]domain.InventoryRevaluation, error) {

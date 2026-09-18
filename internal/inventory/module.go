@@ -23,8 +23,8 @@ type Module struct {
 }
 
 func NewModule(cfg *config.Config, db *database.DB) *Module {
-	repo := postgres.NewInventoryRepository(db.Pool)
-	invSvc := services.NewInventoryService(repo)
+	repo := postgres.NewInventoryRepository(db)
+	invSvc := services.NewInventoryService(repo, db)
 	handler := inventoryhttp.NewInventoryHandler(invSvc)
 
 	return &Module{
