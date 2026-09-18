@@ -24,7 +24,6 @@ import {
   Moon,
   Sun,
   Globe,
-  ChevronDown,
   Menu,
   X,
   History,
@@ -37,6 +36,8 @@ import {
   Layers,
   PieChart,
   FolderArchive,
+  ChevronRight,
+  Sparkles,
 } from "lucide-react";
 
 import arDict from "@/messages/ar.json";
@@ -100,6 +101,7 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const { locale, setLocale, t, dir } = useLocale();
+  const isAr = locale === "ar";
   const { theme, setTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -112,6 +114,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { key: "dashboard", href: "/", icon: LayoutDashboard, label: t.nav.dashboard, active: pathname === "/" },
+    { key: "design-system", href: "/design-system", icon: Sparkles, label: isAr ? "نظام التصميم UI" : "Design System", active: pathname === "/design-system" },
     { key: "organization", href: "/organization", icon: Building2, label: t.nav.organization, active: pathname === "/organization" },
     { key: "iam", href: "/authorization", icon: ShieldCheck, label: t.nav.iam, active: pathname === "/authorization" },
     { key: "audit", href: "/audit", icon: History, label: t.nav.audit, active: pathname === "/audit" },
@@ -141,31 +144,34 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { key: "settings", href: "#", icon: Settings, label: t.nav.settings },
   ];
 
+  // Get active item for breadcrumb
+  const currentNav = navItems.find((n) => n.active) || navItems[0];
+
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground" dir={dir}>
       {/* Topbar */}
-      <header className="sticky top-0 z-40 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+      <header className="sticky top-0 z-40 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75 shadow-xs">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
           {/* Brand & Mobile Toggle */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="md:hidden p-2 rounded-md hover:bg-muted text-foreground"
+              className="md:hidden p-2 rounded-lg hover:bg-muted text-foreground transition-colors"
               aria-label="Toggle menu"
             >
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
-            <div className="flex items-center gap-2">
-              <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg shadow-sm">
+            <Link href="/" className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm shadow-sm">
                 ERP
               </div>
               <div className="hidden sm:block">
                 <span className="font-bold text-sm leading-none block">SAUDI ERP</span>
-                <span className="text-[10px] text-muted-foreground leading-tight block">
+                <span className="text-[10px] text-muted-foreground leading-tight block mt-0.5">
                   Enterprise Core
                 </span>
               </div>
-            </div>
+            </Link>
           </div>
 
           {/* Active Entity & Branch Badge */}
@@ -185,7 +191,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <input
                 type="text"
                 placeholder={t.topbar.search}
-                className="w-full rounded-md border bg-background ps-9 pe-4 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                className="w-full rounded-lg border bg-background ps-9 pe-4 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all"
               />
             </div>
           </div>
@@ -196,10 +202,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <button
               id="lang-toggle-btn"
               onClick={() => setLocale(locale === "ar" ? "en" : "ar")}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border hover:bg-muted transition-colors"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border hover:bg-muted transition-colors"
               title="Switch Language / تبديل اللغة"
             >
-              <Globe className="h-4 w-4" />
+              <Globe className="h-4 w-4 text-primary" />
               <span>{locale === "ar" ? "English" : "العربية"}</span>
             </button>
 
@@ -208,14 +214,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <button
                 id="theme-toggle-btn"
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="p-2 rounded-md border hover:bg-muted transition-colors text-foreground"
+                className="p-2 rounded-lg border hover:bg-muted transition-colors text-foreground"
                 title={theme === "dark" ? t.topbar.light : t.topbar.dark}
                 aria-label="Toggle theme"
               >
                 {theme === "dark" ? (
-                  <Sun className="h-4 w-4 text-yellow-400" />
+                  <Sun className="h-4 w-4 text-amber-400" />
                 ) : (
-                  <Moon className="h-4 w-4" />
+                  <Moon className="h-4 w-4 text-blue-600" />
                 )}
               </button>
             )}
@@ -223,7 +229,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             {/* Notifications */}
             <Link
               href="/notifications"
-              className="relative p-2 rounded-md hover:bg-muted transition-colors text-foreground"
+              className="relative p-2 rounded-lg hover:bg-muted transition-colors text-foreground"
               aria-label={t.topbar.notifications}
             >
               <Bell className="h-4 w-4" />
@@ -232,7 +238,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
             {/* User Profile */}
             <div className="flex items-center gap-2 ps-2 border-s">
-              <div className="h-8 w-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-semibold text-xs border border-primary/30">
+              <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs border border-primary/20">
                 SA
               </div>
               <div className="hidden xl:block text-start">
@@ -249,7 +255,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         {/* Sidebar */}
         <aside
           className={`
-            fixed md:static inset-y-0 z-30 flex-shrink-0 w-64 bg-card border-e transition-transform duration-200 ease-in-out
+            fixed md:static inset-y-0 z-30 flex-shrink-0 w-64 bg-card border-inline-end transition-transform duration-200 ease-in-out
             ${dir === "rtl" ? "right-0" : "left-0"}
             ${sidebarOpen ? "translate-x-0" : dir === "rtl" ? "translate-x-full md:translate-x-0" : "-translate-x-full md:translate-x-0"}
             top-16 bottom-0
@@ -257,27 +263,28 @@ export function Shell({ children }: { children: React.ReactNode }) {
         >
           <div className="h-full flex flex-col justify-between py-4 px-3 overflow-y-auto">
             <div className="space-y-1">
-              <div className="px-3 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                {t.nav.dashboard}
+              <div className="px-3 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                {isAr ? "الوحدات والأنظمة الرئيسية" : "Main System Modules"}
               </div>
               {navItems.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <a
+                  <Link
                     key={item.key}
                     href={item.href}
+                    onClick={() => setSidebarOpen(false)}
                     className={`
-                      flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-colors
+                      flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-colors
                       ${
                         item.active
-                          ? "bg-primary text-primary-foreground shadow-sm"
+                          ? "bg-primary text-primary-foreground shadow-xs font-bold"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground"
                       }
                     `}
                   >
                     <Icon className="h-4 w-4 flex-shrink-0" />
                     <span>{item.label}</span>
-                  </a>
+                  </Link>
                 );
               })}
             </div>
@@ -285,7 +292,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             {/* Footer / System Info */}
             <div className="pt-4 border-t px-3 text-[11px] text-muted-foreground">
               <p className="font-semibold text-foreground">ERP Platform v0.1.0</p>
-              <p className="mt-0.5">ZATCA & GOSI Ready</p>
+              <p className="mt-0.5">ZATCA Phase 2 & GOSI Ready</p>
             </div>
           </div>
         </aside>
@@ -300,7 +307,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         {/* Content Workspace */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto">{children}</div>
+          <div className="max-w-7xl mx-auto space-y-4">
+            {/* Breadcrumb strip */}
+            {pathname !== "/" && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground pb-2">
+                <Link href="/" className="hover:text-foreground transition-colors">
+                  {t.nav.dashboard}
+                </Link>
+                <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180 text-muted-foreground/40" />
+                <span className="font-semibold text-foreground">{currentNav.label}</span>
+              </div>
+            )}
+            {children}
+          </div>
         </main>
       </div>
     </div>

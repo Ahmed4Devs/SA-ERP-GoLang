@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
+    --background: 210 30% 98%;
     --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
@@ -16,53 +16,53 @@
     --primary: 221 83% 53%;
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 210 40% 96.1%;
+    --secondary: 210 35% 95%;
     --secondary-foreground: 222 47% 11.2%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 210 30% 95.5%;
+    --muted-foreground: 215.4 16.3% 45%;
 
-    --accent: 210 40% 96.1%;
+    --accent: 210 35% 94%;
     --accent-foreground: 222 47% 11.2%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    --border: 214.3 28% 90%;
+    --input: 214.3 28% 90%;
     --ring: 221 83% 53%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
   }
 
   .dark {
     --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
+    --foreground: 213 31% 94%;
 
-    --card: 224 71% 7%;
-    --card-foreground: 213 31% 91%;
+    --card: 224 55% 7.5%;
+    --card-foreground: 213 31% 94%;
 
-    --popover: 224 71% 7%;
-    --popover-foreground: 213 31% 91%;
+    --popover: 224 55% 7.5%;
+    --popover-foreground: 213 31% 94%;
 
     --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 47.4% 11.2%;
 
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 217.2 32.6% 15%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 217.2 30% 14%;
+    --muted-foreground: 215 20.2% 68%;
 
-    --accent: 217.2 32.6% 17.5%;
+    --accent: 217.2 30% 16%;
     --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 62.8% 38%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --border: 217.2 28% 18%;
+    --input: 217.2 28% 18%;
+    --ring: 224.3 76.3% 52%;
   }
 }
 
@@ -71,16 +71,55 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground transition-colors duration-200;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
-/* RTL-aware logical styling helpers */
-[dir="rtl"] {
+/* Direction-based dynamic typography */
+[dir="rtl"],
+html[dir="rtl"] body {
+  font-family: var(--font-cairo), sans-serif;
   text-align: right;
+  direction: rtl;
 }
 
-[dir="ltr"] {
+[dir="ltr"],
+html[dir="ltr"] body {
+  font-family: var(--font-inter), sans-serif;
   text-align: left;
+  direction: ltr;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.45);
+}
+
+/* Selection Color */
+::selection {
+  background-color: hsl(var(--primary) / 0.25);
+  color: hsl(var(--primary));
+}
+
+/* Glassmorphism card helpers */
+.glass-panel {
+  background: hsl(var(--card) / 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid hsl(var(--border) / 0.8);
 }
