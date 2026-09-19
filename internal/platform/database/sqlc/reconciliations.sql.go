@@ -256,6 +256,40 @@ func (q *Queries) ListReconciliationMatches(ctx context.Context, reconciliationI
 	return items, nil
 }
 
+const lockBankReconciliationByID = `-- name: LockBankReconciliationByID :one
+SELECT id, legal_entity_id, bank_account_id, statement_id, reconciliation_number, as_of_date, statement_ending_balance, gl_book_balance, unreconciled_difference, status, notes, reconciled_by_user_id, reconciled_at, created_at, updated_at FROM banking.reconciliations
+WHERE id = $1 AND legal_entity_id = $2
+FOR UPDATE
+`
+
+type LockBankReconciliationByIDParams struct {
+	ID            pgtype.UUID `json:"id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+}
+
+func (q *Queries) LockBankReconciliationByID(ctx context.Context, arg LockBankReconciliationByIDParams) (BankingReconciliations, error) {
+	row := q.db.QueryRow(ctx, lockBankReconciliationByID, arg.ID, arg.LegalEntityID)
+	var i BankingReconciliations
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.BankAccountID,
+		&i.StatementID,
+		&i.ReconciliationNumber,
+		&i.AsOfDate,
+		&i.StatementEndingBalance,
+		&i.GlBookBalance,
+		&i.UnreconciledDifference,
+		&i.Status,
+		&i.Notes,
+		&i.ReconciledByUserID,
+		&i.ReconciledAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateBankReconciliation = `-- name: UpdateBankReconciliation :one
 UPDATE banking.reconciliations
 SET status = $3,

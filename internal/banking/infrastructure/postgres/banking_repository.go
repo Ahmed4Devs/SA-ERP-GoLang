@@ -17,14 +17,14 @@ import (
 
 type bankingRepository struct {
 	db *database.DB
-	q  *sqlc.Queries
 }
 
 func NewBankingRepository(db *database.DB) ports.BankingRepository {
-	return &bankingRepository{
-		db: db,
-		q:  sqlc.New(db.Pool),
-	}
+	return &bankingRepository{db: db}
+}
+
+func (r *bankingRepository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 // ============================================================================
@@ -38,7 +38,7 @@ func (r *bankingRepository) CreateBankAccount(ctx context.Context, a *domain.Ban
 	if a.AccountNumberMasked == "" {
 		a.AccountNumberMasked = domain.MaskAccountNumber(a.AccountNumber)
 	}
-	row, err := r.q.CreateBankAccount(ctx, sqlc.CreateBankAccountParams{
+	row, err := r.queries(ctx).CreateBankAccount(ctx, sqlc.CreateBankAccountParams{
 		ID:                  toPgUUID(a.ID),
 		LegalEntityID:       toPgUUID(a.LegalEntityID),
 		AccountCode:         a.AccountCode,
@@ -67,7 +67,7 @@ func (r *bankingRepository) CreateBankAccount(ctx context.Context, a *domain.Ban
 }
 
 func (r *bankingRepository) GetBankAccountByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.BankAccount, error) {
-	row, err := r.q.GetBankAccountByID(ctx, sqlc.GetBankAccountByIDParams{
+	row, err := r.queries(ctx).GetBankAccountByID(ctx, sqlc.GetBankAccountByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -81,7 +81,7 @@ func (r *bankingRepository) GetBankAccountByID(ctx context.Context, legalEntityI
 }
 
 func (r *bankingRepository) GetBankAccountByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.BankAccount, error) {
-	row, err := r.q.GetBankAccountByCode(ctx, sqlc.GetBankAccountByCodeParams{
+	row, err := r.queries(ctx).GetBankAccountByCode(ctx, sqlc.GetBankAccountByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		AccountCode:   code,
 	})
@@ -95,7 +95,7 @@ func (r *bankingRepository) GetBankAccountByCode(ctx context.Context, legalEntit
 }
 
 func (r *bankingRepository) GetBankAccountByIBAN(ctx context.Context, legalEntityID uuid.UUID, iban string) (*domain.BankAccount, error) {
-	row, err := r.q.GetBankAccountByIBAN(ctx, sqlc.GetBankAccountByIBANParams{
+	row, err := r.queries(ctx).GetBankAccountByIBAN(ctx, sqlc.GetBankAccountByIBANParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Iban:          iban,
 	})
@@ -109,7 +109,7 @@ func (r *bankingRepository) GetBankAccountByIBAN(ctx context.Context, legalEntit
 }
 
 func (r *bankingRepository) ListBankAccounts(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.BankAccount, error) {
-	rows, err := r.q.ListBankAccounts(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListBankAccounts(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func (r *bankingRepository) ListBankAccounts(ctx context.Context, legalEntityID 
 }
 
 func (r *bankingRepository) UpdateBankAccountBalance(ctx context.Context, legalEntityID, id uuid.UUID, delta decimal.Decimal) (*domain.BankAccount, error) {
-	row, err := r.q.UpdateBankAccountBalance(ctx, sqlc.UpdateBankAccountBalanceParams{
+	row, err := r.queries(ctx).UpdateBankAccountBalance(ctx, sqlc.UpdateBankAccountBalanceParams{
 		ID:             toPgUUID(id),
 		LegalEntityID:  toPgUUID(legalEntityID),
 		CurrentBalance: toPgNumeric(delta),
@@ -133,7 +133,7 @@ func (r *bankingRepository) UpdateBankAccountBalance(ctx context.Context, legalE
 }
 
 func (r *bankingRepository) UpdateBankAccountStatus(ctx context.Context, legalEntityID, id uuid.UUID, status domain.BankAccountStatus) (*domain.BankAccount, error) {
-	row, err := r.q.UpdateBankAccountStatus(ctx, sqlc.UpdateBankAccountStatusParams{
+	row, err := r.queries(ctx).UpdateBankAccountStatus(ctx, sqlc.UpdateBankAccountStatusParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 		Status:        string(status),
@@ -152,7 +152,7 @@ func (r *bankingRepository) CreateBankStatement(ctx context.Context, s *domain.S
 	if s.ID == uuid.Nil {
 		s.ID = uuid.New()
 	}
-	row, err := r.q.CreateBankStatement(ctx, sqlc.CreateBankStatementParams{
+	row, err := r.queries(ctx).CreateBankStatement(ctx, sqlc.CreateBankStatementParams{
 		ID:               toPgUUID(s.ID),
 		LegalEntityID:    toPgUUID(s.LegalEntityID),
 		BankAccountID:    toPgUUID(s.BankAccountID),
@@ -177,7 +177,7 @@ func (r *bankingRepository) CreateBankStatement(ctx context.Context, s *domain.S
 }
 
 func (r *bankingRepository) GetBankStatementByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Statement, error) {
-	row, err := r.q.GetBankStatementByID(ctx, sqlc.GetBankStatementByIDParams{
+	row, err := r.queries(ctx).GetBankStatementByID(ctx, sqlc.GetBankStatementByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -191,7 +191,7 @@ func (r *bankingRepository) GetBankStatementByID(ctx context.Context, legalEntit
 }
 
 func (r *bankingRepository) ListBankStatements(ctx context.Context, bankAccountID uuid.UUID) ([]*domain.Statement, error) {
-	rows, err := r.q.ListBankStatements(ctx, toPgUUID(bankAccountID))
+	rows, err := r.queries(ctx).ListBankStatements(ctx, toPgUUID(bankAccountID))
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (r *bankingRepository) ListBankStatements(ctx context.Context, bankAccountI
 }
 
 func (r *bankingRepository) UpdateBankStatementStatus(ctx context.Context, legalEntityID, id uuid.UUID, status domain.StatementStatus) (*domain.Statement, error) {
-	row, err := r.q.UpdateBankStatementStatus(ctx, sqlc.UpdateBankStatementStatusParams{
+	row, err := r.queries(ctx).UpdateBankStatementStatus(ctx, sqlc.UpdateBankStatementStatusParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 		Status:        string(status),
@@ -226,7 +226,7 @@ func (r *bankingRepository) CreateStatementLine(ctx context.Context, l *domain.S
 	if l.ValueDate != nil {
 		valDate = *l.ValueDate
 	}
-	row, err := r.q.CreateStatementLine(ctx, sqlc.CreateStatementLineParams{
+	row, err := r.queries(ctx).CreateStatementLine(ctx, sqlc.CreateStatementLineParams{
 		ID:               toPgUUID(l.ID),
 		StatementID:      toPgUUID(l.StatementID),
 		LineNumber:       l.LineNumber,
@@ -247,7 +247,18 @@ func (r *bankingRepository) CreateStatementLine(ctx context.Context, l *domain.S
 }
 
 func (r *bankingRepository) GetStatementLineByID(ctx context.Context, id uuid.UUID) (*domain.StatementLine, error) {
-	row, err := r.q.GetStatementLineByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetStatementLineByID(ctx, toPgUUID(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrStatementLineNotFound
+		}
+		return nil, err
+	}
+	return mapStatementLine(row), nil
+}
+
+func (r *bankingRepository) LockStatementLineByID(ctx context.Context, id uuid.UUID) (*domain.StatementLine, error) {
+	row, err := r.queries(ctx).LockStatementLineByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrStatementLineNotFound
@@ -258,7 +269,7 @@ func (r *bankingRepository) GetStatementLineByID(ctx context.Context, id uuid.UU
 }
 
 func (r *bankingRepository) ListStatementLines(ctx context.Context, statementID uuid.UUID) ([]*domain.StatementLine, error) {
-	rows, err := r.q.ListStatementLines(ctx, toPgUUID(statementID))
+	rows, err := r.queries(ctx).ListStatementLines(ctx, toPgUUID(statementID))
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +281,7 @@ func (r *bankingRepository) ListStatementLines(ctx context.Context, statementID 
 }
 
 func (r *bankingRepository) UpdateStatementLineReconciledStatus(ctx context.Context, id uuid.UUID, status domain.ReconciledStatus) (*domain.StatementLine, error) {
-	row, err := r.q.UpdateStatementLineReconciledStatus(ctx, sqlc.UpdateStatementLineReconciledStatusParams{
+	row, err := r.queries(ctx).UpdateStatementLineReconciledStatus(ctx, sqlc.UpdateStatementLineReconciledStatusParams{
 		ID:               toPgUUID(id),
 		ReconciledStatus: string(status),
 	})
@@ -288,7 +299,7 @@ func (r *bankingRepository) CreateBankReconciliation(ctx context.Context, recon 
 	if recon.ID == uuid.Nil {
 		recon.ID = uuid.New()
 	}
-	row, err := r.q.CreateBankReconciliation(ctx, sqlc.CreateBankReconciliationParams{
+	row, err := r.queries(ctx).CreateBankReconciliation(ctx, sqlc.CreateBankReconciliationParams{
 		ID:                     toPgUUID(recon.ID),
 		LegalEntityID:          toPgUUID(recon.LegalEntityID),
 		BankAccountID:          toPgUUID(recon.BankAccountID),
@@ -309,7 +320,21 @@ func (r *bankingRepository) CreateBankReconciliation(ctx context.Context, recon 
 }
 
 func (r *bankingRepository) GetBankReconciliationByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Reconciliation, error) {
-	row, err := r.q.GetBankReconciliationByID(ctx, sqlc.GetBankReconciliationByIDParams{
+	row, err := r.queries(ctx).GetBankReconciliationByID(ctx, sqlc.GetBankReconciliationByIDParams{
+		ID:            toPgUUID(id),
+		LegalEntityID: toPgUUID(legalEntityID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrReconciliationNotFound
+		}
+		return nil, err
+	}
+	return mapReconciliation(row), nil
+}
+
+func (r *bankingRepository) LockBankReconciliationByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Reconciliation, error) {
+	row, err := r.queries(ctx).LockBankReconciliationByID(ctx, sqlc.LockBankReconciliationByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -323,7 +348,7 @@ func (r *bankingRepository) GetBankReconciliationByID(ctx context.Context, legal
 }
 
 func (r *bankingRepository) ListBankReconciliations(ctx context.Context, bankAccountID uuid.UUID) ([]*domain.Reconciliation, error) {
-	rows, err := r.q.ListBankReconciliations(ctx, toPgUUID(bankAccountID))
+	rows, err := r.queries(ctx).ListBankReconciliations(ctx, toPgUUID(bankAccountID))
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +360,7 @@ func (r *bankingRepository) ListBankReconciliations(ctx context.Context, bankAcc
 }
 
 func (r *bankingRepository) UpdateBankReconciliation(ctx context.Context, recon *domain.Reconciliation) (*domain.Reconciliation, error) {
-	row, err := r.q.UpdateBankReconciliation(ctx, sqlc.UpdateBankReconciliationParams{
+	row, err := r.queries(ctx).UpdateBankReconciliation(ctx, sqlc.UpdateBankReconciliationParams{
 		ID:                     toPgUUID(recon.ID),
 		LegalEntityID:          toPgUUID(recon.LegalEntityID),
 		Status:                 string(recon.Status),
@@ -360,7 +385,7 @@ func (r *bankingRepository) CreateReconciliationMatch(ctx context.Context, m *do
 	if m.ID == uuid.Nil {
 		m.ID = uuid.New()
 	}
-	row, err := r.q.CreateReconciliationMatch(ctx, sqlc.CreateReconciliationMatchParams{
+	row, err := r.queries(ctx).CreateReconciliationMatch(ctx, sqlc.CreateReconciliationMatchParams{
 		ID:                toPgUUID(m.ID),
 		ReconciliationID:  toPgUUID(m.ReconciliationID),
 		StatementLineID:   toPgUUID(m.StatementLineID),
@@ -379,7 +404,7 @@ func (r *bankingRepository) CreateReconciliationMatch(ctx context.Context, m *do
 }
 
 func (r *bankingRepository) ListReconciliationMatches(ctx context.Context, reconciliationID uuid.UUID) ([]*domain.ReconciliationMatch, error) {
-	rows, err := r.q.ListReconciliationMatches(ctx, toPgUUID(reconciliationID))
+	rows, err := r.queries(ctx).ListReconciliationMatches(ctx, toPgUUID(reconciliationID))
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +416,7 @@ func (r *bankingRepository) ListReconciliationMatches(ctx context.Context, recon
 }
 
 func (r *bankingRepository) DeleteReconciliationMatch(ctx context.Context, id uuid.UUID) error {
-	return r.q.DeleteReconciliationMatch(ctx, toPgUUID(id))
+	return r.queries(ctx).DeleteReconciliationMatch(ctx, toPgUUID(id))
 }
 
 // ============================================================================

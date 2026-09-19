@@ -297,6 +297,33 @@ func (q *Queries) ListStatementLines(ctx context.Context, statementID pgtype.UUI
 	return items, nil
 }
 
+const lockStatementLineByID = `-- name: LockStatementLineByID :one
+SELECT id, statement_id, line_number, transaction_date, value_date, description, reference_number, transaction_type, amount, currency_code, balance_after, reconciled_status, created_at FROM banking.statement_lines
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockStatementLineByID(ctx context.Context, id pgtype.UUID) (BankingStatementLines, error) {
+	row := q.db.QueryRow(ctx, lockStatementLineByID, id)
+	var i BankingStatementLines
+	err := row.Scan(
+		&i.ID,
+		&i.StatementID,
+		&i.LineNumber,
+		&i.TransactionDate,
+		&i.ValueDate,
+		&i.Description,
+		&i.ReferenceNumber,
+		&i.TransactionType,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.BalanceAfter,
+		&i.ReconciledStatus,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const updateBankStatementStatus = `-- name: UpdateBankStatementStatus :one
 UPDATE banking.statements
 SET status = $3,

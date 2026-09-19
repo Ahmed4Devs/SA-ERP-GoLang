@@ -117,13 +117,18 @@ func (h *BankingHandler) importStatement(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *BankingHandler) listStatements(w http.ResponseWriter, r *http.Request) {
+	leID, err := uuid.Parse(r.URL.Query().Get("legal_entity_id"))
+	if err != nil {
+		http.Error(w, `{"error":"invalid or missing legal_entity_id"}`, http.StatusBadRequest)
+		return
+	}
 	accIDStr := r.URL.Query().Get("bank_account_id")
 	accID, err := uuid.Parse(accIDStr)
 	if err != nil {
 		http.Error(w, `{"error":"invalid or missing bank_account_id"}`, http.StatusBadRequest)
 		return
 	}
-	stmts, err := h.service.ListBankStatements(r.Context(), accID)
+	stmts, err := h.service.ListBankStatements(r.Context(), leID, accID)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -157,7 +162,12 @@ func (h *BankingHandler) listStatementLines(w http.ResponseWriter, r *http.Reque
 		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
 		return
 	}
-	lines, err := h.service.ListStatementLines(r.Context(), id)
+	leID, err := uuid.Parse(r.URL.Query().Get("legal_entity_id"))
+	if err != nil {
+		http.Error(w, `{"error":"invalid or missing legal_entity_id"}`, http.StatusBadRequest)
+		return
+	}
+	lines, err := h.service.ListStatementLines(r.Context(), leID, id)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -166,13 +176,18 @@ func (h *BankingHandler) listStatementLines(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *BankingHandler) listReconciliations(w http.ResponseWriter, r *http.Request) {
+	leID, err := uuid.Parse(r.URL.Query().Get("legal_entity_id"))
+	if err != nil {
+		http.Error(w, `{"error":"invalid or missing legal_entity_id"}`, http.StatusBadRequest)
+		return
+	}
 	accIDStr := r.URL.Query().Get("bank_account_id")
 	accID, err := uuid.Parse(accIDStr)
 	if err != nil {
 		http.Error(w, `{"error":"invalid or missing bank_account_id"}`, http.StatusBadRequest)
 		return
 	}
-	recons, err := h.service.ListReconciliations(r.Context(), accID)
+	recons, err := h.service.ListReconciliations(r.Context(), leID, accID)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 		return
@@ -249,13 +264,18 @@ func (h *BankingHandler) addManualMatch(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
 		return
 	}
+	leID, err := uuid.Parse(r.URL.Query().Get("legal_entity_id"))
+	if err != nil {
+		http.Error(w, `{"error":"invalid or missing legal_entity_id"}`, http.StatusBadRequest)
+		return
+	}
 	var req domain.ReconciliationMatch
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request payload"}`, http.StatusBadRequest)
 		return
 	}
 	req.ReconciliationID = id
-	created, err := h.service.AddManualMatch(r.Context(), &req)
+	created, err := h.service.AddManualMatch(r.Context(), leID, &req)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
 		return
@@ -269,7 +289,12 @@ func (h *BankingHandler) listMatches(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
 		return
 	}
-	matches, err := h.service.ListMatches(r.Context(), id)
+	leID, err := uuid.Parse(r.URL.Query().Get("legal_entity_id"))
+	if err != nil {
+		http.Error(w, `{"error":"invalid or missing legal_entity_id"}`, http.StatusBadRequest)
+		return
+	}
+	matches, err := h.service.ListMatches(r.Context(), leID, id)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 		return

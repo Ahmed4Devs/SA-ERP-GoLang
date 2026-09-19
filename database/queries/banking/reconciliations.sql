@@ -16,6 +16,11 @@ RETURNING *;
 SELECT * FROM banking.reconciliations
 WHERE id = $1 AND legal_entity_id = $2;
 
+-- name: LockBankReconciliationByID :one
+SELECT * FROM banking.reconciliations
+WHERE id = $1 AND legal_entity_id = $2
+FOR UPDATE;
+
 -- name: ListBankReconciliations :many
 SELECT * FROM banking.reconciliations
 WHERE bank_account_id = $1

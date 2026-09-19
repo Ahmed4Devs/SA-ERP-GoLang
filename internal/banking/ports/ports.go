@@ -27,12 +27,14 @@ type BankingRepository interface {
 	// Statement Lines
 	CreateStatementLine(ctx context.Context, line *domain.StatementLine) (*domain.StatementLine, error)
 	GetStatementLineByID(ctx context.Context, id uuid.UUID) (*domain.StatementLine, error)
+	LockStatementLineByID(ctx context.Context, id uuid.UUID) (*domain.StatementLine, error)
 	ListStatementLines(ctx context.Context, statementID uuid.UUID) ([]*domain.StatementLine, error)
 	UpdateStatementLineReconciledStatus(ctx context.Context, id uuid.UUID, status domain.ReconciledStatus) (*domain.StatementLine, error)
 
 	// Reconciliations
 	CreateBankReconciliation(ctx context.Context, recon *domain.Reconciliation) (*domain.Reconciliation, error)
 	GetBankReconciliationByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Reconciliation, error)
+	LockBankReconciliationByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Reconciliation, error)
 	ListBankReconciliations(ctx context.Context, bankAccountID uuid.UUID) ([]*domain.Reconciliation, error)
 	UpdateBankReconciliation(ctx context.Context, recon *domain.Reconciliation) (*domain.Reconciliation, error)
 
@@ -51,15 +53,15 @@ type BankingService interface {
 	// Statements
 	ImportBankStatement(ctx context.Context, statement *domain.Statement, lines []*domain.StatementLine) (*domain.Statement, error)
 	GetBankStatement(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Statement, error)
-	ListBankStatements(ctx context.Context, bankAccountID uuid.UUID) ([]*domain.Statement, error)
-	ListStatementLines(ctx context.Context, statementID uuid.UUID) ([]*domain.StatementLine, error)
+	ListBankStatements(ctx context.Context, legalEntityID, bankAccountID uuid.UUID) ([]*domain.Statement, error)
+	ListStatementLines(ctx context.Context, legalEntityID, statementID uuid.UUID) ([]*domain.StatementLine, error)
 
 	// Reconciliation
 	CreateReconciliation(ctx context.Context, recon *domain.Reconciliation) (*domain.Reconciliation, error)
 	GetReconciliation(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Reconciliation, error)
-	ListReconciliations(ctx context.Context, bankAccountID uuid.UUID) ([]*domain.Reconciliation, error)
+	ListReconciliations(ctx context.Context, legalEntityID, bankAccountID uuid.UUID) ([]*domain.Reconciliation, error)
 	RunAutoMatch(ctx context.Context, legalEntityID, reconciliationID uuid.UUID, candidateEntries []domain.CandidateLedgerEntry) ([]domain.AutoMatchResult, error)
-	AddManualMatch(ctx context.Context, match *domain.ReconciliationMatch) (*domain.ReconciliationMatch, error)
+	AddManualMatch(ctx context.Context, legalEntityID uuid.UUID, match *domain.ReconciliationMatch) (*domain.ReconciliationMatch, error)
 	LockReconciliation(ctx context.Context, legalEntityID, id uuid.UUID, lockedBy uuid.UUID) (*domain.Reconciliation, error)
-	ListMatches(ctx context.Context, reconciliationID uuid.UUID) ([]*domain.ReconciliationMatch, error)
+	ListMatches(ctx context.Context, legalEntityID, reconciliationID uuid.UUID) ([]*domain.ReconciliationMatch, error)
 }

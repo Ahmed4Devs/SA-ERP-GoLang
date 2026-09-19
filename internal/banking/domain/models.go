@@ -10,13 +10,20 @@ import (
 )
 
 var (
-	ErrBankAccountNotFound    = errors.New("bank account not found")
-	ErrStatementNotFound      = errors.New("bank statement not found")
-	ErrStatementLineNotFound  = errors.New("statement line not found")
-	ErrReconciliationNotFound = errors.New("bank reconciliation not found")
-	ErrReconciliationLocked   = errors.New("bank reconciliation is locked and cannot be modified")
-	ErrInvalidIBAN            = errors.New("invalid IBAN format")
-	ErrInvalidAmount          = errors.New("amount must be greater than zero")
+	ErrBankAccountNotFound      = errors.New("bank account not found")
+	ErrStatementNotFound        = errors.New("bank statement not found")
+	ErrStatementLineNotFound    = errors.New("statement line not found")
+	ErrReconciliationNotFound   = errors.New("bank reconciliation not found")
+	ErrReconciliationLocked     = errors.New("bank reconciliation is locked and cannot be modified")
+	ErrStatementLineMismatch    = errors.New("statement line does not belong to the reconciliation statement")
+	ErrStatementAccountMismatch = errors.New("bank statement does not belong to the reconciliation account")
+	ErrStatementLineMatched     = errors.New("statement line is already fully matched")
+	ErrInvalidStatementLine     = errors.New("bank statement contains an invalid line")
+	ErrBankAccountUnavailable   = errors.New("bank account is not active")
+	ErrCurrencyMismatch         = errors.New("currency does not match the bank account")
+	ErrInvalidMatchedEntityType = errors.New("invalid matched entity type")
+	ErrInvalidIBAN              = errors.New("invalid IBAN format")
+	ErrInvalidAmount            = errors.New("amount must be greater than zero")
 )
 
 type BankAccountStatus string

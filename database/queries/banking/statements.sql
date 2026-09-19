@@ -44,6 +44,11 @@ RETURNING *;
 SELECT * FROM banking.statement_lines
 WHERE id = $1;
 
+-- name: LockStatementLineByID :one
+SELECT * FROM banking.statement_lines
+WHERE id = $1
+FOR UPDATE;
+
 -- name: ListStatementLines :many
 SELECT * FROM banking.statement_lines
 WHERE statement_id = $1

@@ -2,6 +2,8 @@ package banking_test
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +33,7 @@ func setupBankingTest(t *testing.T) (*banking.Module, *database.DB, uuid.UUID, u
 	if err != nil {
 		t.Skipf("PostgreSQL not accessible: %v", err)
 	}
+	t.Cleanup(db.Close)
 
 	txManager := transaction.NewManager(db.Pool)
 	if err := database.MigrateUp(ctx, cfg.Database.URL, "../../../database/migrations"); err != nil {
@@ -59,13 +62,17 @@ func setupBankingTest(t *testing.T) (*banking.Module, *database.DB, uuid.UUID, u
 	return bankingMod, db, le.ID, adminID, ctx
 }
 
+func uniqueBankIdentifiers() (string, string) {
+	value := strings.ReplaceAll(uuid.New().String(), "-", "")
+	return value[:14], "SA" + value[:20]
+}
+
 func TestBankAccount_MaskingAndManagement(t *testing.T) {
 	bankingMod, _, leID, _, ctx := setupBankingTest(t)
 	svc := bankingMod.BankingService
 
 	code := "BANK-TEST-" + uuid.New().String()[:8]
-	iban := "SA12200000" + uuid.New().String()[:12]
-	accNum := "10203040506070"
+	accNum, iban := uniqueBankIdentifiers()
 
 	acc, err := svc.CreateBankAccount(ctx, &domain.BankAccount{
 		LegalEntityID:  leID,
@@ -83,8 +90,9 @@ func TestBankAccount_MaskingAndManagement(t *testing.T) {
 		t.Fatalf("failed to create bank account: %v", err)
 	}
 
-	if acc.AccountNumberMasked != "**** **** **** 6070" {
-		t.Errorf("expected masked account number '**** **** **** 6070', got '%s'", acc.AccountNumberMasked)
+	expectedMasked := "**** **** **** " + accNum[len(accNum)-4:]
+	if acc.AccountNumberMasked != expectedMasked {
+		t.Errorf("expected masked account number %q, got %q", expectedMasked, acc.AccountNumberMasked)
 	}
 	if !acc.CurrentBalance.Equal(decimal.NewFromInt(50000)) {
 		t.Errorf("expected balance 50000, got %s", acc.CurrentBalance.String())
@@ -103,6 +111,7 @@ func TestBankAccount_MaskingAndManagement(t *testing.T) {
 func TestBankStatement_ImportAndLines(t *testing.T) {
 	bankingMod, _, leID, adminID, ctx := setupBankingTest(t)
 	svc := bankingMod.BankingService
+	accountNumber, iban := uniqueBankIdentifiers()
 
 	// 1. Create bank account
 	bankAcc, err := svc.CreateBankAccount(ctx, &domain.BankAccount{
@@ -110,8 +119,8 @@ func TestBankStatement_ImportAndLines(t *testing.T) {
 		AccountCode:    "BANK-STMT-" + uuid.New().String()[:8],
 		BankNameEn:     "Arab National Bank",
 		BankNameAr:     "البنك العربي الوطني",
-		AccountNumber:  "554433221100",
-		IBAN:           "SA99400000554433221100",
+		AccountNumber:  accountNumber,
+		IBAN:           iban,
 		SwiftBIC:       "ARNBSARI",
 		CurrencyCode:   "SAR",
 		OpeningBalance: decimal.NewFromInt(10000),
@@ -168,18 +177,22 @@ func TestBankStatement_ImportAndLines(t *testing.T) {
 	}
 
 	// Check lines
-	fetchedLines, err := svc.ListStatementLines(ctx, stmt.ID)
+	fetchedLines, err := svc.ListStatementLines(ctx, leID, stmt.ID)
 	if err != nil {
 		t.Fatalf("failed to list statement lines: %v", err)
 	}
 	if len(fetchedLines) != 2 {
 		t.Fatalf("expected 2 lines, got %d", len(fetchedLines))
 	}
+	if _, err := svc.ListStatementLines(ctx, uuid.New(), stmt.ID); !errors.Is(err, domain.ErrStatementNotFound) {
+		t.Fatalf("expected tenant-scoped statement lines, got %v", err)
+	}
 }
 
 func TestBankReconciliation_AutoMatch(t *testing.T) {
 	bankingMod, _, leID, adminID, ctx := setupBankingTest(t)
 	svc := bankingMod.BankingService
+	accountNumber, iban := uniqueBankIdentifiers()
 
 	// 1. Bank Account
 	bankAcc, err := svc.CreateBankAccount(ctx, &domain.BankAccount{
@@ -187,8 +200,8 @@ func TestBankReconciliation_AutoMatch(t *testing.T) {
 		AccountCode:    "BANK-RECON-" + uuid.New().String()[:8],
 		BankNameEn:     "Alinma Bank",
 		BankNameAr:     "مصرف الإنماء",
-		AccountNumber:  "887766554433",
-		IBAN:           "SA77050000887766554433",
+		AccountNumber:  accountNumber,
+		IBAN:           iban,
 		SwiftBIC:       "INMASARI",
 		CurrencyCode:   "SAR",
 		OpeningBalance: decimal.NewFromInt(20000),
@@ -274,7 +287,7 @@ func TestBankReconciliation_AutoMatch(t *testing.T) {
 	}
 
 	// Verify matches recorded in DB
-	matches, err := svc.ListMatches(ctx, recon.ID)
+	matches, err := svc.ListMatches(ctx, leID, recon.ID)
 	if err != nil {
 		t.Fatalf("failed to list matches: %v", err)
 	}
@@ -284,11 +297,60 @@ func TestBankReconciliation_AutoMatch(t *testing.T) {
 	if *matches[0].MatchedEntityID != candidateInvoiceID {
 		t.Errorf("expected matched entity ID %s, got %s", candidateInvoiceID, matches[0].MatchedEntityID.String())
 	}
+	if _, err := svc.ListMatches(ctx, uuid.New(), recon.ID); !errors.Is(err, domain.ErrReconciliationNotFound) {
+		t.Fatalf("expected tenant-scoped reconciliation matches, got %v", err)
+	}
+
+	partialMatch, err := svc.AddManualMatch(ctx, leID, &domain.ReconciliationMatch{
+		ReconciliationID:  recon.ID,
+		StatementLineID:   lines[1].ID,
+		MatchType:         domain.MatchExact,
+		MatchedEntityType: domain.MatchedEntityBankFeeAdjustment,
+		MatchedAmount:     decimal.NewFromInt(10),
+	})
+	if err != nil {
+		t.Fatalf("failed to add partial manual match: %v", err)
+	}
+	if partialMatch.MatchType != domain.MatchManual || !partialMatch.DifferenceAmount.Equal(decimal.NewFromInt(15)) {
+		t.Fatalf("unexpected partial match result: type=%s difference=%s", partialMatch.MatchType, partialMatch.DifferenceAmount)
+	}
+
+	_, err = svc.AddManualMatch(ctx, leID, &domain.ReconciliationMatch{
+		ReconciliationID:  recon.ID,
+		StatementLineID:   lines[1].ID,
+		MatchedEntityType: domain.MatchedEntityBankFeeAdjustment,
+		MatchedAmount:     decimal.NewFromInt(16),
+	})
+	if !errors.Is(err, domain.ErrInvalidAmount) {
+		t.Fatalf("expected overmatching the remaining amount to fail, got %v", err)
+	}
+
+	finalMatch, err := svc.AddManualMatch(ctx, leID, &domain.ReconciliationMatch{
+		ReconciliationID:  recon.ID,
+		StatementLineID:   lines[1].ID,
+		MatchedEntityType: domain.MatchedEntityBankFeeAdjustment,
+		MatchedAmount:     decimal.NewFromInt(15),
+	})
+	if err != nil {
+		t.Fatalf("failed to complete manual match: %v", err)
+	}
+	if !finalMatch.DifferenceAmount.IsZero() {
+		t.Fatalf("expected no remaining difference, got %s", finalMatch.DifferenceAmount)
+	}
+
+	updatedLines, err := svc.ListStatementLines(ctx, leID, stmt.ID)
+	if err != nil {
+		t.Fatalf("failed to list updated statement lines: %v", err)
+	}
+	if updatedLines[1].ReconciledStatus != domain.ReconciledMatched {
+		t.Fatalf("expected fully allocated line to be matched, got %s", updatedLines[1].ReconciledStatus)
+	}
 }
 
 func TestBankReconciliation_Completion(t *testing.T) {
 	bankingMod, _, leID, adminID, ctx := setupBankingTest(t)
 	svc := bankingMod.BankingService
+	accountNumber, iban := uniqueBankIdentifiers()
 
 	// 1. Bank Account
 	bankAcc, err := svc.CreateBankAccount(ctx, &domain.BankAccount{
@@ -296,8 +358,8 @@ func TestBankReconciliation_Completion(t *testing.T) {
 		AccountCode:    "BANK-LOCK-" + uuid.New().String()[:8],
 		BankNameEn:     "Bank AlJazira",
 		BankNameAr:     "بنك الجزيرة",
-		AccountNumber:  "123123123123",
-		IBAN:           "SA60600000123123123123",
+		AccountNumber:  accountNumber,
+		IBAN:           iban,
 		SwiftBIC:       "BJAZSARI",
 		CurrencyCode:   "SAR",
 		OpeningBalance: decimal.NewFromInt(15000),
@@ -335,5 +397,165 @@ func TestBankReconciliation_Completion(t *testing.T) {
 	_, err = svc.RunAutoMatch(ctx, leID, recon.ID, nil)
 	if err != domain.ErrReconciliationLocked {
 		t.Fatalf("expected ErrReconciliationLocked, got %v", err)
+	}
+}
+
+func TestBankStatement_ImportRollsBackOnLineFailure(t *testing.T) {
+	bankingMod, _, leID, _, ctx := setupBankingTest(t)
+	svc := bankingMod.BankingService
+	accountNumber, iban := uniqueBankIdentifiers()
+
+	bankAcc, err := svc.CreateBankAccount(ctx, &domain.BankAccount{
+		LegalEntityID:  leID,
+		AccountCode:    "BANK-ROLLBACK-" + uuid.New().String()[:8],
+		BankNameEn:     "Rollback Test Bank",
+		BankNameAr:     "بنك اختبار التراجع",
+		AccountNumber:  accountNumber,
+		IBAN:           iban,
+		CurrencyCode:   "SAR",
+		OpeningBalance: decimal.NewFromInt(1000),
+	})
+	if err != nil {
+		t.Fatalf("failed to create bank account: %v", err)
+	}
+
+	now := time.Now()
+	statementID := uuid.New()
+	duplicateLineID := uuid.New()
+	_, err = svc.ImportBankStatement(ctx, &domain.Statement{
+		ID:              statementID,
+		LegalEntityID:   leID,
+		BankAccountID:   bankAcc.ID,
+		StatementNumber: "ROLLBACK-" + uuid.New().String()[:8],
+		StatementDate:   now,
+		StartDate:       now.AddDate(0, 0, -1),
+		EndDate:         now,
+		OpeningBalance:  decimal.NewFromInt(1000),
+		CurrencyCode:    "SAR",
+	}, []*domain.StatementLine{
+		{
+			ID:              duplicateLineID,
+			TransactionDate: now,
+			Description:     "first line",
+			TransactionType: domain.TransactionCredit,
+			Amount:          decimal.NewFromInt(100),
+		},
+		{
+			ID:              duplicateLineID,
+			TransactionDate: now,
+			Description:     "duplicate primary key",
+			TransactionType: domain.TransactionDebit,
+			Amount:          decimal.NewFromInt(50),
+		},
+	})
+	if err == nil {
+		t.Fatal("expected statement import to fail on the duplicate line ID")
+	}
+
+	_, err = svc.GetBankStatement(ctx, leID, statementID)
+	if !errors.Is(err, domain.ErrStatementNotFound) {
+		t.Fatalf("expected the statement insert to roll back, got %v", err)
+	}
+}
+
+func TestBankReconciliation_AutoMatchRollsBackOnMatchFailure(t *testing.T) {
+	bankingMod, _, leID, _, ctx := setupBankingTest(t)
+	svc := bankingMod.BankingService
+	accountNumber, iban := uniqueBankIdentifiers()
+
+	bankAcc, err := svc.CreateBankAccount(ctx, &domain.BankAccount{
+		LegalEntityID:  leID,
+		AccountCode:    "BANK-MATCH-RB-" + uuid.New().String()[:8],
+		BankNameEn:     "Match Rollback Bank",
+		BankNameAr:     "بنك اختبار تراجع المطابقة",
+		AccountNumber:  accountNumber,
+		IBAN:           iban,
+		CurrencyCode:   "SAR",
+		OpeningBalance: decimal.NewFromInt(5000),
+	})
+	if err != nil {
+		t.Fatalf("failed to create bank account: %v", err)
+	}
+
+	now := time.Now()
+	firstRef := "MATCH-VALID-" + uuid.New().String()[:8]
+	secondRef := "MATCH-INVALID-" + uuid.New().String()[:8]
+	stmt, err := svc.ImportBankStatement(ctx, &domain.Statement{
+		LegalEntityID:   leID,
+		BankAccountID:   bankAcc.ID,
+		StatementNumber: "MATCH-RB-" + uuid.New().String()[:8],
+		StatementDate:   now,
+		StartDate:       now.AddDate(0, 0, -1),
+		EndDate:         now,
+		OpeningBalance:  decimal.NewFromInt(5000),
+		CurrencyCode:    "SAR",
+	}, []*domain.StatementLine{
+		{
+			TransactionDate: now,
+			Description:     "valid match line",
+			ReferenceNumber: &firstRef,
+			TransactionType: domain.TransactionCredit,
+			Amount:          decimal.NewFromInt(100),
+		},
+		{
+			TransactionDate: now,
+			Description:     "invalid match line",
+			ReferenceNumber: &secondRef,
+			TransactionType: domain.TransactionDebit,
+			Amount:          decimal.NewFromInt(50),
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to import statement: %v", err)
+	}
+
+	recon, err := svc.CreateReconciliation(ctx, &domain.Reconciliation{
+		LegalEntityID:          leID,
+		BankAccountID:          bankAcc.ID,
+		StatementID:            &stmt.ID,
+		AsOfDate:               now,
+		StatementEndingBalance: decimal.NewFromInt(5050),
+		GLBookBalance:          decimal.NewFromInt(5050),
+	})
+	if err != nil {
+		t.Fatalf("failed to create reconciliation: %v", err)
+	}
+
+	_, err = svc.RunAutoMatch(ctx, leID, recon.ID, []domain.CandidateLedgerEntry{
+		{
+			EntityType:      domain.MatchedEntityReceipt,
+			EntityID:        uuid.New(),
+			ReferenceNumber: firstRef,
+			Date:            now,
+			Amount:          decimal.NewFromInt(100),
+		},
+		{
+			EntityType:      domain.MatchedEntityType("INVALID"),
+			EntityID:        uuid.New(),
+			ReferenceNumber: secondRef,
+			Date:            now,
+			Amount:          decimal.NewFromInt(50),
+		},
+	})
+	if err == nil {
+		t.Fatal("expected auto-match to fail on the invalid entity type")
+	}
+
+	matches, err := svc.ListMatches(ctx, leID, recon.ID)
+	if err != nil {
+		t.Fatalf("failed to list matches: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("expected all match inserts to roll back, got %d", len(matches))
+	}
+
+	lines, err := svc.ListStatementLines(ctx, leID, stmt.ID)
+	if err != nil {
+		t.Fatalf("failed to list statement lines: %v", err)
+	}
+	for _, line := range lines {
+		if line.ReconciledStatus != domain.ReconciledUnmatched {
+			t.Fatalf("expected line %s to remain unmatched, got %s", line.ID, line.ReconciledStatus)
+		}
 	}
 }
