@@ -49,6 +49,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *database.DB, depende
 	router.Use(metrics.HTTPMetricsMiddleware)
 	router.Use(middleware.SecurityHeaders(middleware.DefaultSecurityHeadersConfig(isProd)))
 	router.Use(middleware.TenantBoundaryGuard())
+	if db != nil {
+		router.Use(middleware.TenantResourceGuard(middleware.NewPostgresTenantOwnershipChecker(db), logger))
+	}
 	router.Use(middleware.Recovery(logger))
 	router.Use(chimiddleware.Timeout(60 * time.Second))
 

@@ -26,7 +26,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func setupSecurityTest(t *testing.T) (*platformhttp.Server, uuid.UUID, context.Context) {
+func setupSecurityTest(t *testing.T) (*platformhttp.Server, *database.DB, uuid.UUID, context.Context) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -39,6 +39,7 @@ func setupSecurityTest(t *testing.T) (*platformhttp.Server, uuid.UUID, context.C
 	if err != nil {
 		t.Skipf("PostgreSQL not accessible: %v", err)
 	}
+	t.Cleanup(db.Close)
 
 	txManager := transaction.NewManager(db.Pool)
 	if err := database.MigrateUp(ctx, cfg.Database.URL, "../../../database/migrations"); err != nil {
@@ -54,12 +55,12 @@ func setupSecurityTest(t *testing.T) (*platformhttp.Server, uuid.UUID, context.C
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	server := platformhttp.NewServer(cfg, logger, db)
 
-	return server, le.ID, ctx
+	return server, db, le.ID, ctx
 }
 
 // 1. OWASP Security Headers Test
 func TestSecurity_OWASPHeaders(t *testing.T) {
-	server, _, _ := setupSecurityTest(t)
+	server, _, _, _ := setupSecurityTest(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
@@ -282,9 +283,61 @@ func TestSecurity_TenantBoundaryGuard(t *testing.T) {
 	}
 }
 
+func TestSecurity_TenantResourceGuardBlocksCrossEntityIDOR(t *testing.T) {
+	server, db, entityAID, ctx := setupSecurityTest(t)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	orgMod := organization.NewModule(cfg, db, transaction.NewManager(db.Pool))
+	org, err := orgMod.OrgService.CreateOrganization(ctx, "ORG-IDOR-"+uuid.NewString()[:8], "منظمة عزل الموارد", "Resource Isolation Org")
+	if err != nil {
+		t.Fatalf("create IDOR test organization: %v", err)
+	}
+	crNumber := fmt.Sprintf("1%09d", time.Now().UnixNano()%1_000_000_000)
+	entityB, err := orgMod.OrgService.CreateLegalEntity(ctx, org.ID, "LE-IDOR", "كيان الموارد الآخر", "Other Resource Entity", crNumber, "SAR")
+	if err != nil {
+		t.Fatalf("create second legal entity: %v", err)
+	}
+
+	insertNotification := func(legalEntityID uuid.UUID) uuid.UUID {
+		t.Helper()
+		id := uuid.New()
+		_, err := db.Pool.Exec(ctx, `
+			INSERT INTO notifications.notifications (
+				id, legal_entity_id, channel, title_ar, title_en, body_ar, body_en,
+				category, priority, status
+			) VALUES ($1, $2, 'IN_APP', 'اختبار', 'Test', 'اختبار', 'Test', 'SYSTEM', 'NORMAL', 'SENT')`, id, legalEntityID)
+		if err != nil {
+			t.Fatalf("insert tenant resource: %v", err)
+		}
+		return id
+	}
+	ownedID := insertNotification(entityAID)
+	foreignID := insertNotification(entityB.ID)
+
+	server.Router.Get("/test-tenant-resources/{id}", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	ownedReq := httptest.NewRequest(http.MethodGet, "/test-tenant-resources/"+ownedID.String()+"?legal_entity_id="+entityAID.String(), nil)
+	ownedRecorder := httptest.NewRecorder()
+	server.Router.ServeHTTP(ownedRecorder, ownedReq)
+	if ownedRecorder.Code != http.StatusOK {
+		t.Fatalf("expected same-tenant resource to pass, got %d: %s", ownedRecorder.Code, ownedRecorder.Body.String())
+	}
+
+	foreignReq := httptest.NewRequest(http.MethodGet, "/test-tenant-resources/"+foreignID.String()+"?legal_entity_id="+entityAID.String(), nil)
+	foreignRecorder := httptest.NewRecorder()
+	server.Router.ServeHTTP(foreignRecorder, foreignReq)
+	if foreignRecorder.Code != http.StatusNotFound {
+		t.Fatalf("expected cross-tenant resource to be hidden, got %d: %s", foreignRecorder.Code, foreignRecorder.Body.String())
+	}
+}
+
 // 6. SQL Injection Resilience Test
 func TestSecurity_SQLInjectionResilience(t *testing.T) {
-	server, leID, ctx := setupSecurityTest(t)
+	server, _, leID, ctx := setupSecurityTest(t)
 
 	// Attempt SQL injection via query parameters
 	sqlInjections := []string{

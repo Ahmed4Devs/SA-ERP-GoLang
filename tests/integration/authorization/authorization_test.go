@@ -14,6 +14,7 @@ import (
 	"erp/internal/organization"
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
+	platformmiddleware "erp/internal/platform/middleware"
 	"erp/internal/platform/transaction"
 	"github.com/google/uuid"
 )
@@ -145,6 +146,25 @@ func TestAuthorization_LegalEntityScopeEnforcement(t *testing.T) {
 	}
 	if decisionB.Allowed {
 		t.Errorf("SECURITY BREACH: user granted permission in unauthorized Entity B scope!")
+	}
+
+	// The production middleware must make the same decision from request tenant context.
+	scopedHandler := platformmiddleware.TenantBoundaryGuard()(authzMod.RequireModuleAccess("gl.journals.post", "gl.journals.post")(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+	))
+	requestFor := func(entityID uuid.UUID) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/accounting/journals?legal_entity_id="+entityID.String(), nil)
+		return req.WithContext(iamhttp.ContextWithUser(req.Context(), createdUser))
+	}
+	allowedRecorder := httptest.NewRecorder()
+	scopedHandler.ServeHTTP(allowedRecorder, requestFor(entityA.ID))
+	if allowedRecorder.Code != http.StatusOK {
+		t.Fatalf("expected scoped middleware access in entity A, got %d", allowedRecorder.Code)
+	}
+	deniedRecorder := httptest.NewRecorder()
+	scopedHandler.ServeHTTP(deniedRecorder, requestFor(entityB.ID))
+	if deniedRecorder.Code != http.StatusForbidden {
+		t.Fatalf("expected scoped middleware denial in entity B, got %d", deniedRecorder.Code)
 	}
 
 	// 7. Test Unheld Permission in Entity A scope: Should be DENIED
