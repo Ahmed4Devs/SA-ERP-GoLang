@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"erp/internal/authorization"
 	"erp/internal/authorization/domain"
@@ -32,6 +31,7 @@ func setupAuthzTest(t *testing.T) (*authorization.Module, *organization.Module, 
 	if err != nil {
 		t.Skipf("PostgreSQL not accessible, skipping integration test: %v", err)
 	}
+	t.Cleanup(db.Close)
 
 	txManager := transaction.NewManager(db.Pool)
 	iamMod := iam.NewModule(cfg, db, txManager)
@@ -76,7 +76,7 @@ func TestAuthorization_LegalEntityScopeEnforcement(t *testing.T) {
 	authzMod, orgMod, iamMod, ctx := setupAuthzTest(t)
 
 	// 1. Setup two separate legal entities to test isolation boundary
-	org, err := orgMod.OrgService.CreateOrganization(ctx, fmt.Sprintf("ORG-AUTHZ-%d", time.Now().UnixNano()%100000), "منظمة الصلاحيات", "Authz Org")
+	org, err := orgMod.OrgService.CreateOrganization(ctx, "ORG-AUTHZ-"+uuid.New().String()[:8], "منظمة الصلاحيات", "Authz Org")
 	if err != nil {
 		t.Fatalf("failed to create org: %v", err)
 	}
@@ -182,10 +182,10 @@ func TestAuthorization_LegalEntityScopeEnforcement(t *testing.T) {
 func TestAuthorization_MiddlewareEnforcement(t *testing.T) {
 	authzMod, orgMod, iamMod, ctx := setupAuthzTest(t)
 
-	org, _ := orgMod.OrgService.CreateOrganization(ctx, fmt.Sprintf("ORG-MW-%d", time.Now().UnixNano()%100000), "منظمة البرمجية", "Middleware Org")
+	org, _ := orgMod.OrgService.CreateOrganization(ctx, "ORG-MW-"+uuid.New().String()[:8], "منظمة البرمجية", "Middleware Org")
 	entity, _ := orgMod.OrgService.CreateLegalEntity(ctx, org.ID, "LE-MW", "الكيان البرمجي", "MW Entity", "1010333333", "SAR")
 
-	testUsername := fmt.Sprintf("mw_%d", time.Now().UnixNano()%1000000)
+	testUsername := fmt.Sprintf("mw_%s", uuid.New().String()[:8])
 	testUser, err := iamMod.AuthService.SeedAdmin(ctx, testUsername, testUsername+"@erp.sa", "مدير المالية", "ComplexPass123!")
 	if err != nil {
 		t.Fatalf("failed to create test user: %v", err)
