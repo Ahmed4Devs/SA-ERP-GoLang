@@ -2,6 +2,7 @@ package gosi_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -33,6 +34,7 @@ func setupGOSITest(t *testing.T) (*gosi.Module, *hr.Module, *database.DB, uuid.U
 	if err != nil {
 		t.Skipf("PostgreSQL not accessible: %v", err)
 	}
+	t.Cleanup(db.Close)
 
 	txManager := transaction.NewManager(db.Pool)
 	if err := database.MigrateUp(ctx, cfg.Database.URL, "../../../database/migrations"); err != nil {
@@ -44,10 +46,14 @@ func setupGOSITest(t *testing.T) (*gosi.Module, *hr.Module, *database.DB, uuid.U
 	hrMod := hr.NewModule(cfg, db)
 	gosiMod := gosi.NewModule(cfg, db)
 
-	// 1. Seed Organization
-	le, err := orgMod.SeedDefaultStructure(ctx)
+	// 1. Create an isolated organization and legal entity for each test.
+	org, err := orgMod.OrgService.CreateOrganization(ctx, "ORG-GOSI-"+uuid.NewString()[:8], "منظمة اختبار التأمينات", "GOSI Test Organization")
 	if err != nil {
-		t.Fatalf("failed to seed organization: %v", err)
+		t.Fatalf("failed to create test organization: %v", err)
+	}
+	le, err := orgMod.OrgService.CreateLegalEntity(ctx, org.ID, "LE-GOSI", "كيان اختبار التأمينات", "GOSI Test Entity", "1010222222", "SAR")
+	if err != nil {
+		t.Fatalf("failed to create test legal entity: %v", err)
 	}
 
 	// 2. Seed default GOSI rules & versions
@@ -195,6 +201,11 @@ func TestGOSI_SaudiNationalCalculation(t *testing.T) {
 		t.Fatalf("expected 3 rules applied for Saudi national, got %d", len(results))
 	}
 
+	input.LegalEntityID = uuid.New()
+	if _, err := gosiMod.GosiService.Calculate(ctx, input); !errors.Is(err, domain.ErrEmployeeScopeMismatch) {
+		t.Fatalf("expected cross-entity employee calculation to fail with scope mismatch, got %v", err)
+	}
+
 	totalEmp := decimal.Zero
 	totalEr := decimal.Zero
 	for _, r := range results {
@@ -335,14 +346,29 @@ func TestGOSI_MonthlyCalculationAndExportBatch(t *testing.T) {
 		t.Fatalf("expected at least 2 calculations (1 Saudi, 1 Expat), got %d", len(calcs))
 	}
 
+	// Re-running an open period replaces line details instead of duplicating them.
+	recalcs, err := gosiMod.GosiService.RunMonthlyCalculation(ctx, leID, year, month)
+	if err != nil {
+		t.Fatalf("idempotent RunMonthlyCalculation failed: %v", err)
+	}
+	if len(recalcs) != len(calcs) {
+		t.Fatalf("expected %d calculations after rerun, got %d", len(calcs), len(recalcs))
+	}
+
 	// 2. Fetch calculation details and lines
 	calc0 := calcs[0]
-	detCalc, lines, err := gosiMod.GosiService.GetCalculationDetails(ctx, calc0.ID)
+	detCalc, lines, err := gosiMod.GosiService.GetCalculationDetails(ctx, leID, calc0.ID)
 	if err != nil {
 		t.Fatalf("GetCalculationDetails failed: %v", err)
 	}
 	if detCalc == nil || len(lines) == 0 {
 		t.Fatalf("expected non-empty calculation and lines")
+	}
+	if len(lines) > 3 {
+		t.Fatalf("monthly rerun duplicated calculation lines: got %d", len(lines))
+	}
+	if _, _, err := gosiMod.GosiService.GetCalculationDetails(ctx, uuid.New(), calc0.ID); !errors.Is(err, domain.ErrCalculationNotFound) {
+		t.Fatalf("expected cross-entity calculation lookup to be hidden, got %v", err)
 	}
 
 	// 3. Create Export Batch
@@ -358,6 +384,12 @@ func TestGOSI_MonthlyCalculationAndExportBatch(t *testing.T) {
 	}
 	if batch.FileContent == nil || !strings.Contains(*batch.FileContent, "GOSIContributionReport") {
 		t.Errorf("batch XML file content invalid or missing root tag")
+	}
+	if _, err := gosiMod.GosiService.CreateExportBatch(ctx, leID, year, month, nil); !errors.Is(err, domain.ErrPeriodAlreadyExported) {
+		t.Fatalf("expected duplicate export to fail, got %v", err)
+	}
+	if _, err := gosiMod.GosiService.RunMonthlyCalculation(ctx, leID, year, month); !errors.Is(err, domain.ErrPeriodAlreadyExported) {
+		t.Fatalf("expected exported period recalculation to fail, got %v", err)
 	}
 
 	// 4. Verify Dashboard Summary

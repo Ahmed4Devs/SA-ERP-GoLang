@@ -247,6 +247,16 @@ func (q *Queries) CreateIntegrationAttempt(ctx context.Context, arg CreateIntegr
 	return i, err
 }
 
+const deleteGosiCalculationLines = `-- name: DeleteGosiCalculationLines :exec
+DELETE FROM gosi.contribution_calculation_lines
+WHERE calculation_id = $1
+`
+
+func (q *Queries) DeleteGosiCalculationLines(ctx context.Context, calculationID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGosiCalculationLines, calculationID)
+	return err
+}
+
 const getExportBatchByID = `-- name: GetExportBatchByID :one
 SELECT id, legal_entity_id, batch_number, export_year, export_month, employee_count, total_employee_amount, total_employer_amount, total_amount, file_content, file_format, status, submitted_at, confirmed_at, created_by, created_at FROM gosi.export_batches WHERE id = $1
 `
@@ -276,11 +286,17 @@ func (q *Queries) GetExportBatchByID(ctx context.Context, id pgtype.UUID) (GosiE
 }
 
 const getGosiContributionCalculation = `-- name: GetGosiContributionCalculation :one
-SELECT id, legal_entity_id, employee_id, profile_id, calculation_year, calculation_month, contribution_basis, total_employee_amount, total_employer_amount, total_amount, calculation_snapshot, export_batch_id, status, created_at FROM gosi.contribution_calculations WHERE id = $1
+SELECT id, legal_entity_id, employee_id, profile_id, calculation_year, calculation_month, contribution_basis, total_employee_amount, total_employer_amount, total_amount, calculation_snapshot, export_batch_id, status, created_at FROM gosi.contribution_calculations
+WHERE id = $1 AND legal_entity_id = $2
 `
 
-func (q *Queries) GetGosiContributionCalculation(ctx context.Context, id pgtype.UUID) (GosiContributionCalculations, error) {
-	row := q.db.QueryRow(ctx, getGosiContributionCalculation, id)
+type GetGosiContributionCalculationParams struct {
+	ID            pgtype.UUID `json:"id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+}
+
+func (q *Queries) GetGosiContributionCalculation(ctx context.Context, arg GetGosiContributionCalculationParams) (GosiContributionCalculations, error) {
+	row := q.db.QueryRow(ctx, getGosiContributionCalculation, arg.ID, arg.LegalEntityID)
 	var i GosiContributionCalculations
 	err := row.Scan(
 		&i.ID,
@@ -301,7 +317,7 @@ func (q *Queries) GetGosiContributionCalculation(ctx context.Context, id pgtype.
 	return i, err
 }
 
-const linkCalculationsToExportBatch = `-- name: LinkCalculationsToExportBatch :exec
+const linkCalculationsToExportBatch = `-- name: LinkCalculationsToExportBatch :execrows
 UPDATE gosi.contribution_calculations
 SET export_batch_id = $1, status = 'EXPORTED'
 WHERE legal_entity_id = $2 AND calculation_year = $3 AND calculation_month = $4 AND status = 'CALCULATED'
@@ -314,14 +330,17 @@ type LinkCalculationsToExportBatchParams struct {
 	CalculationMonth int32       `json:"calculation_month"`
 }
 
-func (q *Queries) LinkCalculationsToExportBatch(ctx context.Context, arg LinkCalculationsToExportBatchParams) error {
-	_, err := q.db.Exec(ctx, linkCalculationsToExportBatch,
+func (q *Queries) LinkCalculationsToExportBatch(ctx context.Context, arg LinkCalculationsToExportBatchParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkCalculationsToExportBatch,
 		arg.ExportBatchID,
 		arg.LegalEntityID,
 		arg.CalculationYear,
 		arg.CalculationMonth,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listExportBatches = `-- name: ListExportBatches :many
@@ -510,6 +529,55 @@ func (q *Queries) ListIntegrationAttempts(ctx context.Context, batchID pgtype.UU
 			&i.ErrorMessage,
 			&i.StartedAt,
 			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockGosiCalculationsByPeriod = `-- name: LockGosiCalculationsByPeriod :many
+SELECT id, legal_entity_id, employee_id, profile_id, calculation_year, calculation_month, contribution_basis, total_employee_amount, total_employer_amount, total_amount, calculation_snapshot, export_batch_id, status, created_at
+FROM gosi.contribution_calculations
+WHERE legal_entity_id = $1 AND calculation_year = $2 AND calculation_month = $3
+ORDER BY employee_id
+FOR UPDATE
+`
+
+type LockGosiCalculationsByPeriodParams struct {
+	LegalEntityID    pgtype.UUID `json:"legal_entity_id"`
+	CalculationYear  int32       `json:"calculation_year"`
+	CalculationMonth int32       `json:"calculation_month"`
+}
+
+func (q *Queries) LockGosiCalculationsByPeriod(ctx context.Context, arg LockGosiCalculationsByPeriodParams) ([]GosiContributionCalculations, error) {
+	rows, err := q.db.Query(ctx, lockGosiCalculationsByPeriod, arg.LegalEntityID, arg.CalculationYear, arg.CalculationMonth)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GosiContributionCalculations{}
+	for rows.Next() {
+		var i GosiContributionCalculations
+		if err := rows.Scan(
+			&i.ID,
+			&i.LegalEntityID,
+			&i.EmployeeID,
+			&i.ProfileID,
+			&i.CalculationYear,
+			&i.CalculationMonth,
+			&i.ContributionBasis,
+			&i.TotalEmployeeAmount,
+			&i.TotalEmployerAmount,
+			&i.TotalAmount,
+			&i.CalculationSnapshot,
+			&i.ExportBatchID,
+			&i.Status,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -2,13 +2,16 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"erp/internal/gosi/domain"
 	"erp/internal/gosi/ports"
 	"erp/internal/platform/database"
 	"erp/internal/platform/identifiers"
+	"erp/internal/platform/transaction"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -16,13 +19,13 @@ import (
 
 type GosiService struct {
 	repo ports.Repository
-	db   *database.DB
+	tx   transaction.Manager
 }
 
 func NewGosiService(repo ports.Repository, db *database.DB) ports.Service {
 	return &GosiService{
 		repo: repo,
-		db:   db,
+		tx:   transaction.NewManager(db.Pool),
 	}
 }
 
@@ -46,12 +49,36 @@ func (s *GosiService) GetActiveRuleVersions(ctx context.Context, legalEntityID u
 // ----------------------------------------------------------------------
 
 func (s *GosiService) RegisterEmployee(ctx context.Context, profile domain.InsuranceProfile) (*domain.InsuranceProfile, error) {
+	if profile.LegalEntityID == uuid.Nil || profile.EmployeeID == uuid.Nil {
+		return nil, fmt.Errorf("legal_entity_id and employee_id are required")
+	}
+	exists, err := s.repo.EmployeeExistsInLegalEntity(ctx, profile.LegalEntityID, profile.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, domain.ErrEmployeeScopeMismatch
+	}
+	profile.NationalityScope = strings.ToUpper(strings.TrimSpace(profile.NationalityScope))
+	if profile.NationalityScope == "" {
+		profile.NationalityScope = "SAUDI"
+	}
+	if profile.NationalityScope != "SAUDI" && profile.NationalityScope != "NON_SAUDI" {
+		return nil, fmt.Errorf("nationality_scope must be SAUDI or NON_SAUDI")
+	}
+	if profile.ContributionBasisOverride != nil && !profile.ContributionBasisOverride.IsPositive() {
+		return nil, fmt.Errorf("contribution_basis_override must be greater than zero")
+	}
+
 	// Check if an insurance profile already exists for this employee
 	existing, err := s.repo.GetInsuranceProfileByEmployee(ctx, profile.LegalEntityID, profile.EmployeeID)
 	if err == nil && existing != nil {
 		// Update existing profile
 		profile.ID = existing.ID
 		return s.repo.UpdateInsuranceProfile(ctx, profile)
+	}
+	if err != nil && !errors.Is(err, domain.ErrInsuranceProfileNotFound) {
+		return nil, err
 	}
 
 	if profile.ID == uuid.Nil {
@@ -77,6 +104,19 @@ func (s *GosiService) ListInsuranceProfiles(ctx context.Context, legalEntityID u
 // Calculate calculates contribution amounts for a single employee using active database rule versions.
 // Regulatory rates MUST come from versioned database rules — never hard-coded.
 func (s *GosiService) Calculate(ctx context.Context, input domain.ContributionInput) ([]domain.SingleRuleResult, error) {
+	if input.LegalEntityID == uuid.Nil || input.EmployeeID == uuid.Nil {
+		return nil, fmt.Errorf("legal_entity_id and employee_id are required")
+	}
+	if !input.ContributionBasis.IsPositive() {
+		return nil, fmt.Errorf("contribution_basis must be greater than zero")
+	}
+	exists, err := s.repo.EmployeeExistsInLegalEntity(ctx, input.LegalEntityID, input.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, domain.ErrEmployeeScopeMismatch
+	}
 	asOfDate := input.PayrollDate
 	if asOfDate.IsZero() {
 		asOfDate = time.Now()
@@ -95,113 +135,130 @@ func (s *GosiService) Calculate(ctx context.Context, input domain.ContributionIn
 
 // RunMonthlyCalculation runs the GOSI calculation for all active enrolled employees for a given month.
 func (s *GosiService) RunMonthlyCalculation(ctx context.Context, legalEntityID uuid.UUID, year, month int) ([]domain.ContributionCalculation, error) {
+	if legalEntityID == uuid.Nil || year < 2000 || year > 9999 || month < 1 || month > 12 {
+		return nil, domain.ErrInvalidPeriod
+	}
 	asOfDate := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
-
-	activeRules, err := s.repo.GetActiveRuleVersions(ctx, legalEntityID, asOfDate)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch active rule versions: %w", err)
-	}
-	if len(activeRules) == 0 {
-		return nil, fmt.Errorf("no active GOSI rule versions found for period %d-%02d", year, month)
-	}
-
-	profiles, err := s.repo.ListActiveInsuranceProfiles(ctx, legalEntityID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list active insurance profiles: %w", err)
-	}
-
 	var calculations []domain.ContributionCalculation
-
-	for _, profile := range profiles {
-		// Determine contribution basis: override takes precedence, otherwise fallback to 10,000 SAR default
-		basis := decimal.NewFromInt(10000)
-		if profile.ContributionBasisOverride != nil && profile.ContributionBasisOverride.GreaterThan(decimal.Zero) {
-			basis = *profile.ContributionBasisOverride
-		}
-
-		natCode := profile.NationalityCode
-		if natCode == "" {
-			if profile.NationalityScope == "SAUDI" {
-				natCode = "SA"
-			} else {
-				natCode = "OTHER"
-			}
-		}
-
-		input := domain.ContributionInput{
-			LegalEntityID:     legalEntityID,
-			EmployeeID:        profile.EmployeeID,
-			PayrollDate:       asOfDate,
-			NationalityCode:   natCode,
-			ContributionBasis: basis,
-		}
-
-		lineResults, err := domain.CalculateContribution(input, activeRules)
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		existingCalculations, err := s.repo.LockCalculationsByPeriod(txCtx, legalEntityID, year, month)
 		if err != nil {
-			return nil, fmt.Errorf("failed calculating contribution for employee %s: %w", profile.EmployeeID, err)
+			return err
+		}
+		for _, calculation := range existingCalculations {
+			if calculation.Status != "CALCULATED" || calculation.ExportBatchID != nil {
+				return domain.ErrPeriodAlreadyExported
+			}
 		}
 
-		totalEmployee := decimal.Zero
-		totalEmployer := decimal.Zero
-
-		for _, lr := range lineResults {
-			totalEmployee = totalEmployee.Add(lr.EmployeeAmount)
-			totalEmployer = totalEmployer.Add(lr.EmployerAmount)
-		}
-		totalAmount := totalEmployee.Add(totalEmployer)
-
-		calc := domain.ContributionCalculation{
-			ID:                  uuid.New(),
-			LegalEntityID:       legalEntityID,
-			EmployeeID:          profile.EmployeeID,
-			ProfileID:           profile.ID,
-			CalculationYear:     year,
-			CalculationMonth:    month,
-			ContributionBasis:   basis,
-			TotalEmployeeAmount: totalEmployee,
-			TotalEmployerAmount: totalEmployer,
-			TotalAmount:         totalAmount,
-			CalculationSnapshot: map[string]any{
-				"nationality_scope": profile.NationalityScope,
-				"nationality_code":  natCode,
-				"rules_applied":     len(lineResults),
-				"calculated_at":     time.Now().Format(time.RFC3339),
-			},
-			Status: "CALCULATED",
-		}
-
-		savedCalc, err := s.repo.CreateContributionCalculation(ctx, calc)
+		activeRules, err := s.repo.GetActiveRuleVersions(txCtx, legalEntityID, asOfDate)
 		if err != nil {
-			return nil, fmt.Errorf("failed to persist contribution calculation: %w", err)
+			return fmt.Errorf("failed to fetch active rule versions: %w", err)
+		}
+		if len(activeRules) == 0 {
+			return fmt.Errorf("no active GOSI rule versions found for period %d-%02d", year, month)
 		}
 
-		// Insert calculation lines
-		for _, lr := range lineResults {
-			line := domain.CalculationLine{
-				ID:             uuid.New(),
-				CalculationID:  savedCalc.ID,
-				RuleVersionID:  lr.RuleVersion.ID,
-				RuleCode:       lr.RuleVersion.RuleCode,
-				RuleNameEn:     lr.RuleVersion.RuleNameEn,
-				RuleNameAr:     lr.RuleVersion.RuleNameAr,
-				BasisAmount:    lr.BasisApplied,
-				EmployeeRate:   lr.RuleVersion.EmployeeRate,
-				EmployerRate:   lr.RuleVersion.EmployerRate,
-				EmployeeAmount: lr.EmployeeAmount,
-				EmployerAmount: lr.EmployerAmount,
-				FormulaNote:    lr.FormulaNote,
-			}
-			if _, err := s.repo.CreateCalculationLine(ctx, line); err != nil {
-				return nil, fmt.Errorf("failed to persist calculation line: %w", err)
-			}
+		profiles, err := s.repo.LockActiveInsuranceProfiles(txCtx, legalEntityID)
+		if err != nil {
+			return fmt.Errorf("failed to list active insurance profiles: %w", err)
 		}
+		calculations = make([]domain.ContributionCalculation, 0, len(profiles))
 
-		savedCalc.FirstNameEn = profile.FirstNameEn
-		savedCalc.LastNameEn = profile.LastNameEn
-		savedCalc.FirstNameAr = profile.FirstNameAr
-		savedCalc.LastNameAr = profile.LastNameAr
-		savedCalc.EmployeeNumber = profile.EmployeeNumber
-		calculations = append(calculations, *savedCalc)
+		for _, profile := range profiles {
+			basis := decimal.NewFromInt(10000)
+			if profile.ContributionBasisOverride != nil && profile.ContributionBasisOverride.GreaterThan(decimal.Zero) {
+				basis = *profile.ContributionBasisOverride
+			}
+
+			natCode := profile.NationalityCode
+			if natCode == "" {
+				if profile.NationalityScope == "SAUDI" {
+					natCode = "SA"
+				} else {
+					natCode = "OTHER"
+				}
+			}
+
+			input := domain.ContributionInput{
+				LegalEntityID:     legalEntityID,
+				EmployeeID:        profile.EmployeeID,
+				PayrollDate:       asOfDate,
+				NationalityCode:   natCode,
+				ContributionBasis: basis,
+			}
+
+			lineResults, err := domain.CalculateContribution(input, activeRules)
+			if err != nil {
+				return fmt.Errorf("failed calculating contribution for employee %s: %w", profile.EmployeeID, err)
+			}
+
+			totalEmployee := decimal.Zero
+			totalEmployer := decimal.Zero
+			for _, lineResult := range lineResults {
+				totalEmployee = totalEmployee.Add(lineResult.EmployeeAmount)
+				totalEmployer = totalEmployer.Add(lineResult.EmployerAmount)
+			}
+
+			calc := domain.ContributionCalculation{
+				ID:                  uuid.New(),
+				LegalEntityID:       legalEntityID,
+				EmployeeID:          profile.EmployeeID,
+				ProfileID:           profile.ID,
+				CalculationYear:     year,
+				CalculationMonth:    month,
+				ContributionBasis:   basis,
+				TotalEmployeeAmount: totalEmployee,
+				TotalEmployerAmount: totalEmployer,
+				TotalAmount:         totalEmployee.Add(totalEmployer),
+				CalculationSnapshot: map[string]any{
+					"nationality_scope": profile.NationalityScope,
+					"nationality_code":  natCode,
+					"rules_applied":     len(lineResults),
+					"calculated_at":     time.Now().UTC().Format(time.RFC3339),
+				},
+				Status: "CALCULATED",
+			}
+
+			savedCalc, err := s.repo.CreateContributionCalculation(txCtx, calc)
+			if err != nil {
+				return fmt.Errorf("failed to persist contribution calculation: %w", err)
+			}
+			if err := s.repo.DeleteCalculationLines(txCtx, savedCalc.ID); err != nil {
+				return err
+			}
+
+			for _, lineResult := range lineResults {
+				line := domain.CalculationLine{
+					ID:             uuid.New(),
+					CalculationID:  savedCalc.ID,
+					RuleVersionID:  lineResult.RuleVersion.ID,
+					RuleCode:       lineResult.RuleVersion.RuleCode,
+					RuleNameEn:     lineResult.RuleVersion.RuleNameEn,
+					RuleNameAr:     lineResult.RuleVersion.RuleNameAr,
+					BasisAmount:    lineResult.BasisApplied,
+					EmployeeRate:   lineResult.RuleVersion.EmployeeRate,
+					EmployerRate:   lineResult.RuleVersion.EmployerRate,
+					EmployeeAmount: lineResult.EmployeeAmount,
+					EmployerAmount: lineResult.EmployerAmount,
+					FormulaNote:    lineResult.FormulaNote,
+				}
+				if _, err := s.repo.CreateCalculationLine(txCtx, line); err != nil {
+					return fmt.Errorf("failed to persist calculation line: %w", err)
+				}
+			}
+
+			savedCalc.FirstNameEn = profile.FirstNameEn
+			savedCalc.LastNameEn = profile.LastNameEn
+			savedCalc.FirstNameAr = profile.FirstNameAr
+			savedCalc.LastNameAr = profile.LastNameAr
+			savedCalc.EmployeeNumber = profile.EmployeeNumber
+			calculations = append(calculations, *savedCalc)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return calculations, nil
@@ -211,8 +268,11 @@ func (s *GosiService) ListCalculationsByPeriod(ctx context.Context, legalEntityI
 	return s.repo.ListCalculationsByPeriod(ctx, legalEntityID, year, month)
 }
 
-func (s *GosiService) GetCalculationDetails(ctx context.Context, calcID uuid.UUID) (*domain.ContributionCalculation, []domain.CalculationLine, error) {
-	calc, err := s.repo.GetContributionCalculation(ctx, calcID)
+func (s *GosiService) GetCalculationDetails(ctx context.Context, legalEntityID, calcID uuid.UUID) (*domain.ContributionCalculation, []domain.CalculationLine, error) {
+	if legalEntityID == uuid.Nil || calcID == uuid.Nil {
+		return nil, nil, fmt.Errorf("legal_entity_id and calculation id are required")
+	}
+	calc, err := s.repo.GetContributionCalculation(ctx, legalEntityID, calcID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -228,77 +288,98 @@ func (s *GosiService) GetCalculationDetails(ctx context.Context, calcID uuid.UUI
 // ----------------------------------------------------------------------
 
 func (s *GosiService) CreateExportBatch(ctx context.Context, legalEntityID uuid.UUID, year, month int, createdBy *uuid.UUID) (*domain.ExportBatch, error) {
-	calcs, err := s.repo.ListCalculationsByPeriod(ctx, legalEntityID, year, month)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list calculations for export batch: %w", err)
-	}
-	if len(calcs) == 0 {
-		return nil, fmt.Errorf("no calculations found for period %d-%02d to export", year, month)
+	if legalEntityID == uuid.Nil || year < 2000 || year > 9999 || month < 1 || month > 12 {
+		return nil, domain.ErrInvalidPeriod
 	}
 
-	totalEmp := decimal.Zero
-	totalEr := decimal.Zero
-	for _, c := range calcs {
-		totalEmp = totalEmp.Add(c.TotalEmployeeAmount)
-		totalEr = totalEr.Add(c.TotalEmployerAmount)
-	}
-	totalAmount := totalEmp.Add(totalEr)
+	var savedBatch *domain.ExportBatch
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		calcs, err := s.repo.LockCalculationsByPeriod(txCtx, legalEntityID, year, month)
+		if err != nil {
+			return fmt.Errorf("failed to lock calculations for export batch: %w", err)
+		}
+		if len(calcs) == 0 {
+			return fmt.Errorf("no calculations found for period %d-%02d to export", year, month)
+		}
+		for _, calc := range calcs {
+			if calc.Status != "CALCULATED" || calc.ExportBatchID != nil {
+				return domain.ErrPeriodAlreadyExported
+			}
+		}
 
-	batchNumber := identifiers.NewDocumentNumber(fmt.Sprintf("GOSI-%d%02d", year, month), time.Now())
-	xmlContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+		totalEmp := decimal.Zero
+		totalEr := decimal.Zero
+		for _, calc := range calcs {
+			totalEmp = totalEmp.Add(calc.TotalEmployeeAmount)
+			totalEr = totalEr.Add(calc.TotalEmployerAmount)
+		}
+		totalAmount := totalEmp.Add(totalEr)
+		generatedAt := time.Now().UTC()
+		batchNumber := identifiers.NewDocumentNumber(fmt.Sprintf("GOSI-%d%02d", year, month), generatedAt)
+		xmlContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <GOSIContributionReport xmlns="urn:sa:gosi:v1" year="%d" month="%02d">
   <LegalEntity id="%s"/>
   <Summary subscriberCount="%d" employeeTotal="%s" employerTotal="%s" grandTotal="%s"/>
   <GeneratedAt>%s</GeneratedAt>
-</GOSIContributionReport>`, year, month, legalEntityID.String(), len(calcs), totalEmp.StringFixed(2), totalEr.StringFixed(2), totalAmount.StringFixed(2), time.Now().UTC().Format(time.RFC3339))
+</GOSIContributionReport>`, year, month, legalEntityID.String(), len(calcs), totalEmp.StringFixed(2), totalEr.StringFixed(2), totalAmount.StringFixed(2), generatedAt.Format(time.RFC3339))
 
-	batch := domain.ExportBatch{
-		ID:                  uuid.New(),
-		LegalEntityID:       legalEntityID,
-		BatchNumber:         batchNumber,
-		ExportYear:          year,
-		ExportMonth:         month,
-		EmployeeCount:       len(calcs),
-		TotalEmployeeAmount: totalEmp,
-		TotalEmployerAmount: totalEr,
-		TotalAmount:         totalAmount,
-		FileContent:         &xmlContent,
-		FileFormat:          "XML",
-		Status:              "GENERATED",
-		CreatedBy:           createdBy,
-	}
+		batch := domain.ExportBatch{
+			ID:                  uuid.New(),
+			LegalEntityID:       legalEntityID,
+			BatchNumber:         batchNumber,
+			ExportYear:          year,
+			ExportMonth:         month,
+			EmployeeCount:       len(calcs),
+			TotalEmployeeAmount: totalEmp,
+			TotalEmployerAmount: totalEr,
+			TotalAmount:         totalAmount,
+			FileContent:         &xmlContent,
+			FileFormat:          "XML",
+			Status:              "GENERATED",
+			CreatedBy:           createdBy,
+		}
 
-	savedBatch, err := s.repo.CreateExportBatch(ctx, batch)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create export batch: %w", err)
-	}
+		savedBatch, err = s.repo.CreateExportBatch(txCtx, batch)
+		if err != nil {
+			return fmt.Errorf("failed to create export batch: %w", err)
+		}
 
-	// Link calculations to this export batch
-	if err := s.repo.LinkCalculationsToExportBatch(ctx, savedBatch.ID, legalEntityID, year, month); err != nil {
-		return nil, fmt.Errorf("failed to link calculations to export batch: %w", err)
-	}
+		linked, err := s.repo.LinkCalculationsToExportBatch(txCtx, savedBatch.ID, legalEntityID, year, month)
+		if err != nil {
+			return fmt.Errorf("failed to link calculations to export batch: %w", err)
+		}
+		if linked != int64(len(calcs)) {
+			return fmt.Errorf("linked %d of %d calculations to export batch", linked, len(calcs))
+		}
 
-	// Record initial integration attempt
-	_, _ = s.repo.CreateIntegrationAttempt(ctx, domain.IntegrationAttempt{
-		ID:            uuid.New(),
-		LegalEntityID: legalEntityID,
-		BatchID:       savedBatch.ID,
-		AttemptNumber: 1,
-		AdapterType:   "FILE_EXPORT",
-		RequestPayload: map[string]any{
-			"batch_number": batchNumber,
-			"year":         year,
-			"month":        month,
-			"subscribers":  len(calcs),
-		},
-		ResponsePayload: map[string]any{
-			"status":   "SUCCESS",
-			"format":   "XML",
-			"filesize": len(xmlContent),
-		},
-		Status:    "SUCCESS",
-		StartedAt: time.Now(),
+		_, err = s.repo.CreateIntegrationAttempt(txCtx, domain.IntegrationAttempt{
+			ID:            uuid.New(),
+			LegalEntityID: legalEntityID,
+			BatchID:       savedBatch.ID,
+			AttemptNumber: 1,
+			AdapterType:   "FILE_EXPORT",
+			RequestPayload: map[string]any{
+				"batch_number": batchNumber,
+				"year":         year,
+				"month":        month,
+				"subscribers":  len(calcs),
+			},
+			ResponsePayload: map[string]any{
+				"status":   "SUCCESS",
+				"format":   "XML",
+				"filesize": len(xmlContent),
+			},
+			Status:    "SUCCESS",
+			StartedAt: generatedAt,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to record export integration attempt: %w", err)
+		}
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return savedBatch, nil
 }

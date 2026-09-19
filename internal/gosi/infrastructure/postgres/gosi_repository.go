@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"erp/internal/platform/database/sqlc"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type Repository struct {
@@ -24,6 +26,10 @@ func NewRepository(db *database.DB) ports.Repository {
 		db: db,
 		q:  sqlc.New(db.Pool),
 	}
+}
+
+func (r *Repository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 // ----------------------------------------------------------------------
@@ -169,7 +175,7 @@ func (r *Repository) CreateRuleVersion(ctx context.Context, rv domain.RuleVersio
 }
 
 func (r *Repository) GetActiveRuleVersions(ctx context.Context, legalEntityID uuid.UUID, asOfDate time.Time) ([]domain.RuleVersion, error) {
-	rows, err := r.q.GetActiveRuleVersions(ctx, sqlc.GetActiveRuleVersionsParams{
+	rows, err := r.queries(ctx).GetActiveRuleVersions(ctx, sqlc.GetActiveRuleVersionsParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Column2:       toPgDate(asOfDate),
 	})
@@ -321,6 +327,9 @@ func (r *Repository) GetInsuranceProfileByEmployee(ctx context.Context, legalEnt
 		EmployeeID:    toPgUUID(employeeID),
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrInsuranceProfileNotFound
+		}
 		return nil, fmt.Errorf("failed to get insurance profile: %w", err)
 	}
 
@@ -432,6 +441,49 @@ func (r *Repository) ListActiveInsuranceProfiles(ctx context.Context, legalEntit
 	return result, nil
 }
 
+func (r *Repository) LockActiveInsuranceProfiles(ctx context.Context, legalEntityID uuid.UUID) ([]domain.InsuranceProfile, error) {
+	rows, err := r.queries(ctx).LockActiveInsuranceProfiles(ctx, toPgUUID(legalEntityID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to lock active insurance profiles: %w", err)
+	}
+
+	result := make([]domain.InsuranceProfile, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, domain.InsuranceProfile{
+			ID:                        toUUID(row.ID),
+			LegalEntityID:             toUUID(row.LegalEntityID),
+			EmployeeID:                toUUID(row.EmployeeID),
+			GosiNumber:                fromPgText(row.GosiNumber),
+			RegistrationDate:          fromPgDatePtr(row.RegistrationDate),
+			DeregistrationDate:        fromPgDatePtr(row.DeregistrationDate),
+			NationalityScope:          row.NationalityScope,
+			IsActive:                  row.IsActive,
+			ContributionBasisOverride: fromPgNumericPtr(row.ContributionBasisOverride),
+			Notes:                     fromPgText(row.Notes),
+			CreatedAt:                 fromPgTimestamptz(row.CreatedAt),
+			UpdatedAt:                 fromPgTimestamptz(row.UpdatedAt),
+			FirstNameEn:               row.FirstNameEn,
+			LastNameEn:                row.LastNameEn,
+			FirstNameAr:               row.FirstNameAr,
+			LastNameAr:                row.LastNameAr,
+			EmployeeNumber:            row.EmployeeNumber,
+			NationalityCode:           row.NationalityCountryCode,
+		})
+	}
+	return result, nil
+}
+
+func (r *Repository) EmployeeExistsInLegalEntity(ctx context.Context, legalEntityID, employeeID uuid.UUID) (bool, error) {
+	exists, err := r.queries(ctx).EmployeeExistsInLegalEntity(ctx, sqlc.EmployeeExistsInLegalEntityParams{
+		ID:            toPgUUID(employeeID),
+		LegalEntityID: toPgUUID(legalEntityID),
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to verify employee legal entity: %w", err)
+	}
+	return exists, nil
+}
+
 // ----------------------------------------------------------------------
 // 4. Calculations
 // ----------------------------------------------------------------------
@@ -450,7 +502,7 @@ func (r *Repository) CreateContributionCalculation(ctx context.Context, calc dom
 		}
 	}
 
-	row, err := r.q.CreateContributionCalculation(ctx, sqlc.CreateContributionCalculationParams{
+	row, err := r.queries(ctx).CreateContributionCalculation(ctx, sqlc.CreateContributionCalculationParams{
 		ID:                  toPgUUID(calc.ID),
 		LegalEntityID:       toPgUUID(calc.LegalEntityID),
 		EmployeeID:          toPgUUID(calc.EmployeeID),
@@ -491,7 +543,7 @@ func (r *Repository) CreateCalculationLine(ctx context.Context, line domain.Calc
 		line.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateGosiCalculationLine(ctx, sqlc.CreateGosiCalculationLineParams{
+	row, err := r.queries(ctx).CreateGosiCalculationLine(ctx, sqlc.CreateGosiCalculationLineParams{
 		ID:             toPgUUID(line.ID),
 		CalculationID:  toPgUUID(line.CalculationID),
 		RuleVersionID:  toPgUUID(line.RuleVersionID),
@@ -526,9 +578,22 @@ func (r *Repository) CreateCalculationLine(ctx context.Context, line domain.Calc
 	}, nil
 }
 
-func (r *Repository) GetContributionCalculation(ctx context.Context, id uuid.UUID) (*domain.ContributionCalculation, error) {
-	row, err := r.q.GetGosiContributionCalculation(ctx, toPgUUID(id))
+func (r *Repository) DeleteCalculationLines(ctx context.Context, calculationID uuid.UUID) error {
+	if err := r.queries(ctx).DeleteGosiCalculationLines(ctx, toPgUUID(calculationID)); err != nil {
+		return fmt.Errorf("failed to replace calculation lines: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) GetContributionCalculation(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.ContributionCalculation, error) {
+	row, err := r.queries(ctx).GetGosiContributionCalculation(ctx, sqlc.GetGosiContributionCalculationParams{
+		ID:            toPgUUID(id),
+		LegalEntityID: toPgUUID(legalEntityID),
+	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrCalculationNotFound
+		}
 		return nil, fmt.Errorf("failed to get contribution calculation: %w", err)
 	}
 
@@ -556,7 +621,7 @@ func (r *Repository) GetContributionCalculation(ctx context.Context, id uuid.UUI
 }
 
 func (r *Repository) ListCalculationsByPeriod(ctx context.Context, legalEntityID uuid.UUID, year, month int) ([]domain.ContributionCalculation, error) {
-	rows, err := r.q.ListGosiCalculationsByPeriod(ctx, sqlc.ListGosiCalculationsByPeriodParams{
+	rows, err := r.queries(ctx).ListGosiCalculationsByPeriod(ctx, sqlc.ListGosiCalculationsByPeriodParams{
 		LegalEntityID:    toPgUUID(legalEntityID),
 		CalculationYear:  int32(year),
 		CalculationMonth: int32(month),
@@ -592,6 +657,42 @@ func (r *Repository) ListCalculationsByPeriod(ctx context.Context, legalEntityID
 			FirstNameAr:         row.FirstNameAr,
 			LastNameAr:          row.LastNameAr,
 			EmployeeNumber:      row.EmployeeNumber,
+		})
+	}
+	return result, nil
+}
+
+func (r *Repository) LockCalculationsByPeriod(ctx context.Context, legalEntityID uuid.UUID, year, month int) ([]domain.ContributionCalculation, error) {
+	rows, err := r.queries(ctx).LockGosiCalculationsByPeriod(ctx, sqlc.LockGosiCalculationsByPeriodParams{
+		LegalEntityID:    toPgUUID(legalEntityID),
+		CalculationYear:  int32(year),
+		CalculationMonth: int32(month),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to lock calculations by period: %w", err)
+	}
+
+	result := make([]domain.ContributionCalculation, 0, len(rows))
+	for _, row := range rows {
+		var snapshot map[string]any
+		if len(row.CalculationSnapshot) > 0 {
+			_ = json.Unmarshal(row.CalculationSnapshot, &snapshot)
+		}
+		result = append(result, domain.ContributionCalculation{
+			ID:                  toUUID(row.ID),
+			LegalEntityID:       toUUID(row.LegalEntityID),
+			EmployeeID:          toUUID(row.EmployeeID),
+			ProfileID:           toUUID(row.ProfileID),
+			CalculationYear:     int(row.CalculationYear),
+			CalculationMonth:    int(row.CalculationMonth),
+			ContributionBasis:   fromPgNumeric(row.ContributionBasis),
+			TotalEmployeeAmount: fromPgNumeric(row.TotalEmployeeAmount),
+			TotalEmployerAmount: fromPgNumeric(row.TotalEmployerAmount),
+			TotalAmount:         fromPgNumeric(row.TotalAmount),
+			CalculationSnapshot: snapshot,
+			ExportBatchID:       toUUIDPtr(row.ExportBatchID),
+			Status:              row.Status,
+			CreatedAt:           fromPgTimestamptz(row.CreatedAt),
 		})
 	}
 	return result, nil
@@ -633,7 +734,7 @@ func (r *Repository) CreateExportBatch(ctx context.Context, batch domain.ExportB
 		batch.ID = uuid.New()
 	}
 
-	row, err := r.q.CreateExportBatch(ctx, sqlc.CreateExportBatchParams{
+	row, err := r.queries(ctx).CreateExportBatch(ctx, sqlc.CreateExportBatchParams{
 		ID:                  toPgUUID(batch.ID),
 		LegalEntityID:       toPgUUID(batch.LegalEntityID),
 		BatchNumber:         batch.BatchNumber,
@@ -757,17 +858,17 @@ func (r *Repository) UpdateExportBatchStatus(ctx context.Context, id uuid.UUID, 
 	}, nil
 }
 
-func (r *Repository) LinkCalculationsToExportBatch(ctx context.Context, batchID, legalEntityID uuid.UUID, year, month int) error {
-	err := r.q.LinkCalculationsToExportBatch(ctx, sqlc.LinkCalculationsToExportBatchParams{
+func (r *Repository) LinkCalculationsToExportBatch(ctx context.Context, batchID, legalEntityID uuid.UUID, year, month int) (int64, error) {
+	count, err := r.queries(ctx).LinkCalculationsToExportBatch(ctx, sqlc.LinkCalculationsToExportBatchParams{
 		ExportBatchID:    toPgUUID(batchID),
 		LegalEntityID:    toPgUUID(legalEntityID),
 		CalculationYear:  int32(year),
 		CalculationMonth: int32(month),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to link calculations to export batch: %w", err)
+		return 0, fmt.Errorf("failed to link calculations to export batch: %w", err)
 	}
-	return nil
+	return count, nil
 }
 
 // ----------------------------------------------------------------------
@@ -797,7 +898,7 @@ func (r *Repository) CreateIntegrationAttempt(ctx context.Context, attempt domai
 		}
 	}
 
-	row, err := r.q.CreateIntegrationAttempt(ctx, sqlc.CreateIntegrationAttemptParams{
+	row, err := r.queries(ctx).CreateIntegrationAttempt(ctx, sqlc.CreateIntegrationAttemptParams{
 		ID:              toPgUUID(attempt.ID),
 		LegalEntityID:   toPgUUID(attempt.LegalEntityID),
 		BatchID:         toPgUUID(attempt.BatchID),

@@ -61,6 +61,26 @@ func (q *Queries) CreateInsuranceProfile(ctx context.Context, arg CreateInsuranc
 	return i, err
 }
 
+const employeeExistsInLegalEntity = `-- name: EmployeeExistsInLegalEntity :one
+SELECT EXISTS (
+    SELECT 1
+    FROM hr.employees
+    WHERE id = $1 AND legal_entity_id = $2
+)
+`
+
+type EmployeeExistsInLegalEntityParams struct {
+	ID            pgtype.UUID `json:"id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+}
+
+func (q *Queries) EmployeeExistsInLegalEntity(ctx context.Context, arg EmployeeExistsInLegalEntityParams) (bool, error) {
+	row := q.db.QueryRow(ctx, employeeExistsInLegalEntity, arg.ID, arg.LegalEntityID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const getInsuranceProfileByEmployee = `-- name: GetInsuranceProfileByEmployee :one
 SELECT id, legal_entity_id, employee_id, gosi_number, registration_date, deregistration_date, nationality_scope, is_active, contribution_basis_override, notes, created_at, updated_at FROM gosi.employee_insurance_profiles
 WHERE legal_entity_id = $1 AND employee_id = $2
@@ -215,6 +235,76 @@ func (q *Queries) ListInsuranceProfiles(ctx context.Context, legalEntityID pgtyp
 			&i.FirstNameAr,
 			&i.LastNameAr,
 			&i.EmployeeNumber,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockActiveInsuranceProfiles = `-- name: LockActiveInsuranceProfiles :many
+SELECT p.id, p.legal_entity_id, p.employee_id, p.gosi_number, p.registration_date, p.deregistration_date, p.nationality_scope, p.is_active, p.contribution_basis_override, p.notes, p.created_at, p.updated_at, e.first_name_en, e.last_name_en, e.first_name_ar, e.last_name_ar,
+       e.employee_number, e.nationality_country_code
+FROM gosi.employee_insurance_profiles p
+JOIN hr.employees e ON e.id = p.employee_id
+WHERE p.legal_entity_id = $1 AND p.is_active = true
+ORDER BY e.employee_number
+FOR UPDATE OF p
+`
+
+type LockActiveInsuranceProfilesRow struct {
+	ID                        pgtype.UUID        `json:"id"`
+	LegalEntityID             pgtype.UUID        `json:"legal_entity_id"`
+	EmployeeID                pgtype.UUID        `json:"employee_id"`
+	GosiNumber                pgtype.Text        `json:"gosi_number"`
+	RegistrationDate          pgtype.Date        `json:"registration_date"`
+	DeregistrationDate        pgtype.Date        `json:"deregistration_date"`
+	NationalityScope          string             `json:"nationality_scope"`
+	IsActive                  bool               `json:"is_active"`
+	ContributionBasisOverride pgtype.Numeric     `json:"contribution_basis_override"`
+	Notes                     pgtype.Text        `json:"notes"`
+	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
+	FirstNameEn               string             `json:"first_name_en"`
+	LastNameEn                string             `json:"last_name_en"`
+	FirstNameAr               string             `json:"first_name_ar"`
+	LastNameAr                string             `json:"last_name_ar"`
+	EmployeeNumber            string             `json:"employee_number"`
+	NationalityCountryCode    string             `json:"nationality_country_code"`
+}
+
+func (q *Queries) LockActiveInsuranceProfiles(ctx context.Context, legalEntityID pgtype.UUID) ([]LockActiveInsuranceProfilesRow, error) {
+	rows, err := q.db.Query(ctx, lockActiveInsuranceProfiles, legalEntityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LockActiveInsuranceProfilesRow{}
+	for rows.Next() {
+		var i LockActiveInsuranceProfilesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LegalEntityID,
+			&i.EmployeeID,
+			&i.GosiNumber,
+			&i.RegistrationDate,
+			&i.DeregistrationDate,
+			&i.NationalityScope,
+			&i.IsActive,
+			&i.ContributionBasisOverride,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.FirstNameEn,
+			&i.LastNameEn,
+			&i.FirstNameAr,
+			&i.LastNameAr,
+			&i.EmployeeNumber,
+			&i.NationalityCountryCode,
 		); err != nil {
 			return nil, err
 		}

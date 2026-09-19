@@ -280,6 +280,11 @@ func (h *GosiHandler) ListCalculations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GosiHandler) GetCalculationDetails(w http.ResponseWriter, r *http.Request) {
+	leID, err := uuid.Parse(r.URL.Query().Get("legal_entity_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "valid legal_entity_id query parameter is required")
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	calcID, err := uuid.Parse(idStr)
 	if err != nil {
@@ -287,7 +292,7 @@ func (h *GosiHandler) GetCalculationDetails(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	calc, lines, err := h.svc.GetCalculationDetails(r.Context(), calcID)
+	calc, lines, err := h.svc.GetCalculationDetails(r.Context(), leID, calcID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

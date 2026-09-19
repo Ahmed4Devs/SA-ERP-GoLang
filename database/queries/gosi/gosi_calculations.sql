@@ -21,8 +21,13 @@ INSERT INTO gosi.contribution_calculation_lines (
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING *;
 
+-- name: DeleteGosiCalculationLines :exec
+DELETE FROM gosi.contribution_calculation_lines
+WHERE calculation_id = $1;
+
 -- name: GetGosiContributionCalculation :one
-SELECT * FROM gosi.contribution_calculations WHERE id = $1;
+SELECT * FROM gosi.contribution_calculations
+WHERE id = $1 AND legal_entity_id = $2;
 
 -- name: ListGosiCalculationsByPeriod :many
 SELECT c.*, e.first_name_en, e.last_name_en, e.first_name_ar, e.last_name_ar, e.employee_number
@@ -30,6 +35,13 @@ FROM gosi.contribution_calculations c
 JOIN hr.employees e ON e.id = c.employee_id
 WHERE c.legal_entity_id = $1 AND c.calculation_year = $2 AND c.calculation_month = $3
 ORDER BY e.employee_number;
+
+-- name: LockGosiCalculationsByPeriod :many
+SELECT *
+FROM gosi.contribution_calculations
+WHERE legal_entity_id = $1 AND calculation_year = $2 AND calculation_month = $3
+ORDER BY employee_id
+FOR UPDATE;
 
 -- name: ListGosiCalculationLines :many
 SELECT * FROM gosi.contribution_calculation_lines
@@ -72,7 +84,7 @@ SELECT * FROM gosi.integration_attempts
 WHERE batch_id = $1
 ORDER BY attempt_number;
 
--- name: LinkCalculationsToExportBatch :exec
+-- name: LinkCalculationsToExportBatch :execrows
 UPDATE gosi.contribution_calculations
 SET export_batch_id = $1, status = 'EXPORTED'
 WHERE legal_entity_id = $2 AND calculation_year = $3 AND calculation_month = $4 AND status = 'CALCULATED';

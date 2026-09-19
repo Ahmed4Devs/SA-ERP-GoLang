@@ -34,3 +34,19 @@ FROM gosi.employee_insurance_profiles p
 JOIN hr.employees e ON e.id = p.employee_id
 WHERE p.legal_entity_id = $1 AND p.is_active = true
 ORDER BY e.employee_number;
+
+-- name: LockActiveInsuranceProfiles :many
+SELECT p.*, e.first_name_en, e.last_name_en, e.first_name_ar, e.last_name_ar,
+       e.employee_number, e.nationality_country_code
+FROM gosi.employee_insurance_profiles p
+JOIN hr.employees e ON e.id = p.employee_id
+WHERE p.legal_entity_id = $1 AND p.is_active = true
+ORDER BY e.employee_number
+FOR UPDATE OF p;
+
+-- name: EmployeeExistsInLegalEntity :one
+SELECT EXISTS (
+    SELECT 1
+    FROM hr.employees
+    WHERE id = $1 AND legal_entity_id = $2
+);

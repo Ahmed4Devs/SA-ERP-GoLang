@@ -28,12 +28,16 @@ type Repository interface {
 	ListInsuranceProfiles(ctx context.Context, legalEntityID uuid.UUID) ([]domain.InsuranceProfile, error)
 	UpdateInsuranceProfile(ctx context.Context, profile domain.InsuranceProfile) (*domain.InsuranceProfile, error)
 	ListActiveInsuranceProfiles(ctx context.Context, legalEntityID uuid.UUID) ([]domain.InsuranceProfile, error)
+	LockActiveInsuranceProfiles(ctx context.Context, legalEntityID uuid.UUID) ([]domain.InsuranceProfile, error)
+	EmployeeExistsInLegalEntity(ctx context.Context, legalEntityID, employeeID uuid.UUID) (bool, error)
 
 	// Calculations
 	CreateContributionCalculation(ctx context.Context, calc domain.ContributionCalculation) (*domain.ContributionCalculation, error)
 	CreateCalculationLine(ctx context.Context, line domain.CalculationLine) (*domain.CalculationLine, error)
-	GetContributionCalculation(ctx context.Context, id uuid.UUID) (*domain.ContributionCalculation, error)
+	DeleteCalculationLines(ctx context.Context, calculationID uuid.UUID) error
+	GetContributionCalculation(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.ContributionCalculation, error)
 	ListCalculationsByPeriod(ctx context.Context, legalEntityID uuid.UUID, year, month int) ([]domain.ContributionCalculation, error)
+	LockCalculationsByPeriod(ctx context.Context, legalEntityID uuid.UUID, year, month int) ([]domain.ContributionCalculation, error)
 	ListCalculationLines(ctx context.Context, calcID uuid.UUID) ([]domain.CalculationLine, error)
 
 	// Export Batches
@@ -41,7 +45,7 @@ type Repository interface {
 	GetExportBatchByID(ctx context.Context, id uuid.UUID) (*domain.ExportBatch, error)
 	ListExportBatches(ctx context.Context, legalEntityID uuid.UUID) ([]domain.ExportBatch, error)
 	UpdateExportBatchStatus(ctx context.Context, id uuid.UUID, status string) (*domain.ExportBatch, error)
-	LinkCalculationsToExportBatch(ctx context.Context, batchID, legalEntityID uuid.UUID, year, month int) error
+	LinkCalculationsToExportBatch(ctx context.Context, batchID, legalEntityID uuid.UUID, year, month int) (int64, error)
 
 	// Integration Attempts
 	CreateIntegrationAttempt(ctx context.Context, attempt domain.IntegrationAttempt) (*domain.IntegrationAttempt, error)
@@ -62,7 +66,7 @@ type Service interface {
 	Calculate(ctx context.Context, input domain.ContributionInput) ([]domain.SingleRuleResult, error)
 	RunMonthlyCalculation(ctx context.Context, legalEntityID uuid.UUID, year, month int) ([]domain.ContributionCalculation, error)
 	ListCalculationsByPeriod(ctx context.Context, legalEntityID uuid.UUID, year, month int) ([]domain.ContributionCalculation, error)
-	GetCalculationDetails(ctx context.Context, calcID uuid.UUID) (*domain.ContributionCalculation, []domain.CalculationLine, error)
+	GetCalculationDetails(ctx context.Context, legalEntityID, calcID uuid.UUID) (*domain.ContributionCalculation, []domain.CalculationLine, error)
 
 	// Export
 	CreateExportBatch(ctx context.Context, legalEntityID uuid.UUID, year, month int, createdBy *uuid.UUID) (*domain.ExportBatch, error)

@@ -195,12 +195,14 @@ type Querier interface {
 	DeleteBudget(ctx context.Context, arg DeleteBudgetParams) error
 	DeleteBudgetLine(ctx context.Context, id pgtype.UUID) error
 	DeleteExpiredSessions(ctx context.Context) error
+	DeleteGosiCalculationLines(ctx context.Context, calculationID pgtype.UUID) error
 	DeleteItemTaxProfile(ctx context.Context, itemID pgtype.UUID) error
 	DeleteItemUOM(ctx context.Context, id pgtype.UUID) error
 	DeleteJournalLinesByEntryID(ctx context.Context, journalEntryID pgtype.UUID) error
 	DeletePayrollRunEmployees(ctx context.Context, runID pgtype.UUID) error
 	DeleteReconciliationMatch(ctx context.Context, id pgtype.UUID) error
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
+	EmployeeExistsInLegalEntity(ctx context.Context, arg EmployeeExistsInLegalEntityParams) (bool, error)
 	EndAssetAssignment(ctx context.Context, arg EndAssetAssignmentParams) error
 	FailIdempotencyKey(ctx context.Context, arg FailIdempotencyKeyParams) error
 	FetchPendingOutboxEvents(ctx context.Context, limit int32) ([]PlatformOutboxEvents, error)
@@ -293,7 +295,7 @@ type Querier interface {
 	GetGeneralLedgerReport(ctx context.Context, arg GetGeneralLedgerReportParams) ([]GetGeneralLedgerReportRow, error)
 	GetGoodsReceipt(ctx context.Context, id pgtype.UUID) (PurchasingGoodsReceipts, error)
 	GetGoodsReceiptByNumber(ctx context.Context, arg GetGoodsReceiptByNumberParams) (PurchasingGoodsReceipts, error)
-	GetGosiContributionCalculation(ctx context.Context, id pgtype.UUID) (GosiContributionCalculations, error)
+	GetGosiContributionCalculation(ctx context.Context, arg GetGosiContributionCalculationParams) (GosiContributionCalculations, error)
 	GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyParams) (PlatformIdempotencyKeys, error)
 	GetIncomeStatementAccounts(ctx context.Context, arg GetIncomeStatementAccountsParams) ([]GetIncomeStatementAccountsRow, error)
 	GetInstanceStepByID(ctx context.Context, id pgtype.UUID) (WorkflowInstanceSteps, error)
@@ -432,7 +434,7 @@ type Querier interface {
 	InsertSecurityEvent(ctx context.Context, arg InsertSecurityEventParams) (AuditSecurityEvents, error)
 	InsertStockMovement(ctx context.Context, arg InsertStockMovementParams) (InventoryStockMovements, error)
 	IssuePurchaseOrder(ctx context.Context, id pgtype.UUID) (PurchasingPurchaseOrders, error)
-	LinkCalculationsToExportBatch(ctx context.Context, arg LinkCalculationsToExportBatchParams) error
+	LinkCalculationsToExportBatch(ctx context.Context, arg LinkCalculationsToExportBatchParams) (int64, error)
 	LinkPayrollRunJournalEntry(ctx context.Context, arg LinkPayrollRunJournalEntryParams) (PayrollRuns, error)
 	ListAccessEvents(ctx context.Context, arg ListAccessEventsParams) ([]AuditAccessEvents, error)
 	ListAccountsByLegalEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]AccountingAccounts, error)
@@ -605,10 +607,12 @@ type Querier interface {
 	ListWarehousesByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]WarehouseWarehouses, error)
 	ListWorkflowDefinitions(ctx context.Context) ([]WorkflowDefinitions, error)
 	ListZeroRateReasons(ctx context.Context) ([]TaxZeroRateReasons, error)
+	LockActiveInsuranceProfiles(ctx context.Context, legalEntityID pgtype.UUID) ([]LockActiveInsuranceProfilesRow, error)
 	LockApprovalRequestByID(ctx context.Context, id pgtype.UUID) (WorkflowApprovalRequests, error)
 	LockBalance(ctx context.Context, arg LockBalanceParams) (InventoryStockBalances, error)
 	LockBankReconciliationByID(ctx context.Context, arg LockBankReconciliationByIDParams) (BankingReconciliations, error)
 	LockCashAccountByID(ctx context.Context, arg LockCashAccountByIDParams) (TreasuryCashAccounts, error)
+	LockGosiCalculationsByPeriod(ctx context.Context, arg LockGosiCalculationsByPeriodParams) ([]GosiContributionCalculations, error)
 	LockInstanceStepByID(ctx context.Context, id pgtype.UUID) (WorkflowInstanceSteps, error)
 	LockOpenItem(ctx context.Context, id pgtype.UUID) (ReceivablesOpenItems, error)
 	LockPayablesOpenItem(ctx context.Context, id pgtype.UUID) (PayablesOpenItems, error)
