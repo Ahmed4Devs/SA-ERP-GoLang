@@ -33,6 +33,7 @@ func setupTaxTest(t *testing.T) (*tax.Module, *accounting.Module, *database.DB, 
 	if err != nil {
 		t.Skipf("PostgreSQL not accessible: %v", err)
 	}
+	t.Cleanup(db.Close)
 
 	txManager := transaction.NewManager(db.Pool)
 	iamMod := iam.NewModule(cfg, db, txManager)
@@ -40,10 +41,14 @@ func setupTaxTest(t *testing.T) (*tax.Module, *accounting.Module, *database.DB, 
 	accMod := accounting.NewModule(cfg, db)
 	taxMod := tax.NewModule(cfg, db)
 
-	// Ensure organization & legal entity exist
-	le, err := orgMod.SeedDefaultStructure(ctx)
+	// Isolate every test run so period and return uniqueness constraints remain repeatable.
+	org, err := orgMod.OrgService.CreateOrganization(ctx, "ORG-TAX-"+uuid.NewString()[:8], "منظمة اختبار الضريبة", "Tax Test Organization")
 	if err != nil {
-		t.Fatalf("failed to seed organization: %v", err)
+		t.Fatalf("failed to create test organization: %v", err)
+	}
+	le, err := orgMod.OrgService.CreateLegalEntity(ctx, org.ID, "LE-TAX", "كيان اختبار الضريبة", "Tax Test Entity", "1010111111", "SAR")
+	if err != nil {
+		t.Fatalf("failed to create test legal entity: %v", err)
 	}
 
 	// Seed accounting COA & tax configuration
@@ -89,10 +94,13 @@ func TestTaxEngine_EffectiveDatedRates(t *testing.T) {
 	if stdCode == nil {
 		t.Fatal("standard tax code VAT-STD-15 not found")
 	}
+	if _, err := taxMod.TaxService.GetTaxCode(ctx, uuid.New(), stdCode.ID); !errors.Is(err, domain.ErrTaxCodeNotFound) {
+		t.Fatalf("expected tenant-scoped tax code lookup, got %v", err)
+	}
 
 	// Historical Date: 2019-05-15 (before July 2020 VAT increase to 15%)
 	histDate := time.Date(2019, 5, 15, 0, 0, 0, 0, time.UTC)
-	histRate, err := taxMod.TaxService.GetActiveRate(ctx, stdCode.ID, histDate)
+	histRate, err := taxMod.TaxService.GetActiveRate(ctx, leID, stdCode.ID, histDate)
 	if err != nil {
 		t.Fatalf("failed to get historical rate for 2019: %v", err)
 	}
@@ -102,12 +110,45 @@ func TestTaxEngine_EffectiveDatedRates(t *testing.T) {
 
 	// Current Date: 2026-03-15 (after July 2020)
 	currentDate := time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC)
-	currentRate, err := taxMod.TaxService.GetActiveRate(ctx, stdCode.ID, currentDate)
+	currentRate, err := taxMod.TaxService.GetActiveRate(ctx, leID, stdCode.ID, currentDate)
 	if err != nil {
 		t.Fatalf("failed to get current rate for 2026: %v", err)
 	}
 	if !currentRate.RatePercent.Equal(decimal.NewFromInt(15)) {
 		t.Errorf("expected current rate 15%%, got: %s", currentRate.RatePercent.String())
+	}
+	if _, err := taxMod.TaxService.GetActiveRate(ctx, uuid.New(), stdCode.ID, currentDate); !errors.Is(err, domain.ErrTaxCodeNotFound) {
+		t.Fatalf("expected tenant-scoped rate lookup, got %v", err)
+	}
+}
+
+func TestTaxEngine_TaxCodeCreationRollsBackWhenInitialRateFails(t *testing.T) {
+	taxMod, _, _, leID, _, ctx := setupTaxTest(t)
+	code := "VAT-ROLLBACK-" + uuid.NewString()[:8]
+	missingActorID := uuid.New()
+
+	_, err := taxMod.TaxService.CreateTaxCode(ctx, domain.TaxCode{
+		LegalEntityID:   leID,
+		Code:            code,
+		NameEn:          "Rollback Test Tax",
+		NameAr:          "ضريبة اختبار التراجع",
+		TaxCategoryCode: "S",
+		TaxType:         "BOTH",
+		IsRecoverable:   true,
+		IsActive:        true,
+	}, decimal.NewFromInt(15), time.Now(), &missingActorID)
+	if err == nil {
+		t.Fatal("expected the initial rate insert to fail for a missing actor")
+	}
+
+	codes, err := taxMod.TaxService.ListTaxCodes(ctx, leID)
+	if err != nil {
+		t.Fatalf("failed to list tax codes: %v", err)
+	}
+	for _, taxCode := range codes {
+		if taxCode.Code == code {
+			t.Fatalf("tax code %s remained after its initial rate insert failed", code)
+		}
 	}
 }
 
@@ -267,6 +308,9 @@ func TestTaxEngine_TaxTransactionPostingAndIdempotency(t *testing.T) {
 	if len(txRecord.Lines) != 1 {
 		t.Fatalf("expected 1 line item, got: %d", len(txRecord.Lines))
 	}
+	if _, err := taxMod.TaxService.GetTaxTransaction(ctx, uuid.New(), txRecord.ID); !errors.Is(err, domain.ErrTaxTransactionNotFound) {
+		t.Fatalf("expected tenant-scoped tax transaction lookup, got %v", err)
+	}
 
 	// 2. Duplicate posting must fail with ErrDuplicateTaxTransaction
 	_, err = taxMod.TaxService.PostTaxTransaction(ctx, req)
@@ -306,9 +350,12 @@ func TestTaxEngine_PeriodLocking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create historical period: %v", err)
 	}
+	if _, err := taxMod.TaxService.ClosePeriod(ctx, uuid.New(), period.ID); !errors.Is(err, domain.ErrTaxPeriodNotFound) {
+		t.Fatalf("expected tenant-scoped period close, got %v", err)
+	}
 
 	// Ensure it is closed
-	_, err = taxMod.TaxService.ClosePeriod(ctx, period.ID)
+	_, err = taxMod.TaxService.ClosePeriod(ctx, leID, period.ID)
 	if err != nil {
 		t.Fatalf("failed to close period: %v", err)
 	}
@@ -460,6 +507,9 @@ func TestTaxEngine_VATReturnDeclarationBoxes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to generate VAT return draft: %v", err)
 	}
+	if _, err := taxMod.TaxService.GenerateVATReturnDraft(ctx, uuid.New(), julyPeriod.ID); !errors.Is(err, domain.ErrTaxPeriodNotFound) {
+		t.Fatalf("expected tenant-scoped VAT return generation, got %v", err)
+	}
 
 	// Verification of ZATCA 16-Boxes:
 	// Box 1: Taxable 10,000, VAT 1,500
@@ -502,6 +552,9 @@ func TestTaxEngine_VATReturnDeclarationBoxes(t *testing.T) {
 	}
 
 	// Submit VAT Return
+	if _, err := taxMod.TaxService.SubmitVATReturn(ctx, uuid.New(), retDraft.ID, userID); !errors.Is(err, domain.ErrTaxReturnNotFound) {
+		t.Fatalf("expected tenant-scoped VAT return submission, got %v", err)
+	}
 	submitted, err := taxMod.TaxService.SubmitVATReturn(ctx, leID, retDraft.ID, userID)
 	if err != nil {
 		t.Fatalf("failed to submit VAT return: %v", err)

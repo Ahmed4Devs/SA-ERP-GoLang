@@ -38,23 +38,23 @@ type TaxService interface {
 	ListExemptionReasons(ctx context.Context) ([]domain.ExemptionReason, error)
 	ListZeroRateReasons(ctx context.Context) ([]domain.ZeroRateReason, error)
 	ListTaxCodes(ctx context.Context, legalEntityID uuid.UUID) ([]domain.TaxCode, error)
-	GetTaxCode(ctx context.Context, id uuid.UUID) (*domain.TaxCode, error)
+	GetTaxCode(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.TaxCode, error)
 	CreateTaxCode(ctx context.Context, req domain.TaxCode, initialRate decimal.Decimal, effectiveFrom time.Time, createdBy *uuid.UUID) (*domain.TaxCode, error)
-	CreateRateVersion(ctx context.Context, rate domain.TaxRateVersion) (*domain.TaxRateVersion, error)
-	GetActiveRate(ctx context.Context, taxCodeID uuid.UUID, targetDate time.Time) (*domain.TaxRateVersion, error)
+	CreateRateVersion(ctx context.Context, legalEntityID uuid.UUID, rate domain.TaxRateVersion) (*domain.TaxRateVersion, error)
+	GetActiveRate(ctx context.Context, legalEntityID, taxCodeID uuid.UUID, targetDate time.Time) (*domain.TaxRateVersion, error)
 
 	// Financial Calculation Engine
 	CalculateTax(ctx context.Context, req CalculateTaxRequest) (*domain.TaxCalculationResult, error)
 
 	// Tax Transaction Engine
 	PostTaxTransaction(ctx context.Context, req PostTaxTransactionRequest) (*domain.TaxTransaction, error)
-	GetTaxTransaction(ctx context.Context, id uuid.UUID) (*domain.TaxTransaction, error)
+	GetTaxTransaction(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.TaxTransaction, error)
 	ListTaxTransactions(ctx context.Context, legalEntityID uuid.UUID, limit, offset int32) ([]domain.TaxTransaction, error)
 
 	// Periods & VAT Returns (ZATCA)
 	ListPeriods(ctx context.Context, legalEntityID uuid.UUID) ([]domain.TaxPeriod, error)
 	CreatePeriod(ctx context.Context, period domain.TaxPeriod) (*domain.TaxPeriod, error)
-	ClosePeriod(ctx context.Context, periodID uuid.UUID) (*domain.TaxPeriod, error)
+	ClosePeriod(ctx context.Context, legalEntityID, periodID uuid.UUID) (*domain.TaxPeriod, error)
 	GenerateVATReturnDraft(ctx context.Context, legalEntityID, periodID uuid.UUID) (*domain.TaxReturn, error)
 	SubmitVATReturn(ctx context.Context, legalEntityID, returnID uuid.UUID, actorID uuid.UUID) (*domain.TaxReturn, error)
 	ListVATReturns(ctx context.Context, legalEntityID uuid.UUID) ([]domain.TaxReturn, error)

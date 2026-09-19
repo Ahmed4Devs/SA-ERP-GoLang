@@ -126,6 +126,11 @@ func (h *TaxHandler) ListTaxCodes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaxHandler) GetTaxCode(w http.ResponseWriter, r *http.Request) {
+	leID, err := h.resolveLegalEntityID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_SCOPE", err.Error())
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -133,7 +138,7 @@ func (h *TaxHandler) GetTaxCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, err := h.taxService.GetTaxCode(r.Context(), id)
+	code, err := h.taxService.GetTaxCode(r.Context(), leID, id)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
@@ -194,6 +199,11 @@ func (h *TaxHandler) CreateTaxCode(w http.ResponseWriter, r *http.Request) {
 
 func (h *TaxHandler) AddRateVersion(w http.ResponseWriter, r *http.Request) {
 	user := iamhttp.UserFromContext(r.Context())
+	leID, err := h.resolveLegalEntityID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_SCOPE", err.Error())
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	taxCodeID, err := uuid.Parse(idStr)
 	if err != nil {
@@ -221,7 +231,7 @@ func (h *TaxHandler) AddRateVersion(w http.ResponseWriter, r *http.Request) {
 		CreatedBy:     actorID,
 	}
 
-	created, err := h.taxService.CreateRateVersion(r.Context(), ver)
+	created, err := h.taxService.CreateRateVersion(r.Context(), leID, ver)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "FAILED", err.Error())
 		return
@@ -299,6 +309,11 @@ func (h *TaxHandler) ListTaxTransactions(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *TaxHandler) GetTaxTransaction(w http.ResponseWriter, r *http.Request) {
+	leID, err := h.resolveLegalEntityID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_SCOPE", err.Error())
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -306,7 +321,7 @@ func (h *TaxHandler) GetTaxTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := h.taxService.GetTaxTransaction(r.Context(), id)
+	tx, err := h.taxService.GetTaxTransaction(r.Context(), leID, id)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
@@ -432,6 +447,11 @@ func (h *TaxHandler) CreatePeriod(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TaxHandler) ClosePeriod(w http.ResponseWriter, r *http.Request) {
+	leID, err := h.resolveLegalEntityID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "INVALID_SCOPE", err.Error())
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	periodID, err := uuid.Parse(idStr)
 	if err != nil {
@@ -439,7 +459,7 @@ func (h *TaxHandler) ClosePeriod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	closed, err := h.taxService.ClosePeriod(r.Context(), periodID)
+	closed, err := h.taxService.ClosePeriod(r.Context(), leID, periodID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "FAILED", err.Error())
 		return

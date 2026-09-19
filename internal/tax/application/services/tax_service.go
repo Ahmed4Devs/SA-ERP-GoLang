@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"erp/internal/platform/database"
+	"erp/internal/platform/transaction"
 	"erp/internal/tax/domain"
 	"erp/internal/tax/ports"
 
@@ -15,11 +17,13 @@ import (
 
 type taxService struct {
 	repo ports.TaxRepository
+	tx   transaction.Manager
 }
 
-func NewTaxService(repo ports.TaxRepository) ports.TaxService {
+func NewTaxService(repo ports.TaxRepository, db *database.DB) ports.TaxService {
 	return &taxService{
 		repo: repo,
+		tx:   transaction.NewManager(db.Pool),
 	}
 }
 
@@ -40,8 +44,15 @@ func (s *taxService) ListTaxCodes(ctx context.Context, legalEntityID uuid.UUID) 
 	return s.repo.ListTaxCodesByEntity(ctx, legalEntityID)
 }
 
-func (s *taxService) GetTaxCode(ctx context.Context, id uuid.UUID) (*domain.TaxCode, error) {
-	return s.repo.GetTaxCodeByID(ctx, id)
+func (s *taxService) GetTaxCode(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.TaxCode, error) {
+	code, err := s.repo.GetTaxCodeByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if code.LegalEntityID != legalEntityID {
+		return nil, domain.ErrTaxCodeNotFound
+	}
+	return code, nil
 }
 
 func (s *taxService) CreateTaxCode(ctx context.Context, req domain.TaxCode, initialRate decimal.Decimal, effectiveFrom time.Time, createdBy *uuid.UUID) (*domain.TaxCode, error) {
@@ -52,49 +63,61 @@ func (s *taxService) CreateTaxCode(ctx context.Context, req domain.TaxCode, init
 
 	// Validate rate according to category
 	catUpper := strings.ToUpper(req.TaxCategoryCode)
-	if (catUpper == "E" || catUpper == "Z" || catUpper == "O") && !initialRate.IsZero() {
+	if initialRate.IsNegative() || initialRate.GreaterThan(decimal.NewFromInt(100)) ||
+		((catUpper == "E" || catUpper == "Z" || catUpper == "O") && !initialRate.IsZero()) {
 		return nil, domain.ErrInvalidTaxRate
-	}
-
-	createdCode, err := s.repo.CreateTaxCode(ctx, &req)
-	if err != nil {
-		return nil, err
 	}
 
 	if effectiveFrom.IsZero() {
 		effectiveFrom = time.Now().UTC().Truncate(24 * time.Hour)
 	}
 
-	_, err = s.repo.CreateTaxRateVersion(ctx, &domain.TaxRateVersion{
-		TaxCodeID:     createdCode.ID,
-		RatePercent:   initialRate,
-		EffectiveFrom: effectiveFrom,
-		Description:   "Initial tax rate version",
-		CreatedBy:     createdBy,
+	var createdCode *domain.TaxCode
+	err = s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		createdCode, err = s.repo.CreateTaxCode(txCtx, &req)
+		if err != nil {
+			return err
+		}
+
+		_, err = s.repo.CreateTaxRateVersion(txCtx, &domain.TaxRateVersion{
+			TaxCodeID:     createdCode.ID,
+			RatePercent:   initialRate,
+			EffectiveFrom: effectiveFrom,
+			Description:   "Initial tax rate version",
+			CreatedBy:     createdBy,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create initial tax rate version: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create initial tax rate version: %w", err)
+		return nil, err
 	}
 
 	createdCode.CurrentRatePercent = &initialRate
 	return createdCode, nil
 }
 
-func (s *taxService) CreateRateVersion(ctx context.Context, rate domain.TaxRateVersion) (*domain.TaxRateVersion, error) {
-	taxCode, err := s.repo.GetTaxCodeByID(ctx, rate.TaxCodeID)
+func (s *taxService) CreateRateVersion(ctx context.Context, legalEntityID uuid.UUID, rate domain.TaxRateVersion) (*domain.TaxRateVersion, error) {
+	taxCode, err := s.GetTaxCode(ctx, legalEntityID, rate.TaxCodeID)
 	if err != nil {
 		return nil, err
 	}
 
 	catUpper := strings.ToUpper(taxCode.TaxCategoryCode)
-	if (catUpper == "E" || catUpper == "Z" || catUpper == "O") && !rate.RatePercent.IsZero() {
+	if rate.RatePercent.IsNegative() || rate.RatePercent.GreaterThan(decimal.NewFromInt(100)) ||
+		((catUpper == "E" || catUpper == "Z" || catUpper == "O") && !rate.RatePercent.IsZero()) {
 		return nil, domain.ErrInvalidTaxRate
 	}
 
 	return s.repo.CreateTaxRateVersion(ctx, &rate)
 }
 
-func (s *taxService) GetActiveRate(ctx context.Context, taxCodeID uuid.UUID, targetDate time.Time) (*domain.TaxRateVersion, error) {
+func (s *taxService) GetActiveRate(ctx context.Context, legalEntityID, taxCodeID uuid.UUID, targetDate time.Time) (*domain.TaxRateVersion, error) {
+	if _, err := s.GetTaxCode(ctx, legalEntityID, taxCodeID); err != nil {
+		return nil, err
+	}
 	if targetDate.IsZero() {
 		targetDate = time.Now().UTC()
 	}
@@ -120,7 +143,7 @@ func (s *taxService) CalculateTax(ctx context.Context, req ports.CalculateTaxReq
 
 		// Lookup rate version if rate is not explicitly provided or if taxCodeID is given
 		if line.TaxCodeID != uuid.Nil {
-			taxCode, err := s.repo.GetTaxCodeByID(ctx, line.TaxCodeID)
+			taxCode, err := s.GetTaxCode(ctx, req.LegalEntityID, line.TaxCodeID)
 			if err != nil {
 				return nil, err
 			}
@@ -176,7 +199,7 @@ func (s *taxService) PostTaxTransaction(ctx context.Context, req ports.PostTaxTr
 		if err != nil {
 			return nil, err
 		}
-		taxCode, err := s.repo.GetTaxCodeByID(ctx, l.TaxCodeID)
+		taxCode, err := s.GetTaxCode(ctx, req.LegalEntityID, l.TaxCodeID)
 		if err != nil {
 			return nil, err
 		}
@@ -246,8 +269,15 @@ func (s *taxService) PostTaxTransaction(ctx context.Context, req ports.PostTaxTr
 	return s.repo.CreateTaxTransaction(ctx, txRecord)
 }
 
-func (s *taxService) GetTaxTransaction(ctx context.Context, id uuid.UUID) (*domain.TaxTransaction, error) {
-	return s.repo.GetTaxTransactionByID(ctx, id)
+func (s *taxService) GetTaxTransaction(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.TaxTransaction, error) {
+	taxTransaction, err := s.repo.GetTaxTransactionByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if taxTransaction == nil || taxTransaction.LegalEntityID != legalEntityID {
+		return nil, domain.ErrTaxTransactionNotFound
+	}
+	return taxTransaction, nil
 }
 
 func (s *taxService) ListTaxTransactions(ctx context.Context, legalEntityID uuid.UUID, limit, offset int32) ([]domain.TaxTransaction, error) {
@@ -266,7 +296,14 @@ func (s *taxService) CreatePeriod(ctx context.Context, period domain.TaxPeriod) 
 	return s.repo.CreateTaxPeriod(ctx, &period)
 }
 
-func (s *taxService) ClosePeriod(ctx context.Context, periodID uuid.UUID) (*domain.TaxPeriod, error) {
+func (s *taxService) ClosePeriod(ctx context.Context, legalEntityID, periodID uuid.UUID) (*domain.TaxPeriod, error) {
+	period, err := s.repo.GetTaxPeriodByID(ctx, periodID)
+	if err != nil {
+		return nil, err
+	}
+	if period.LegalEntityID != legalEntityID {
+		return nil, domain.ErrTaxPeriodNotFound
+	}
 	return s.repo.UpdateTaxPeriodStatus(ctx, periodID, domain.TaxPeriodStatusClosed)
 }
 
@@ -274,6 +311,9 @@ func (s *taxService) GenerateVATReturnDraft(ctx context.Context, legalEntityID, 
 	period, err := s.repo.GetTaxPeriodByID(ctx, periodID)
 	if err != nil {
 		return nil, err
+	}
+	if period.LegalEntityID != legalEntityID {
+		return nil, domain.ErrTaxPeriodNotFound
 	}
 
 	existingReturn, err := s.repo.GetTaxReturnByPeriod(ctx, legalEntityID, periodID)
@@ -390,8 +430,11 @@ func (s *taxService) GenerateVATReturnDraft(ctx context.Context, legalEntityID, 
 
 func (s *taxService) SubmitVATReturn(ctx context.Context, legalEntityID, returnID uuid.UUID, actorID uuid.UUID) (*domain.TaxReturn, error) {
 	ret, err := s.repo.GetTaxReturnByID(ctx, returnID)
-	if err != nil || ret == nil {
-		return nil, fmt.Errorf("tax return not found")
+	if err != nil {
+		return nil, err
+	}
+	if ret == nil || ret.LegalEntityID != legalEntityID {
+		return nil, domain.ErrTaxReturnNotFound
 	}
 
 	if ret.Status == "SUBMITTED" {

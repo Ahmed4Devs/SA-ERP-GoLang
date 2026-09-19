@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"erp/internal/platform/database/sqlc"
+	"erp/internal/platform/transaction"
 	"erp/internal/tax/domain"
 	"erp/internal/tax/ports"
 
@@ -25,6 +26,13 @@ func NewTaxRepository(pool *pgxpool.Pool) ports.TaxRepository {
 		pool:    pool,
 		queries: sqlc.New(pool),
 	}
+}
+
+func (r *taxRepository) queriesFor(ctx context.Context) *sqlc.Queries {
+	if tx, ok := transaction.TxFromContext(ctx); ok {
+		return r.queries.WithTx(tx)
+	}
+	return r.queries
 }
 
 // 1. Tax Categories & Reasons
@@ -199,7 +207,7 @@ func (r *taxRepository) GetTaxCodeByCode(ctx context.Context, legalEntityID uuid
 }
 
 func (r *taxRepository) CreateTaxCode(ctx context.Context, code *domain.TaxCode) (*domain.TaxCode, error) {
-	row, err := r.queries.CreateTaxCode(ctx, sqlc.CreateTaxCodeParams{
+	row, err := r.queriesFor(ctx).CreateTaxCode(ctx, sqlc.CreateTaxCodeParams{
 		LegalEntityID:        toPgUUID(code.LegalEntityID),
 		Code:                 code.Code,
 		NameEn:               code.NameEn,
@@ -244,7 +252,7 @@ func (r *taxRepository) UpdateTaxCode(ctx context.Context, code *domain.TaxCode)
 }
 
 func (r *taxRepository) CreateTaxRateVersion(ctx context.Context, rate *domain.TaxRateVersion) (*domain.TaxRateVersion, error) {
-	row, err := r.queries.CreateTaxRateVersion(ctx, sqlc.CreateTaxRateVersionParams{
+	row, err := r.queriesFor(ctx).CreateTaxRateVersion(ctx, sqlc.CreateTaxRateVersionParams{
 		TaxCodeID:     toPgUUID(rate.TaxCodeID),
 		RatePercent:   toPgNumeric(rate.RatePercent),
 		EffectiveFrom: toPgDate(rate.EffectiveFrom),

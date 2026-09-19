@@ -24,7 +24,7 @@ type Module struct {
 
 func NewModule(cfg *config.Config, db *database.DB) *Module {
 	repo := postgres.NewTaxRepository(db.Pool)
-	taxSvc := services.NewTaxService(repo)
+	taxSvc := services.NewTaxService(repo, db)
 	handler := taxhttp.NewTaxHandler(taxSvc)
 
 	return &Module{
