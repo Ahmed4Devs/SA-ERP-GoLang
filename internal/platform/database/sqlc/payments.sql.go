@@ -884,6 +884,43 @@ func (q *Queries) LockPayablesOpenItem(ctx context.Context, id pgtype.UUID) (Pay
 	return i, err
 }
 
+const lockTreasuryPaymentByID = `-- name: LockTreasuryPaymentByID :one
+SELECT id, legal_entity_id, payment_number, cash_account_id, payment_date, payment_type, paid_to, amount, currency_code, reference_number, description, status, gl_offset_account_id, journal_entry_id, created_by_user_id, approved_by_user_id, created_at, updated_at FROM treasury.payments
+WHERE id = $1 AND legal_entity_id = $2
+FOR UPDATE
+`
+
+type LockTreasuryPaymentByIDParams struct {
+	ID            pgtype.UUID `json:"id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+}
+
+func (q *Queries) LockTreasuryPaymentByID(ctx context.Context, arg LockTreasuryPaymentByIDParams) (TreasuryPayments, error) {
+	row := q.db.QueryRow(ctx, lockTreasuryPaymentByID, arg.ID, arg.LegalEntityID)
+	var i TreasuryPayments
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.PaymentNumber,
+		&i.CashAccountID,
+		&i.PaymentDate,
+		&i.PaymentType,
+		&i.PaidTo,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.ReferenceNumber,
+		&i.Description,
+		&i.Status,
+		&i.GlOffsetAccountID,
+		&i.JournalEntryID,
+		&i.CreatedByUserID,
+		&i.ApprovedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updatePayablesOpenItemAllocation = `-- name: UpdatePayablesOpenItemAllocation :one
 UPDATE payables.open_items
 SET 

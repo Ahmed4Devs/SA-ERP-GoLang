@@ -580,6 +580,88 @@ func (q *Queries) ListTreasuryTransfers(ctx context.Context, legalEntityID pgtyp
 	return items, nil
 }
 
+const lockTreasuryBankAccountByID = `-- name: LockTreasuryBankAccountByID :one
+SELECT id, legal_entity_id, account_code, bank_name_en, bank_name_ar, branch_name, account_number, account_number_masked, iban, swift_bic, currency_code, gl_account_id, opening_balance, current_balance, available_balance, overdraft_limit, status, is_primary, contact_person, contact_phone, created_at, updated_at FROM banking.bank_accounts
+WHERE id = $1 AND legal_entity_id = $2
+FOR UPDATE
+`
+
+type LockTreasuryBankAccountByIDParams struct {
+	ID            pgtype.UUID `json:"id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+}
+
+func (q *Queries) LockTreasuryBankAccountByID(ctx context.Context, arg LockTreasuryBankAccountByIDParams) (BankingBankAccounts, error) {
+	row := q.db.QueryRow(ctx, lockTreasuryBankAccountByID, arg.ID, arg.LegalEntityID)
+	var i BankingBankAccounts
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.AccountCode,
+		&i.BankNameEn,
+		&i.BankNameAr,
+		&i.BranchName,
+		&i.AccountNumber,
+		&i.AccountNumberMasked,
+		&i.Iban,
+		&i.SwiftBic,
+		&i.CurrencyCode,
+		&i.GlAccountID,
+		&i.OpeningBalance,
+		&i.CurrentBalance,
+		&i.AvailableBalance,
+		&i.OverdraftLimit,
+		&i.Status,
+		&i.IsPrimary,
+		&i.ContactPerson,
+		&i.ContactPhone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const lockTreasuryTransferByID = `-- name: LockTreasuryTransferByID :one
+SELECT id, legal_entity_id, transfer_number, transfer_date, source_type, source_cash_account_id, source_bank_account_id, destination_type, destination_cash_account_id, destination_bank_account_id, amount, currency_code, fee_amount, fee_gl_account_id, status, reference_number, notes, journal_entry_id, initiated_by_user_id, completed_by_user_id, created_at, updated_at FROM treasury.transfers
+WHERE id = $1 AND legal_entity_id = $2
+FOR UPDATE
+`
+
+type LockTreasuryTransferByIDParams struct {
+	ID            pgtype.UUID `json:"id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+}
+
+func (q *Queries) LockTreasuryTransferByID(ctx context.Context, arg LockTreasuryTransferByIDParams) (TreasuryTransfers, error) {
+	row := q.db.QueryRow(ctx, lockTreasuryTransferByID, arg.ID, arg.LegalEntityID)
+	var i TreasuryTransfers
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.TransferNumber,
+		&i.TransferDate,
+		&i.SourceType,
+		&i.SourceCashAccountID,
+		&i.SourceBankAccountID,
+		&i.DestinationType,
+		&i.DestinationCashAccountID,
+		&i.DestinationBankAccountID,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.FeeAmount,
+		&i.FeeGlAccountID,
+		&i.Status,
+		&i.ReferenceNumber,
+		&i.Notes,
+		&i.JournalEntryID,
+		&i.InitiatedByUserID,
+		&i.CompletedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateTransferOrderLineQuantities = `-- name: UpdateTransferOrderLineQuantities :one
 UPDATE inventory.transfer_order_lines
 SET
@@ -642,6 +724,51 @@ func (q *Queries) UpdateTransferOrderStatus(ctx context.Context, arg UpdateTrans
 		&i.ReceivedDate,
 		&i.Notes,
 		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateTreasuryBankAccountBalance = `-- name: UpdateTreasuryBankAccountBalance :one
+UPDATE banking.bank_accounts
+SET current_balance = current_balance + $3,
+    available_balance = available_balance + $3,
+    updated_at = now()
+WHERE id = $1 AND legal_entity_id = $2
+RETURNING id, legal_entity_id, account_code, bank_name_en, bank_name_ar, branch_name, account_number, account_number_masked, iban, swift_bic, currency_code, gl_account_id, opening_balance, current_balance, available_balance, overdraft_limit, status, is_primary, contact_person, contact_phone, created_at, updated_at
+`
+
+type UpdateTreasuryBankAccountBalanceParams struct {
+	ID             pgtype.UUID    `json:"id"`
+	LegalEntityID  pgtype.UUID    `json:"legal_entity_id"`
+	CurrentBalance pgtype.Numeric `json:"current_balance"`
+}
+
+func (q *Queries) UpdateTreasuryBankAccountBalance(ctx context.Context, arg UpdateTreasuryBankAccountBalanceParams) (BankingBankAccounts, error) {
+	row := q.db.QueryRow(ctx, updateTreasuryBankAccountBalance, arg.ID, arg.LegalEntityID, arg.CurrentBalance)
+	var i BankingBankAccounts
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.AccountCode,
+		&i.BankNameEn,
+		&i.BankNameAr,
+		&i.BranchName,
+		&i.AccountNumber,
+		&i.AccountNumberMasked,
+		&i.Iban,
+		&i.SwiftBic,
+		&i.CurrencyCode,
+		&i.GlAccountID,
+		&i.OpeningBalance,
+		&i.CurrentBalance,
+		&i.AvailableBalance,
+		&i.OverdraftLimit,
+		&i.Status,
+		&i.IsPrimary,
+		&i.ContactPerson,
+		&i.ContactPhone,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

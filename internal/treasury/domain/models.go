@@ -10,6 +10,7 @@ import (
 
 var (
 	ErrCashAccountNotFound      = errors.New("cash account not found")
+	ErrBankAccountNotFound      = errors.New("bank account not found")
 	ErrReceiptNotFound          = errors.New("treasury receipt not found")
 	ErrPaymentNotFound          = errors.New("treasury payment not found")
 	ErrTransferNotFound         = errors.New("treasury transfer not found")
@@ -17,6 +18,9 @@ var (
 	ErrInsufficientCashBalance  = errors.New("insufficient cash balance in account")
 	ErrInvalidStatusTransition  = errors.New("invalid status transition")
 	ErrInvalidAmount            = errors.New("amount must be greater than zero")
+	ErrInvalidTransferAccounts  = errors.New("transfer source and destination accounts are invalid")
+	ErrInactiveTreasuryAccount  = errors.New("treasury account is not active")
+	ErrCurrencyMismatch         = errors.New("transaction currency does not match treasury account currency")
 )
 
 type CashAccountType string
@@ -117,6 +121,18 @@ type CashAccount struct {
 	Status          CashAccountStatus `json:"status"`
 	CreatedAt       time.Time         `json:"created_at"`
 	UpdatedAt       time.Time         `json:"updated_at"`
+}
+
+// BankAccountBalance contains the bank-account fields needed to settle a
+// treasury transfer without coupling the treasury service to the banking module.
+type BankAccountBalance struct {
+	ID               uuid.UUID
+	LegalEntityID    uuid.UUID
+	CurrencyCode     string
+	CurrentBalance   decimal.Decimal
+	AvailableBalance decimal.Decimal
+	OverdraftLimit   decimal.Decimal
+	Status           string
 }
 
 type Receipt struct {

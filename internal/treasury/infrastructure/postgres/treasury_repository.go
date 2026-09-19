@@ -17,14 +17,14 @@ import (
 
 type treasuryRepository struct {
 	db *database.DB
-	q  *sqlc.Queries
 }
 
 func NewTreasuryRepository(db *database.DB) ports.TreasuryRepository {
-	return &treasuryRepository{
-		db: db,
-		q:  sqlc.New(db.Pool),
-	}
+	return &treasuryRepository{db: db}
+}
+
+func (r *treasuryRepository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 // ============================================================================
@@ -35,7 +35,7 @@ func (r *treasuryRepository) CreateCashAccount(ctx context.Context, a *domain.Ca
 	if a.ID == uuid.Nil {
 		a.ID = uuid.New()
 	}
-	row, err := r.q.CreateCashAccount(ctx, sqlc.CreateCashAccountParams{
+	row, err := r.queries(ctx).CreateCashAccount(ctx, sqlc.CreateCashAccountParams{
 		ID:              toPgUUID(a.ID),
 		LegalEntityID:   toPgUUID(a.LegalEntityID),
 		BranchID:        toPgUUIDPtr(a.BranchID),
@@ -57,7 +57,21 @@ func (r *treasuryRepository) CreateCashAccount(ctx context.Context, a *domain.Ca
 }
 
 func (r *treasuryRepository) GetCashAccountByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.CashAccount, error) {
-	row, err := r.q.GetCashAccountByID(ctx, sqlc.GetCashAccountByIDParams{
+	row, err := r.queries(ctx).GetCashAccountByID(ctx, sqlc.GetCashAccountByIDParams{
+		ID:            toPgUUID(id),
+		LegalEntityID: toPgUUID(legalEntityID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrCashAccountNotFound
+		}
+		return nil, err
+	}
+	return mapCashAccount(row), nil
+}
+
+func (r *treasuryRepository) LockCashAccountByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.CashAccount, error) {
+	row, err := r.queries(ctx).LockCashAccountByID(ctx, sqlc.LockCashAccountByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -71,7 +85,7 @@ func (r *treasuryRepository) GetCashAccountByID(ctx context.Context, legalEntity
 }
 
 func (r *treasuryRepository) GetCashAccountByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.CashAccount, error) {
-	row, err := r.q.GetCashAccountByCode(ctx, sqlc.GetCashAccountByCodeParams{
+	row, err := r.queries(ctx).GetCashAccountByCode(ctx, sqlc.GetCashAccountByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		AccountCode:   code,
 	})
@@ -85,7 +99,7 @@ func (r *treasuryRepository) GetCashAccountByCode(ctx context.Context, legalEnti
 }
 
 func (r *treasuryRepository) ListCashAccounts(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.CashAccount, error) {
-	rows, err := r.q.ListCashAccounts(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListCashAccounts(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +111,7 @@ func (r *treasuryRepository) ListCashAccounts(ctx context.Context, legalEntityID
 }
 
 func (r *treasuryRepository) UpdateCashAccountBalance(ctx context.Context, legalEntityID, id uuid.UUID, delta decimal.Decimal) (*domain.CashAccount, error) {
-	row, err := r.q.UpdateCashAccountBalance(ctx, sqlc.UpdateCashAccountBalanceParams{
+	row, err := r.queries(ctx).UpdateCashAccountBalance(ctx, sqlc.UpdateCashAccountBalanceParams{
 		ID:             toPgUUID(id),
 		LegalEntityID:  toPgUUID(legalEntityID),
 		CurrentBalance: toPgNumeric(delta),
@@ -109,7 +123,7 @@ func (r *treasuryRepository) UpdateCashAccountBalance(ctx context.Context, legal
 }
 
 func (r *treasuryRepository) UpdateCashAccountStatus(ctx context.Context, legalEntityID, id uuid.UUID, status domain.CashAccountStatus) (*domain.CashAccount, error) {
-	row, err := r.q.UpdateCashAccountStatus(ctx, sqlc.UpdateCashAccountStatusParams{
+	row, err := r.queries(ctx).UpdateCashAccountStatus(ctx, sqlc.UpdateCashAccountStatusParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 		Status:        string(status),
@@ -128,7 +142,7 @@ func (r *treasuryRepository) CreateReceipt(ctx context.Context, rc *domain.Recei
 	if rc.ID == uuid.Nil {
 		rc.ID = uuid.New()
 	}
-	row, err := r.q.CreateTreasuryReceipt(ctx, sqlc.CreateTreasuryReceiptParams{
+	row, err := r.queries(ctx).CreateTreasuryReceipt(ctx, sqlc.CreateTreasuryReceiptParams{
 		ID:            toPgUUID(rc.ID),
 		LegalEntityID: toPgUUID(rc.LegalEntityID),
 		ReceiptNumber: rc.ReceiptNumber,
@@ -160,7 +174,21 @@ func (r *treasuryRepository) CreateReceipt(ctx context.Context, rc *domain.Recei
 }
 
 func (r *treasuryRepository) GetReceiptByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Receipt, error) {
-	row, err := r.q.GetTreasuryReceiptByID(ctx, sqlc.GetTreasuryReceiptByIDParams{
+	row, err := r.queries(ctx).GetTreasuryReceiptByID(ctx, sqlc.GetTreasuryReceiptByIDParams{
+		ID:            toPgUUID(id),
+		LegalEntityID: toPgUUID(legalEntityID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrReceiptNotFound
+		}
+		return nil, err
+	}
+	return mapReceipt(row), nil
+}
+
+func (r *treasuryRepository) LockReceiptByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Receipt, error) {
+	row, err := r.queries(ctx).LockTreasuryReceiptByID(ctx, sqlc.LockTreasuryReceiptByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -174,7 +202,7 @@ func (r *treasuryRepository) GetReceiptByID(ctx context.Context, legalEntityID, 
 }
 
 func (r *treasuryRepository) GetReceiptByNumber(ctx context.Context, legalEntityID uuid.UUID, number string) (*domain.Receipt, error) {
-	row, err := r.q.GetTreasuryReceiptByNumber(ctx, sqlc.GetTreasuryReceiptByNumberParams{
+	row, err := r.queries(ctx).GetTreasuryReceiptByNumber(ctx, sqlc.GetTreasuryReceiptByNumberParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		ReceiptNumber: number,
 	})
@@ -188,7 +216,7 @@ func (r *treasuryRepository) GetReceiptByNumber(ctx context.Context, legalEntity
 }
 
 func (r *treasuryRepository) ListReceipts(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.Receipt, error) {
-	rows, err := r.q.ListTreasuryReceipts(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListTreasuryReceipts(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +228,7 @@ func (r *treasuryRepository) ListReceipts(ctx context.Context, legalEntityID uui
 }
 
 func (r *treasuryRepository) UpdateReceiptStatus(ctx context.Context, legalEntityID, id uuid.UUID, status domain.ReceiptStatus, journalEntryID *uuid.UUID) (*domain.Receipt, error) {
-	row, err := r.q.UpdateTreasuryReceiptStatus(ctx, sqlc.UpdateTreasuryReceiptStatusParams{
+	row, err := r.queries(ctx).UpdateTreasuryReceiptStatus(ctx, sqlc.UpdateTreasuryReceiptStatusParams{
 		ID:             toPgUUID(id),
 		LegalEntityID:  toPgUUID(legalEntityID),
 		Status:         string(status),
@@ -220,7 +248,7 @@ func (r *treasuryRepository) CreatePayment(ctx context.Context, p *domain.Paymen
 	if p.ID == uuid.Nil {
 		p.ID = uuid.New()
 	}
-	row, err := r.q.CreateTreasuryPayment(ctx, sqlc.CreateTreasuryPaymentParams{
+	row, err := r.queries(ctx).CreateTreasuryPayment(ctx, sqlc.CreateTreasuryPaymentParams{
 		ID:                toPgUUID(p.ID),
 		LegalEntityID:     toPgUUID(p.LegalEntityID),
 		PaymentNumber:     p.PaymentNumber,
@@ -245,7 +273,21 @@ func (r *treasuryRepository) CreatePayment(ctx context.Context, p *domain.Paymen
 }
 
 func (r *treasuryRepository) GetPaymentByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Payment, error) {
-	row, err := r.q.GetTreasuryPaymentByID(ctx, sqlc.GetTreasuryPaymentByIDParams{
+	row, err := r.queries(ctx).GetTreasuryPaymentByID(ctx, sqlc.GetTreasuryPaymentByIDParams{
+		ID:            toPgUUID(id),
+		LegalEntityID: toPgUUID(legalEntityID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrPaymentNotFound
+		}
+		return nil, err
+	}
+	return mapPayment(row), nil
+}
+
+func (r *treasuryRepository) LockPaymentByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Payment, error) {
+	row, err := r.queries(ctx).LockTreasuryPaymentByID(ctx, sqlc.LockTreasuryPaymentByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -259,7 +301,7 @@ func (r *treasuryRepository) GetPaymentByID(ctx context.Context, legalEntityID, 
 }
 
 func (r *treasuryRepository) GetPaymentByNumber(ctx context.Context, legalEntityID uuid.UUID, number string) (*domain.Payment, error) {
-	row, err := r.q.GetTreasuryPaymentByNumber(ctx, sqlc.GetTreasuryPaymentByNumberParams{
+	row, err := r.queries(ctx).GetTreasuryPaymentByNumber(ctx, sqlc.GetTreasuryPaymentByNumberParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		PaymentNumber: number,
 	})
@@ -273,7 +315,7 @@ func (r *treasuryRepository) GetPaymentByNumber(ctx context.Context, legalEntity
 }
 
 func (r *treasuryRepository) ListPayments(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.Payment, error) {
-	rows, err := r.q.ListTreasuryPayments(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListTreasuryPayments(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +327,7 @@ func (r *treasuryRepository) ListPayments(ctx context.Context, legalEntityID uui
 }
 
 func (r *treasuryRepository) UpdatePaymentStatus(ctx context.Context, legalEntityID, id uuid.UUID, status domain.PaymentStatus, journalEntryID, approvedBy *uuid.UUID) (*domain.Payment, error) {
-	row, err := r.q.UpdateTreasuryPaymentStatus(ctx, sqlc.UpdateTreasuryPaymentStatusParams{
+	row, err := r.queries(ctx).UpdateTreasuryPaymentStatus(ctx, sqlc.UpdateTreasuryPaymentStatusParams{
 		ID:               toPgUUID(id),
 		LegalEntityID:    toPgUUID(legalEntityID),
 		Status:           string(status),
@@ -306,7 +348,7 @@ func (r *treasuryRepository) CreateTransfer(ctx context.Context, t *domain.Trans
 	if t.ID == uuid.Nil {
 		t.ID = uuid.New()
 	}
-	row, err := r.q.CreateTreasuryTransfer(ctx, sqlc.CreateTreasuryTransferParams{
+	row, err := r.queries(ctx).CreateTreasuryTransfer(ctx, sqlc.CreateTreasuryTransferParams{
 		ID:                       toPgUUID(t.ID),
 		LegalEntityID:            toPgUUID(t.LegalEntityID),
 		TransferNumber:           t.TransferNumber,
@@ -335,7 +377,21 @@ func (r *treasuryRepository) CreateTransfer(ctx context.Context, t *domain.Trans
 }
 
 func (r *treasuryRepository) GetTransferByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Transfer, error) {
-	row, err := r.q.GetTreasuryTransferByID(ctx, sqlc.GetTreasuryTransferByIDParams{
+	row, err := r.queries(ctx).GetTreasuryTransferByID(ctx, sqlc.GetTreasuryTransferByIDParams{
+		ID:            toPgUUID(id),
+		LegalEntityID: toPgUUID(legalEntityID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrTransferNotFound
+		}
+		return nil, err
+	}
+	return mapTransfer(row), nil
+}
+
+func (r *treasuryRepository) LockTransferByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Transfer, error) {
+	row, err := r.queries(ctx).LockTreasuryTransferByID(ctx, sqlc.LockTreasuryTransferByIDParams{
 		ID:            toPgUUID(id),
 		LegalEntityID: toPgUUID(legalEntityID),
 	})
@@ -349,7 +405,7 @@ func (r *treasuryRepository) GetTransferByID(ctx context.Context, legalEntityID,
 }
 
 func (r *treasuryRepository) GetTransferByNumber(ctx context.Context, legalEntityID uuid.UUID, number string) (*domain.Transfer, error) {
-	row, err := r.q.GetTreasuryTransferByNumber(ctx, sqlc.GetTreasuryTransferByNumberParams{
+	row, err := r.queries(ctx).GetTreasuryTransferByNumber(ctx, sqlc.GetTreasuryTransferByNumberParams{
 		LegalEntityID:  toPgUUID(legalEntityID),
 		TransferNumber: number,
 	})
@@ -363,7 +419,7 @@ func (r *treasuryRepository) GetTransferByNumber(ctx context.Context, legalEntit
 }
 
 func (r *treasuryRepository) ListTransfers(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.Transfer, error) {
-	rows, err := r.q.ListTreasuryTransfers(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queries(ctx).ListTreasuryTransfers(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -375,7 +431,7 @@ func (r *treasuryRepository) ListTransfers(ctx context.Context, legalEntityID uu
 }
 
 func (r *treasuryRepository) UpdateTransferStatus(ctx context.Context, legalEntityID, id uuid.UUID, status domain.TransferStatus, journalEntryID, completedBy *uuid.UUID) (*domain.Transfer, error) {
-	row, err := r.q.UpdateTreasuryTransferStatus(ctx, sqlc.UpdateTreasuryTransferStatusParams{
+	row, err := r.queries(ctx).UpdateTreasuryTransferStatus(ctx, sqlc.UpdateTreasuryTransferStatusParams{
 		ID:                toPgUUID(id),
 		LegalEntityID:     toPgUUID(legalEntityID),
 		Status:            string(status),
@@ -386,6 +442,32 @@ func (r *treasuryRepository) UpdateTransferStatus(ctx context.Context, legalEnti
 		return nil, err
 	}
 	return mapTransfer(row), nil
+}
+
+func (r *treasuryRepository) LockBankAccountByID(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.BankAccountBalance, error) {
+	row, err := r.queries(ctx).LockTreasuryBankAccountByID(ctx, sqlc.LockTreasuryBankAccountByIDParams{
+		ID:            toPgUUID(id),
+		LegalEntityID: toPgUUID(legalEntityID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrBankAccountNotFound
+		}
+		return nil, err
+	}
+	return mapBankAccountBalance(row), nil
+}
+
+func (r *treasuryRepository) UpdateBankAccountBalance(ctx context.Context, legalEntityID, id uuid.UUID, delta decimal.Decimal) (*domain.BankAccountBalance, error) {
+	row, err := r.queries(ctx).UpdateTreasuryBankAccountBalance(ctx, sqlc.UpdateTreasuryBankAccountBalanceParams{
+		ID:             toPgUUID(id),
+		LegalEntityID:  toPgUUID(legalEntityID),
+		CurrentBalance: toPgNumeric(delta),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapBankAccountBalance(row), nil
 }
 
 // ============================================================================
@@ -409,6 +491,18 @@ func mapCashAccount(r sqlc.TreasuryCashAccounts) *domain.CashAccount {
 		Status:          domain.CashAccountStatus(r.Status),
 		CreatedAt:       fromPgTimestamptz(r.CreatedAt),
 		UpdatedAt:       fromPgTimestamptz(r.UpdatedAt),
+	}
+}
+
+func mapBankAccountBalance(r sqlc.BankingBankAccounts) *domain.BankAccountBalance {
+	return &domain.BankAccountBalance{
+		ID:               toUUID(r.ID),
+		LegalEntityID:    toUUID(r.LegalEntityID),
+		CurrencyCode:     r.CurrencyCode,
+		CurrentBalance:   fromPgNumeric(r.CurrentBalance),
+		AvailableBalance: fromPgNumeric(r.AvailableBalance),
+		OverdraftLimit:   fromPgNumeric(r.OverdraftLimit),
+		Status:           r.Status,
 	}
 }
 

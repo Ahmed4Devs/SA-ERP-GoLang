@@ -16,6 +16,11 @@ RETURNING *;
 SELECT * FROM treasury.receipts
 WHERE id = $1 AND legal_entity_id = $2;
 
+-- name: LockTreasuryReceiptByID :one
+SELECT * FROM treasury.receipts
+WHERE id = $1 AND legal_entity_id = $2
+FOR UPDATE;
+
 -- name: GetTreasuryReceiptByNumber :one
 SELECT * FROM treasury.receipts
 WHERE legal_entity_id = $1 AND receipt_number = $2;

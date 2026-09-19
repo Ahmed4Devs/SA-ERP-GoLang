@@ -16,6 +16,11 @@ RETURNING *;
 SELECT * FROM treasury.payments
 WHERE id = $1 AND legal_entity_id = $2;
 
+-- name: LockTreasuryPaymentByID :one
+SELECT * FROM treasury.payments
+WHERE id = $1 AND legal_entity_id = $2
+FOR UPDATE;
+
 -- name: GetTreasuryPaymentByNumber :one
 SELECT * FROM treasury.payments
 WHERE legal_entity_id = $1 AND payment_number = $2;

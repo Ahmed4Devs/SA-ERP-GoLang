@@ -20,6 +20,24 @@ RETURNING *;
 SELECT * FROM treasury.transfers
 WHERE id = $1 AND legal_entity_id = $2;
 
+-- name: LockTreasuryTransferByID :one
+SELECT * FROM treasury.transfers
+WHERE id = $1 AND legal_entity_id = $2
+FOR UPDATE;
+
+-- name: LockTreasuryBankAccountByID :one
+SELECT * FROM banking.bank_accounts
+WHERE id = $1 AND legal_entity_id = $2
+FOR UPDATE;
+
+-- name: UpdateTreasuryBankAccountBalance :one
+UPDATE banking.bank_accounts
+SET current_balance = current_balance + $3,
+    available_balance = available_balance + $3,
+    updated_at = now()
+WHERE id = $1 AND legal_entity_id = $2
+RETURNING *;
+
 -- name: GetTreasuryTransferByNumber :one
 SELECT * FROM treasury.transfers
 WHERE legal_entity_id = $1 AND transfer_number = $2;

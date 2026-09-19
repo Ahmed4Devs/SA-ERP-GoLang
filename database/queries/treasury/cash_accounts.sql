@@ -14,6 +14,11 @@ RETURNING *;
 SELECT * FROM treasury.cash_accounts
 WHERE id = $1 AND legal_entity_id = $2;
 
+-- name: LockCashAccountByID :one
+SELECT * FROM treasury.cash_accounts
+WHERE id = $1 AND legal_entity_id = $2
+FOR UPDATE;
+
 -- name: GetCashAccountByCode :one
 SELECT * FROM treasury.cash_accounts
 WHERE legal_entity_id = $1 AND account_code = $2;

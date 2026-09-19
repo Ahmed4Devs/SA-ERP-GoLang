@@ -185,6 +185,40 @@ func (q *Queries) ListCashAccounts(ctx context.Context, legalEntityID pgtype.UUI
 	return items, nil
 }
 
+const lockCashAccountByID = `-- name: LockCashAccountByID :one
+SELECT id, legal_entity_id, branch_id, account_code, name_en, name_ar, account_type, gl_account_id, currency_code, custodian_user_id, max_limit, current_balance, status, created_at, updated_at FROM treasury.cash_accounts
+WHERE id = $1 AND legal_entity_id = $2
+FOR UPDATE
+`
+
+type LockCashAccountByIDParams struct {
+	ID            pgtype.UUID `json:"id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+}
+
+func (q *Queries) LockCashAccountByID(ctx context.Context, arg LockCashAccountByIDParams) (TreasuryCashAccounts, error) {
+	row := q.db.QueryRow(ctx, lockCashAccountByID, arg.ID, arg.LegalEntityID)
+	var i TreasuryCashAccounts
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.BranchID,
+		&i.AccountCode,
+		&i.NameEn,
+		&i.NameAr,
+		&i.AccountType,
+		&i.GlAccountID,
+		&i.CurrencyCode,
+		&i.CustodianUserID,
+		&i.MaxLimit,
+		&i.CurrentBalance,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateCashAccountBalance = `-- name: UpdateCashAccountBalance :one
 UPDATE treasury.cash_accounts
 SET current_balance = current_balance + $3,

@@ -2,6 +2,7 @@ package treasury_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -33,6 +34,7 @@ func setupTreasuryTest(t *testing.T) (*treasury.Module, *banking.Module, *databa
 	if err != nil {
 		t.Skipf("PostgreSQL not accessible: %v", err)
 	}
+	t.Cleanup(db.Close)
 
 	txManager := transaction.NewManager(db.Pool)
 	if err := database.MigrateUp(ctx, cfg.Database.URL, "../../../database/migrations"); err != nil {
@@ -158,6 +160,16 @@ func TestTreasuryReceipt_Lifecycle(t *testing.T) {
 	if !updatedAcc.CurrentBalance.Equal(decimal.NewFromInt(1400)) {
 		t.Errorf("expected balance 1400, got %s", updatedAcc.CurrentBalance.String())
 	}
+	if _, err := svc.PostReceipt(ctx, leID, rc.ID, nil); err != nil {
+		t.Fatalf("idempotent receipt post failed: %v", err)
+	}
+	updatedAcc, err = svc.GetCashAccount(ctx, leID, acc.ID)
+	if err != nil {
+		t.Fatalf("failed to fetch account after repeated post: %v", err)
+	}
+	if !updatedAcc.CurrentBalance.Equal(decimal.NewFromInt(1400)) {
+		t.Fatalf("repeated receipt post changed balance to %s", updatedAcc.CurrentBalance)
+	}
 
 	// 5. Attempt Receipt that exceeds limit (1400 + 800 = 2200 > 2000)
 	excessRc, err := svc.CreateReceipt(ctx, &domain.Receipt{
@@ -263,6 +275,135 @@ func TestTreasuryPayment_Lifecycle(t *testing.T) {
 	}
 }
 
+func TestTreasuryPayment_ConcurrentPaymentsCannotOverdraw(t *testing.T) {
+	treasuryMod, _, _, leID, adminID, ctx := setupTreasuryTest(t)
+	svc := treasuryMod.TreasuryService
+
+	account, err := svc.CreateCashAccount(ctx, &domain.CashAccount{
+		LegalEntityID:   leID,
+		AccountCode:     "CASH-RACE-" + uuid.New().String()[:8],
+		NameEn:          "Concurrent Payment Box",
+		NameAr:          "صندوق اختبار التزامن",
+		AccountType:     domain.CashAccountPettyCash,
+		CurrencyCode:    "SAR",
+		CustodianUserID: &adminID,
+		MaxLimit:        decimal.NewFromInt(1000),
+		CurrentBalance:  decimal.NewFromInt(100),
+		Status:          domain.CashAccountActive,
+	})
+	if err != nil {
+		t.Fatalf("failed to create cash account: %v", err)
+	}
+
+	payments := make([]*domain.Payment, 2)
+	for i := range payments {
+		payments[i], err = svc.CreatePayment(ctx, &domain.Payment{
+			LegalEntityID:   leID,
+			CashAccountID:   account.ID,
+			PaymentDate:     time.Now(),
+			PaymentType:     domain.PaymentMiscellaneous,
+			PaidTo:          "Concurrent payee",
+			Amount:          decimal.NewFromInt(80),
+			CurrencyCode:    "SAR",
+			CreatedByUserID: &adminID,
+		})
+		if err != nil {
+			t.Fatalf("failed to create payment: %v", err)
+		}
+	}
+
+	start := make(chan struct{})
+	results := make(chan error, len(payments))
+	for _, payment := range payments {
+		payment := payment
+		go func() {
+			<-start
+			_, err := svc.PayPayment(ctx, leID, payment.ID, nil)
+			results <- err
+		}()
+	}
+	close(start)
+
+	successes := 0
+	insufficient := 0
+	for range payments {
+		err := <-results
+		switch {
+		case err == nil:
+			successes++
+		case errors.Is(err, domain.ErrInsufficientCashBalance):
+			insufficient++
+		default:
+			t.Fatalf("unexpected payment result: %v", err)
+		}
+	}
+	if successes != 1 || insufficient != 1 {
+		t.Fatalf("expected one payment and one insufficient-balance error, got successes=%d insufficient=%d", successes, insufficient)
+	}
+
+	updated, err := svc.GetCashAccount(ctx, leID, account.ID)
+	if err != nil {
+		t.Fatalf("failed to reload cash account: %v", err)
+	}
+	if !updated.CurrentBalance.Equal(decimal.NewFromInt(20)) {
+		t.Fatalf("expected final balance 20, got %s", updated.CurrentBalance)
+	}
+}
+
+func TestTreasuryReceipt_PostRollbackRestoresBalance(t *testing.T) {
+	treasuryMod, _, _, leID, adminID, ctx := setupTreasuryTest(t)
+	svc := treasuryMod.TreasuryService
+
+	account, err := svc.CreateCashAccount(ctx, &domain.CashAccount{
+		LegalEntityID:   leID,
+		AccountCode:     "CASH-ROLLBACK-" + uuid.New().String()[:8],
+		NameEn:          "Receipt Rollback Box",
+		NameAr:          "صندوق تراجع القبض",
+		AccountType:     domain.CashAccountPettyCash,
+		CurrencyCode:    "SAR",
+		CustodianUserID: &adminID,
+		MaxLimit:        decimal.NewFromInt(1000),
+		CurrentBalance:  decimal.NewFromInt(100),
+		Status:          domain.CashAccountActive,
+	})
+	if err != nil {
+		t.Fatalf("failed to create cash account: %v", err)
+	}
+	receipt, err := svc.CreateReceipt(ctx, &domain.Receipt{
+		LegalEntityID:   leID,
+		CashAccountID:   account.ID,
+		ReceiptDate:     time.Now(),
+		ReceiptType:     domain.ReceiptMiscellaneous,
+		ReceivedFrom:    "Rollback payer",
+		Amount:          decimal.NewFromInt(25),
+		CurrencyCode:    "SAR",
+		PaymentMethod:   domain.PaymentMethodCash,
+		CreatedByUserID: &adminID,
+	})
+	if err != nil {
+		t.Fatalf("failed to create receipt: %v", err)
+	}
+
+	invalidJournalID := uuid.New()
+	if _, err := svc.PostReceipt(ctx, leID, receipt.ID, &invalidJournalID); err == nil {
+		t.Fatal("expected invalid journal entry to abort receipt posting")
+	}
+	updatedAccount, err := svc.GetCashAccount(ctx, leID, account.ID)
+	if err != nil {
+		t.Fatalf("failed to reload cash account: %v", err)
+	}
+	if !updatedAccount.CurrentBalance.Equal(decimal.NewFromInt(100)) {
+		t.Fatalf("expected rolled-back balance 100, got %s", updatedAccount.CurrentBalance)
+	}
+	unchangedReceipt, err := svc.GetReceipt(ctx, leID, receipt.ID)
+	if err != nil {
+		t.Fatalf("failed to reload receipt: %v", err)
+	}
+	if unchangedReceipt.Status != domain.ReceiptDraft {
+		t.Fatalf("expected receipt to remain DRAFT, got %s", unchangedReceipt.Status)
+	}
+}
+
 func TestTreasuryTransfer_CashToBank(t *testing.T) {
 	treasuryMod, bankingMod, _, leID, adminID, ctx := setupTreasuryTest(t)
 	tSvc := treasuryMod.TreasuryService
@@ -337,5 +478,77 @@ func TestTreasuryTransfer_CashToBank(t *testing.T) {
 	}
 	if !updatedCash.CurrentBalance.Equal(decimal.NewFromInt(1985)) {
 		t.Errorf("expected cash balance 1985, got %s", updatedCash.CurrentBalance.String())
+	}
+	updatedBank, err := bSvc.GetBankAccount(ctx, leID, bankAcc.ID)
+	if err != nil {
+		t.Fatalf("failed to fetch updated bank account: %v", err)
+	}
+	if !updatedBank.CurrentBalance.Equal(decimal.NewFromInt(11000)) {
+		t.Errorf("expected bank balance 11000, got %s", updatedBank.CurrentBalance.String())
+	}
+}
+
+func TestTreasuryTransfer_RollbackRestoresBothCashAccounts(t *testing.T) {
+	treasuryMod, _, _, leID, adminID, ctx := setupTreasuryTest(t)
+	svc := treasuryMod.TreasuryService
+
+	createAccount := func(code string, balance decimal.Decimal) *domain.CashAccount {
+		t.Helper()
+		account, err := svc.CreateCashAccount(ctx, &domain.CashAccount{
+			LegalEntityID:   leID,
+			AccountCode:     code + uuid.New().String()[:8],
+			NameEn:          "Transfer Rollback Box",
+			NameAr:          "صندوق تراجع التحويل",
+			AccountType:     domain.CashAccountMainVault,
+			CurrencyCode:    "SAR",
+			CustodianUserID: &adminID,
+			MaxLimit:        decimal.NewFromInt(5000),
+			CurrentBalance:  balance,
+			Status:          domain.CashAccountActive,
+		})
+		if err != nil {
+			t.Fatalf("failed to create cash account: %v", err)
+		}
+		return account
+	}
+	source := createAccount("CASH-TRF-RB-SRC-", decimal.NewFromInt(1000))
+	destination := createAccount("CASH-TRF-RB-DST-", decimal.NewFromInt(100))
+	transfer, err := svc.CreateTransfer(ctx, &domain.Transfer{
+		LegalEntityID:            leID,
+		TransferDate:             time.Now(),
+		SourceType:               domain.TransferSourceCash,
+		SourceCashAccountID:      &source.ID,
+		DestinationType:          domain.TransferDestinationCash,
+		DestinationCashAccountID: &destination.ID,
+		Amount:                   decimal.NewFromInt(200),
+		FeeAmount:                decimal.NewFromInt(10),
+		CurrencyCode:             "SAR",
+		InitiatedByUserID:        &adminID,
+	})
+	if err != nil {
+		t.Fatalf("failed to create transfer: %v", err)
+	}
+
+	invalidJournalID := uuid.New()
+	if _, err := svc.CompleteTransfer(ctx, leID, transfer.ID, adminID, &invalidJournalID); err == nil {
+		t.Fatal("expected invalid journal entry to abort transfer")
+	}
+	rolledBackSource, err := svc.GetCashAccount(ctx, leID, source.ID)
+	if err != nil {
+		t.Fatalf("failed to reload source account: %v", err)
+	}
+	rolledBackDestination, err := svc.GetCashAccount(ctx, leID, destination.ID)
+	if err != nil {
+		t.Fatalf("failed to reload destination account: %v", err)
+	}
+	if !rolledBackSource.CurrentBalance.Equal(decimal.NewFromInt(1000)) || !rolledBackDestination.CurrentBalance.Equal(decimal.NewFromInt(100)) {
+		t.Fatalf("expected balances to roll back to 1000/100, got %s/%s", rolledBackSource.CurrentBalance, rolledBackDestination.CurrentBalance)
+	}
+	unchangedTransfer, err := svc.GetTransfer(ctx, leID, transfer.ID)
+	if err != nil {
+		t.Fatalf("failed to reload transfer: %v", err)
+	}
+	if unchangedTransfer.Status != domain.TransferDraft {
+		t.Fatalf("expected transfer to remain DRAFT, got %s", unchangedTransfer.Status)
 	}
 }

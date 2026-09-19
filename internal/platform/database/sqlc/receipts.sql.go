@@ -964,6 +964,45 @@ func (q *Queries) LockOpenItem(ctx context.Context, id pgtype.UUID) (Receivables
 	return i, err
 }
 
+const lockTreasuryReceiptByID = `-- name: LockTreasuryReceiptByID :one
+SELECT id, legal_entity_id, receipt_number, cash_account_id, receipt_date, receipt_type, received_from, amount, currency_code, payment_method, cheque_number, cheque_date, reference_number, description, status, gl_offset_account_id, journal_entry_id, created_by_user_id, created_at, updated_at FROM treasury.receipts
+WHERE id = $1 AND legal_entity_id = $2
+FOR UPDATE
+`
+
+type LockTreasuryReceiptByIDParams struct {
+	ID            pgtype.UUID `json:"id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+}
+
+func (q *Queries) LockTreasuryReceiptByID(ctx context.Context, arg LockTreasuryReceiptByIDParams) (TreasuryReceipts, error) {
+	row := q.db.QueryRow(ctx, lockTreasuryReceiptByID, arg.ID, arg.LegalEntityID)
+	var i TreasuryReceipts
+	err := row.Scan(
+		&i.ID,
+		&i.LegalEntityID,
+		&i.ReceiptNumber,
+		&i.CashAccountID,
+		&i.ReceiptDate,
+		&i.ReceiptType,
+		&i.ReceivedFrom,
+		&i.Amount,
+		&i.CurrencyCode,
+		&i.PaymentMethod,
+		&i.ChequeNumber,
+		&i.ChequeDate,
+		&i.ReferenceNumber,
+		&i.Description,
+		&i.Status,
+		&i.GlOffsetAccountID,
+		&i.JournalEntryID,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateOpenItemAllocation = `-- name: UpdateOpenItemAllocation :one
 UPDATE receivables.open_items
 SET 

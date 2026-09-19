@@ -607,9 +607,14 @@ type Querier interface {
 	ListZeroRateReasons(ctx context.Context) ([]TaxZeroRateReasons, error)
 	LockApprovalRequestByID(ctx context.Context, id pgtype.UUID) (WorkflowApprovalRequests, error)
 	LockBalance(ctx context.Context, arg LockBalanceParams) (InventoryStockBalances, error)
+	LockCashAccountByID(ctx context.Context, arg LockCashAccountByIDParams) (TreasuryCashAccounts, error)
 	LockInstanceStepByID(ctx context.Context, id pgtype.UUID) (WorkflowInstanceSteps, error)
 	LockOpenItem(ctx context.Context, id pgtype.UUID) (ReceivablesOpenItems, error)
 	LockPayablesOpenItem(ctx context.Context, id pgtype.UUID) (PayablesOpenItems, error)
+	LockTreasuryBankAccountByID(ctx context.Context, arg LockTreasuryBankAccountByIDParams) (BankingBankAccounts, error)
+	LockTreasuryPaymentByID(ctx context.Context, arg LockTreasuryPaymentByIDParams) (TreasuryPayments, error)
+	LockTreasuryReceiptByID(ctx context.Context, arg LockTreasuryReceiptByIDParams) (TreasuryReceipts, error)
+	LockTreasuryTransferByID(ctx context.Context, arg LockTreasuryTransferByIDParams) (TreasuryTransfers, error)
 	MarkJournalEntryReversed(ctx context.Context, arg MarkJournalEntryReversedParams) (AccountingJournalEntries, error)
 	MarkOutboxEventPublished(ctx context.Context, id pgtype.UUID) error
 	MarkSchedulePosted(ctx context.Context, arg MarkSchedulePostedParams) error
@@ -711,6 +716,7 @@ type Querier interface {
 	UpdateTaxTransactionStatus(ctx context.Context, arg UpdateTaxTransactionStatusParams) (TaxTaxTransactions, error)
 	UpdateTransferOrderLineQuantities(ctx context.Context, arg UpdateTransferOrderLineQuantitiesParams) (InventoryTransferOrderLines, error)
 	UpdateTransferOrderStatus(ctx context.Context, arg UpdateTransferOrderStatusParams) (InventoryTransferOrders, error)
+	UpdateTreasuryBankAccountBalance(ctx context.Context, arg UpdateTreasuryBankAccountBalanceParams) (BankingBankAccounts, error)
 	UpdateTreasuryPaymentStatus(ctx context.Context, arg UpdateTreasuryPaymentStatusParams) (TreasuryPayments, error)
 	UpdateTreasuryReceiptStatus(ctx context.Context, arg UpdateTreasuryReceiptStatusParams) (TreasuryReceipts, error)
 	UpdateTreasuryTransferStatus(ctx context.Context, arg UpdateTreasuryTransferStatusParams) (TreasuryTransfers, error)
