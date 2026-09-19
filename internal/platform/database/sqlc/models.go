@@ -1909,16 +1909,17 @@ type PlatformIdempotencyKeys struct {
 }
 
 type PlatformOutboxEvents struct {
-	ID            pgtype.UUID        `json:"id"`
-	EventType     string             `json:"event_type"`
-	AggregateType string             `json:"aggregate_type"`
-	AggregateID   pgtype.UUID        `json:"aggregate_id"`
-	Payload       []byte             `json:"payload"`
-	OccurredAt    pgtype.Timestamptz `json:"occurred_at"`
-	AvailableAt   pgtype.Timestamptz `json:"available_at"`
-	PublishedAt   pgtype.Timestamptz `json:"published_at"`
-	AttemptCount  int32              `json:"attempt_count"`
-	LastError     pgtype.Text        `json:"last_error"`
+	ID             pgtype.UUID        `json:"id"`
+	EventType      string             `json:"event_type"`
+	AggregateType  string             `json:"aggregate_type"`
+	AggregateID    pgtype.UUID        `json:"aggregate_id"`
+	Payload        []byte             `json:"payload"`
+	OccurredAt     pgtype.Timestamptz `json:"occurred_at"`
+	AvailableAt    pgtype.Timestamptz `json:"available_at"`
+	PublishedAt    pgtype.Timestamptz `json:"published_at"`
+	AttemptCount   int32              `json:"attempt_count"`
+	LastError      pgtype.Text        `json:"last_error"`
+	DeadLetteredAt pgtype.Timestamptz `json:"dead_lettered_at"`
 }
 
 type ProductsBarcodes struct {

@@ -11,10 +11,66 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimPendingOutboxEvents = `-- name: ClaimPendingOutboxEvents :many
+WITH candidates AS (
+    SELECT id
+    FROM platform.outbox_events
+    WHERE published_at IS NULL AND dead_lettered_at IS NULL AND available_at <= now()
+    ORDER BY available_at ASC, occurred_at ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT $2
+)
+UPDATE platform.outbox_events AS event
+SET available_at = $1
+FROM candidates
+WHERE event.id = candidates.id
+RETURNING event.id, event.event_type, event.aggregate_type, event.aggregate_id,
+          event.payload, event.occurred_at, event.available_at, event.published_at,
+          event.attempt_count, event.last_error, event.dead_lettered_at
+`
+
+type ClaimPendingOutboxEventsParams struct {
+	LeaseUntil pgtype.Timestamptz `json:"lease_until"`
+	BatchSize  int32              `json:"batch_size"`
+}
+
+func (q *Queries) ClaimPendingOutboxEvents(ctx context.Context, arg ClaimPendingOutboxEventsParams) ([]PlatformOutboxEvents, error) {
+	rows, err := q.db.Query(ctx, claimPendingOutboxEvents, arg.LeaseUntil, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlatformOutboxEvents{}
+	for rows.Next() {
+		var i PlatformOutboxEvents
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventType,
+			&i.AggregateType,
+			&i.AggregateID,
+			&i.Payload,
+			&i.OccurredAt,
+			&i.AvailableAt,
+			&i.PublishedAt,
+			&i.AttemptCount,
+			&i.LastError,
+			&i.DeadLetteredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const fetchPendingOutboxEvents = `-- name: FetchPendingOutboxEvents :many
-SELECT id, event_type, aggregate_type, aggregate_id, payload, occurred_at, available_at, published_at, attempt_count, last_error
+SELECT id, event_type, aggregate_type, aggregate_id, payload, occurred_at, available_at,
+       published_at, attempt_count, last_error, dead_lettered_at
 FROM platform.outbox_events
-WHERE published_at IS NULL AND available_at <= now()
+WHERE published_at IS NULL AND dead_lettered_at IS NULL AND available_at <= now()
 ORDER BY available_at ASC, occurred_at ASC
 LIMIT $1
 `
@@ -39,6 +95,7 @@ func (q *Queries) FetchPendingOutboxEvents(ctx context.Context, limit int32) ([]
 			&i.PublishedAt,
 			&i.AttemptCount,
 			&i.LastError,
+			&i.DeadLetteredAt,
 		); err != nil {
 			return nil, err
 		}
@@ -61,7 +118,8 @@ INSERT INTO platform.outbox_events (
 ) VALUES (
     $1, $2, $3, $4, $5, $6
 )
-RETURNING id, event_type, aggregate_type, aggregate_id, payload, occurred_at, available_at, published_at, attempt_count, last_error
+RETURNING id, event_type, aggregate_type, aggregate_id, payload, occurred_at, available_at,
+          published_at, attempt_count, last_error, dead_lettered_at
 `
 
 type InsertOutboxEventParams struct {
@@ -94,13 +152,33 @@ func (q *Queries) InsertOutboxEvent(ctx context.Context, arg InsertOutboxEventPa
 		&i.PublishedAt,
 		&i.AttemptCount,
 		&i.LastError,
+		&i.DeadLetteredAt,
 	)
 	return i, err
 }
 
+const markOutboxEventDeadLettered = `-- name: MarkOutboxEventDeadLettered :exec
+UPDATE platform.outbox_events
+SET attempt_count = attempt_count + 1,
+    last_error = $2,
+    dead_lettered_at = now()
+WHERE id = $1
+`
+
+type MarkOutboxEventDeadLetteredParams struct {
+	ID        pgtype.UUID `json:"id"`
+	LastError pgtype.Text `json:"last_error"`
+}
+
+func (q *Queries) MarkOutboxEventDeadLettered(ctx context.Context, arg MarkOutboxEventDeadLetteredParams) error {
+	_, err := q.db.Exec(ctx, markOutboxEventDeadLettered, arg.ID, arg.LastError)
+	return err
+}
+
 const markOutboxEventPublished = `-- name: MarkOutboxEventPublished :exec
 UPDATE platform.outbox_events
-SET published_at = now()
+SET published_at = now(),
+    last_error = NULL
 WHERE id = $1
 `
 

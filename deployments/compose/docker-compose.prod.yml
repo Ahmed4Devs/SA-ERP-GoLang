@@ -83,7 +83,6 @@ services:
       context: ../../
       dockerfile: deployments/docker/Dockerfile.worker
     restart: always
-    profiles: ["zatca"]
     environment:
       APP_ENV: production
       DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required}"

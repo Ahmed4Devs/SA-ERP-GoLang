@@ -59,7 +59,7 @@ func (r *NotificationRepository) Create(ctx context.Context, n *domain.Notificat
 		RETURNING id, created_at
 	`
 
-	err := r.db.Pool.QueryRow(ctx, query,
+	err := r.db.DBTX(ctx).QueryRow(ctx, query,
 		n.ID,
 		n.LegalEntityID,
 		n.RecipientUserID,
@@ -325,15 +325,18 @@ func (r *NotificationRepository) MarkAllAsRead(ctx context.Context, legalEntityI
 }
 
 // UpdateStatus updates the delivery status of a notification.
-func (r *NotificationRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status domain.NotificationStatus, sentAt *time.Time, errMsg *string) error {
+func (r *NotificationRepository) UpdateStatus(ctx context.Context, legalEntityID, id uuid.UUID, status domain.NotificationStatus, sentAt *time.Time, errMsg *string) error {
 	query := `
 		UPDATE notifications.notifications
 		SET status = $1, sent_at = COALESCE($2, sent_at), error_message = $3
-		WHERE id = $4
+		WHERE legal_entity_id = $4 AND id = $5
 	`
-	_, err := r.db.Pool.Exec(ctx, query, string(status), sentAt, errMsg, id)
+	tag, err := r.db.DBTX(ctx).Exec(ctx, query, string(status), sentAt, errMsg, legalEntityID, id)
 	if err != nil {
 		return fmt.Errorf("failed to update notification status: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrNotificationNotFound
 	}
 	return nil
 }

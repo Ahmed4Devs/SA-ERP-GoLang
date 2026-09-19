@@ -12,6 +12,8 @@ import (
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
 	"erp/internal/platform/mail"
+	"erp/internal/platform/outbox"
+	"erp/internal/platform/transaction"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,26 +21,37 @@ import (
 
 // Module coordinates the notification and messaging domain.
 type Module struct {
-	pool    *pgxpool.Pool
-	Service ports.Service
-	Repo    ports.Repository
-	Mailer  mail.Mailer
-	Handler *nhttp.NotificationHandler
+	pool     *pgxpool.Pool
+	Service  ports.Service
+	Repo     ports.Repository
+	Mailer   mail.Mailer
+	Outbox   *outbox.Repository
+	Delivery *application.EmailDelivery
+	Handler  *nhttp.NotificationHandler
 }
 
 // NewModule initializes a new Notifications module.
 func NewModule(cfg *config.Config, db *database.DB, mailer mail.Mailer) *Module {
 	repo := postgres.NewNotificationRepository(db)
-	svc := application.NewNotificationService(repo, mailer)
+	eventOutbox := outbox.NewRepository(db)
+	svc := application.NewNotificationService(repo, eventOutbox, transaction.NewManager(db.Pool))
+	delivery := application.NewEmailDelivery(repo, mailer)
 	handler := nhttp.NewNotificationHandler(svc)
 
 	return &Module{
-		pool:    db.Pool,
-		Service: svc,
-		Repo:    repo,
-		Mailer:  mailer,
-		Handler: handler,
+		pool:     db.Pool,
+		Service:  svc,
+		Repo:     repo,
+		Mailer:   mailer,
+		Outbox:   eventOutbox,
+		Delivery: delivery,
+		Handler:  handler,
 	}
+}
+
+// RegisterOutboxHandlers connects durable notification events to their delivery handler.
+func (m *Module) RegisterOutboxHandlers(dispatcher *outbox.Dispatcher) error {
+	return dispatcher.Register(application.EmailRequestedEventType, m.Delivery.Handle)
 }
 
 // RegisterRoutes mounts all notification endpoints on the Chi router under /api/v1/notifications.

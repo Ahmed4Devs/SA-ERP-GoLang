@@ -16,7 +16,7 @@ type Repository interface {
 	CountUnread(ctx context.Context, legalEntityID uuid.UUID, recipientUserID *uuid.UUID) (int64, error)
 	MarkAsRead(ctx context.Context, legalEntityID, id uuid.UUID) error
 	MarkAllAsRead(ctx context.Context, legalEntityID uuid.UUID, recipientUserID *uuid.UUID) error
-	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.NotificationStatus, sentAt *time.Time, errMsg *string) error
+	UpdateStatus(ctx context.Context, legalEntityID, id uuid.UUID, status domain.NotificationStatus, sentAt *time.Time, errMsg *string) error
 	Delete(ctx context.Context, legalEntityID, id uuid.UUID) error
 	GetSummary(ctx context.Context, legalEntityID uuid.UUID, recipientUserID *uuid.UUID) (*domain.NotificationSummary, error)
 	GetTemplateByCode(ctx context.Context, code string) (*domain.NotificationTemplate, error)

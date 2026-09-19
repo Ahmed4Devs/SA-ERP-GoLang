@@ -8,7 +8,7 @@ The production deployment orchestrates 6 primary containers via Docker Compose o
 - **`erp-nginx`**: Edge reverse proxy handling TLS termination, rate limiting, and HTTP/2 routing.
 - **`erp-web`**: Next.js 16 standalone frontend web server (Port 3000).
 - **`erp-api`**: Go core backend API service with pgx connection pooling (Port 8080).
-- **`erp-worker`**: Go background worker that retries pending/failed ZATCA submissions from PostgreSQL.
+- **`erp-worker`**: Go background worker that dispatches the transactional outbox, delivers queued email notifications, and—when enabled—retries pending ZATCA submissions.
 - **`erp-migrate`**: Ephemeral schema migration runner executing Goose database migrations before API launch.
 - **`erp-postgres`**: PostgreSQL 18 relational database with Saudi localized schema (`Asia/Riyadh` TZ).
 
@@ -78,7 +78,7 @@ docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
   ```bash
   docker compose -f docker-compose.prod.yml up -d --scale erp-api=4
   ```
-- **`erp-worker`**: Workers scan PostgreSQL for retryable ZATCA submissions. Scale only after verifying database connection limits and row-locking behavior:
+- **`erp-worker`**: Workers lease outbox rows with `FOR UPDATE SKIP LOCKED`, so notification delivery can scale horizontally. SMTP is an at-least-once external transport; recipients can see a duplicate only in the narrow case where SMTP accepts a message and the worker crashes before recording success:
   ```bash
   docker compose -f docker-compose.prod.yml up -d --scale erp-worker=3
   ```
@@ -123,7 +123,27 @@ Ensure `postgresql.conf` parameters match host hardware:
    docker compose -f docker-compose.prod.yml logs --tail=200 erp-worker | grep -i "zatca"
    ```
 
-### Scenario C: Rate Limiting or CSRF Blocks
+### Scenario C: Notification or Outbox Backlog
+1. Inspect ready, leased, and dead-letter events:
+   ```sql
+   SELECT event_type, attempt_count, available_at, dead_lettered_at, last_error
+   FROM platform.outbox_events
+   WHERE published_at IS NULL
+   ORDER BY occurred_at;
+   ```
+2. Verify the worker is running even when `ZATCA_ENABLED=false`, then inspect dispatch errors:
+   ```bash
+   docker compose -f docker-compose.prod.yml ps erp-worker
+   docker compose -f docker-compose.prod.yml logs --tail=200 erp-worker | grep -i "outbox\|notification"
+   ```
+3. Resolve SMTP credentials/connectivity before re-queuing a dead-letter row. Re-queue only the exact reviewed event:
+   ```sql
+   UPDATE platform.outbox_events
+   SET dead_lettered_at = NULL, attempt_count = 0, last_error = NULL, available_at = now()
+   WHERE id = '<reviewed-event-uuid>' AND published_at IS NULL;
+   ```
+
+### Scenario D: Rate Limiting or CSRF Blocks
 1. If legitimate corporate clients receive `HTTP 429 Too Many Requests`:
    - Inspect client IP against Nginx rate limiting zones (`limit_req_zone`).
    - If behind a corporate proxy or Cloudflare, ensure `real_ip_header CF-Connecting-IP;` or `X-Forwarded-For` is configured.

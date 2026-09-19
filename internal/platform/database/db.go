@@ -17,7 +17,7 @@ type DB struct {
 	cfg  *config.Config
 }
 
-const LatestSchemaVersion int64 = 300
+const LatestSchemaVersion int64 = 310
 
 func NewPool(ctx context.Context, cfg *config.Config) (*DB, error) {
 	if err := prepareIntegrationTestDatabase(cfg); err != nil {

@@ -8,23 +8,33 @@ import (
 
 	"erp/internal/notifications/domain"
 	"erp/internal/notifications/ports"
-	"erp/internal/platform/mail"
+	"erp/internal/platform/outbox"
+	"erp/internal/platform/transaction"
 	"github.com/google/uuid"
 )
+
+const EmailRequestedEventType = "notifications.email.requested"
+
+type EmailRequestedPayload struct {
+	LegalEntityID  uuid.UUID `json:"legal_entity_id"`
+	NotificationID uuid.UUID `json:"notification_id"`
+}
 
 // NotificationService coordinates multi-channel notification dispatch and user feeds.
 type NotificationService struct {
 	repo   ports.Repository
-	mailer mail.Mailer
+	outbox outbox.Enqueuer
+	tx     transaction.Manager
 }
 
 var _ ports.Service = (*NotificationService)(nil)
 
 // NewNotificationService creates a new NotificationService instance.
-func NewNotificationService(repo ports.Repository, mailer mail.Mailer) *NotificationService {
+func NewNotificationService(repo ports.Repository, eventOutbox outbox.Enqueuer, tx transaction.Manager) *NotificationService {
 	return &NotificationService{
 		repo:   repo,
-		mailer: mailer,
+		outbox: eventOutbox,
+		tx:     tx,
 	}
 }
 
@@ -66,6 +76,9 @@ func (s *NotificationService) Send(ctx context.Context, params domain.SendNotifi
 	if channel == "" {
 		channel = domain.ChannelInApp
 	}
+	if channel != domain.ChannelInApp && channel != domain.ChannelEmail {
+		return nil, domain.ErrInvalidChannel
+	}
 
 	category := params.Category
 	if category == "" {
@@ -80,37 +93,12 @@ func (s *NotificationService) Send(ctx context.Context, params domain.SendNotifi
 	now := time.Now().UTC()
 	status := domain.StatusSent
 	sentAt := &now
-	var errMsg *string
-
-	// If channel includes EMAIL, dispatch through the Mailer
 	if channel == domain.ChannelEmail {
 		if strings.TrimSpace(params.RecipientEmail) == "" {
 			return nil, fmt.Errorf("%w: recipient_email is required for email channel", domain.ErrRecipientRequired)
 		}
-
-		emailMsg := mail.EmailMessage{
-			To:       []string{params.RecipientEmail},
-			Subject:  titleEn,
-			BodyText: fmt.Sprintf("%s\n\n%s", bodyAr, bodyEn),
-			BodyHTML: fmt.Sprintf(`
-				<div dir="rtl" style="font-family: sans-serif; padding: 20px; line-height: 1.6;">
-					<h2 style="color: #1e3a8a;">%s</h2>
-					<p style="font-size: 16px;">%s</p>
-					<hr style="margin: 20px 0; border: 0; border-top: 1px solid #e5e7eb;" />
-					<div dir="ltr" style="text-align: left;">
-						<h3 style="color: #4b5563;">%s</h3>
-						<p style="font-size: 14px; color: #4b5563;">%s</p>
-					</div>
-				</div>
-			`, titleAr, bodyAr, titleEn, bodyEn),
-		}
-
-		if err := s.mailer.Send(ctx, emailMsg); err != nil {
-			status = domain.StatusFailed
-			errStr := err.Error()
-			errMsg = &errStr
-			sentAt = nil
-		}
+		status = domain.StatusPending
+		sentAt = nil
 	}
 
 	notification := &domain.Notification{
@@ -129,14 +117,30 @@ func (s *NotificationService) Send(ctx context.Context, params domain.SendNotifi
 		EntityType:      params.EntityType,
 		EntityID:        params.EntityID,
 		Status:          status,
-		ErrorMessage:    errMsg,
 		SentAt:          sentAt,
 		CreatedAt:       now,
 	}
 
-	created, err := s.repo.Create(ctx, notification)
+	var created *domain.Notification
+	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		var err error
+		created, err = s.repo.Create(txCtx, notification)
+		if err != nil {
+			return fmt.Errorf("failed to record notification: %w", err)
+		}
+		if channel == domain.ChannelEmail {
+			aggregateID := created.ID
+			if _, err := s.outbox.Enqueue(txCtx, EmailRequestedEventType, "Notification", &aggregateID, EmailRequestedPayload{
+				LegalEntityID:  created.LegalEntityID,
+				NotificationID: created.ID,
+			}); err != nil {
+				return fmt.Errorf("failed to enqueue email delivery: %w", err)
+			}
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to record notification: %w", err)
+		return nil, err
 	}
 
 	return created, nil

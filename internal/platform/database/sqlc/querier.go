@@ -17,6 +17,7 @@ type Querier interface {
 	AssignUserRole(ctx context.Context, arg AssignUserRoleParams) (AuthzUserRoleAssignments, error)
 	AwardSupplierQuoteLine(ctx context.Context, arg AwardSupplierQuoteLineParams) (PurchasingSupplierQuoteLines, error)
 	CancelPendingApprovalRequestsForStep(ctx context.Context, instanceStepID pgtype.UUID) error
+	ClaimPendingOutboxEvents(ctx context.Context, arg ClaimPendingOutboxEventsParams) ([]PlatformOutboxEvents, error)
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
 	CountAuditEvents(ctx context.Context, arg CountAuditEventsParams) (int64, error)
 	CountCustomers(ctx context.Context, arg CountCustomersParams) (int64, error)
@@ -622,6 +623,7 @@ type Querier interface {
 	LockTreasuryReceiptByID(ctx context.Context, arg LockTreasuryReceiptByIDParams) (TreasuryReceipts, error)
 	LockTreasuryTransferByID(ctx context.Context, arg LockTreasuryTransferByIDParams) (TreasuryTransfers, error)
 	MarkJournalEntryReversed(ctx context.Context, arg MarkJournalEntryReversedParams) (AccountingJournalEntries, error)
+	MarkOutboxEventDeadLettered(ctx context.Context, arg MarkOutboxEventDeadLetteredParams) error
 	MarkOutboxEventPublished(ctx context.Context, id pgtype.UUID) error
 	MarkSchedulePosted(ctx context.Context, arg MarkSchedulePostedParams) error
 	PostCreditNote(ctx context.Context, arg PostCreditNoteParams) (SalesCreditNotes, error)

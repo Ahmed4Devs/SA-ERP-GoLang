@@ -224,6 +224,28 @@ func TestOutboxEvents(t *testing.T) {
 		t.Errorf("inserted outbox event %v not found in pending list", event.ID)
 	}
 
+	// Claiming leases the row so another worker cannot process it concurrently.
+	claimed, err := queries.ClaimPendingOutboxEvents(ctx, sqlc.ClaimPendingOutboxEventsParams{
+		LeaseUntil: timestamptzVal(now.Add(time.Minute)),
+		BatchSize:  10,
+	})
+	if err != nil {
+		t.Fatalf("failed to claim pending outbox events: %v", err)
+	}
+	if len(claimed) != 1 || claimed[0].ID != event.ID {
+		t.Fatalf("expected to claim event %v, got %+v", event.ID, claimed)
+	}
+	claimedAgain, err := queries.ClaimPendingOutboxEvents(ctx, sqlc.ClaimPendingOutboxEventsParams{
+		LeaseUntil: timestamptzVal(now.Add(time.Minute)),
+		BatchSize:  10,
+	})
+	if err != nil {
+		t.Fatalf("failed second outbox claim: %v", err)
+	}
+	if len(claimedAgain) != 0 {
+		t.Fatalf("expected leased event to be unavailable, got %d events", len(claimedAgain))
+	}
+
 	// Mark published
 	if err := queries.MarkOutboxEventPublished(ctx, event.ID); err != nil {
 		t.Fatalf("failed to mark outbox event as published: %v", err)

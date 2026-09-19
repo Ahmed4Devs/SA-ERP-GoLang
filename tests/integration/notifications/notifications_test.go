@@ -11,15 +11,23 @@ import (
 
 	"erp/internal/iam"
 	"erp/internal/notifications"
+	notificationapp "erp/internal/notifications/application"
 	"erp/internal/notifications/domain"
 	"erp/internal/organization"
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
 	"erp/internal/platform/mail"
+	"erp/internal/platform/outbox"
 	"erp/internal/platform/transaction"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+type failingOutbox struct{}
+
+func (failingOutbox) Enqueue(context.Context, string, string, *uuid.UUID, any) (*outbox.Event, error) {
+	return nil, fmt.Errorf("forced outbox failure")
+}
 
 func setupNotificationsIntegrationTest(t *testing.T) (*notifications.Module, *database.DB, *mail.MockMailer, uuid.UUID, uuid.UUID, context.Context) {
 	t.Helper()
@@ -34,6 +42,7 @@ func setupNotificationsIntegrationTest(t *testing.T) (*notifications.Module, *da
 	if err != nil {
 		t.Skipf("PostgreSQL not accessible: %v", err)
 	}
+	t.Cleanup(db.Close)
 
 	txManager := transaction.NewManager(db.Pool)
 	if err := database.MigrateUp(ctx, cfg.Database.URL, "../../../database/migrations"); err != nil {
@@ -69,8 +78,7 @@ func setupNotificationsIntegrationTest(t *testing.T) (*notifications.Module, *da
 }
 
 func TestNotifications_InAppDispatchAndUnreadCount(t *testing.T) {
-	mod, db, _, leID, userID, ctx := setupNotificationsIntegrationTest(t)
-	defer db.Close()
+	mod, _, _, leID, userID, ctx := setupNotificationsIntegrationTest(t)
 
 	initialUnread, _ := mod.Service.GetUnreadCount(ctx, leID, &userID)
 
@@ -133,8 +141,7 @@ func TestNotifications_InAppDispatchAndUnreadCount(t *testing.T) {
 }
 
 func TestNotifications_EmailDispatchViaMailer(t *testing.T) {
-	mod, db, mockMailer, leID, userID, ctx := setupNotificationsIntegrationTest(t)
-	defer db.Close()
+	mod, _, mockMailer, leID, userID, ctx := setupNotificationsIntegrationTest(t)
 
 	recipientEmail := "cfo.finance@saudi-enterprise.sa"
 	params := domain.SendNotificationParams{
@@ -155,8 +162,31 @@ func TestNotifications_EmailDispatchViaMailer(t *testing.T) {
 		t.Fatalf("failed to send email notification: %v", err)
 	}
 
-	if notif.Status != domain.StatusSent {
-		t.Errorf("expected status SENT, got %s", notif.Status)
+	if notif.Status != domain.StatusPending {
+		t.Errorf("expected status PENDING before worker delivery, got %s", notif.Status)
+	}
+	if len(mockMailer.SentMessages()) != 0 {
+		t.Fatal("email must not be sent before the outbox worker processes it")
+	}
+
+	dispatcher := outbox.NewDispatcher(mod.Outbox, nil, outbox.DefaultDispatcherConfig())
+	if err := mod.RegisterOutboxHandlers(dispatcher); err != nil {
+		t.Fatalf("failed to register notification outbox handler: %v", err)
+	}
+	processed, err := dispatcher.RunOnce(ctx)
+	if err != nil {
+		t.Fatalf("outbox delivery failed: %v", err)
+	}
+	if processed < 1 {
+		t.Fatalf("expected at least one delivered outbox event, got %d", processed)
+	}
+
+	delivered, err := mod.Service.Get(ctx, leID, notif.ID)
+	if err != nil {
+		t.Fatalf("failed to reload delivered notification: %v", err)
+	}
+	if delivered.Status != domain.StatusSent || delivered.SentAt == nil {
+		t.Fatalf("expected delivered notification status SENT, got %s", delivered.Status)
 	}
 
 	// Verify email delivered to MockMailer
@@ -177,9 +207,38 @@ func TestNotifications_EmailDispatchViaMailer(t *testing.T) {
 	}
 }
 
-func TestNotifications_MarkAllAsRead(t *testing.T) {
+func TestNotifications_EmailAndOutboxAreAtomic(t *testing.T) {
 	mod, db, _, leID, userID, ctx := setupNotificationsIntegrationTest(t)
-	defer db.Close()
+	service := notificationapp.NewNotificationService(mod.Repo, failingOutbox{}, transaction.NewManager(db.Pool))
+
+	_, before, err := mod.Service.List(ctx, domain.NotificationFilter{LegalEntityID: leID, RecipientUserID: &userID})
+	if err != nil {
+		t.Fatalf("failed to count notifications before rollback test: %v", err)
+	}
+	_, err = service.Send(ctx, domain.SendNotificationParams{
+		LegalEntityID:   leID,
+		RecipientUserID: &userID,
+		RecipientEmail:  "atomic@example.sa",
+		Channel:         domain.ChannelEmail,
+		TitleAr:         "اختبار الذرية",
+		TitleEn:         "Atomic delivery test",
+		BodyAr:          "يجب التراجع عن السجل",
+		BodyEn:          "The record must roll back",
+	})
+	if err == nil {
+		t.Fatal("expected forced outbox failure")
+	}
+	_, after, err := mod.Service.List(ctx, domain.NotificationFilter{LegalEntityID: leID, RecipientUserID: &userID})
+	if err != nil {
+		t.Fatalf("failed to count notifications after rollback test: %v", err)
+	}
+	if after != before {
+		t.Fatalf("notification insert was not rolled back: before=%d after=%d", before, after)
+	}
+}
+
+func TestNotifications_MarkAllAsRead(t *testing.T) {
+	mod, _, _, leID, userID, ctx := setupNotificationsIntegrationTest(t)
 
 	// Send 3 notifications
 	for i := 1; i <= 3; i++ {
@@ -215,8 +274,7 @@ func TestNotifications_MarkAllAsRead(t *testing.T) {
 }
 
 func TestNotifications_FilteringAndSummary(t *testing.T) {
-	mod, db, _, leID, userID, ctx := setupNotificationsIntegrationTest(t)
-	defer db.Close()
+	mod, _, _, leID, userID, ctx := setupNotificationsIntegrationTest(t)
 
 	// Send inventory alert
 	_, err := mod.Service.Send(ctx, domain.SendNotificationParams{
@@ -262,7 +320,6 @@ func TestNotifications_FilteringAndSummary(t *testing.T) {
 
 func TestNotifications_SeedDefaultData(t *testing.T) {
 	mod, db, _, _, _, ctx := setupNotificationsIntegrationTest(t)
-	defer db.Close()
 
 	// Fresh legal entity
 	var freshLEID uuid.UUID
@@ -309,8 +366,7 @@ func TestNotifications_SeedDefaultData(t *testing.T) {
 }
 
 func TestNotifications_HTTPTransport(t *testing.T) {
-	mod, db, _, leID, userID, _ := setupNotificationsIntegrationTest(t)
-	defer db.Close()
+	mod, _, _, leID, userID, _ := setupNotificationsIntegrationTest(t)
 
 	r := chi.NewRouter()
 	mod.RegisterRoutes(r, nil)
