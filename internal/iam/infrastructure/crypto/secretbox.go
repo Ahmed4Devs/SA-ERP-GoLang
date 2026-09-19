@@ -40,7 +40,7 @@ func (b *SecretBox) Encrypt(plaintext string) (string, error) {
 
 func (b *SecretBox) Decrypt(encoded string) (string, error) {
 	sealed, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil || len(sealed) < b.aead.NonceSize() {
+	if err != nil || len(sealed) < b.aead.NonceSize() || base64.RawURLEncoding.EncodeToString(sealed) != encoded {
 		return "", fmt.Errorf("invalid encrypted MFA secret")
 	}
 	nonce, ciphertext := sealed[:b.aead.NonceSize()], sealed[b.aead.NonceSize():]

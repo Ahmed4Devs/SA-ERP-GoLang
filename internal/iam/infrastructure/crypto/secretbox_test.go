@@ -29,10 +29,12 @@ func TestSecretBoxRoundTripAndTamperDetection(t *testing.T) {
 		t.Fatalf("Decrypt() = %q", decrypted)
 	}
 
-	tampered := encrypted[:len(encrypted)-1] + "A"
-	if tampered == encrypted {
-		tampered = encrypted[:len(encrypted)-1] + "B"
+	tamperedBytes, err := base64.RawURLEncoding.DecodeString(encrypted)
+	if err != nil {
+		t.Fatalf("failed to decode encrypted test value: %v", err)
 	}
+	tamperedBytes[len(tamperedBytes)-1] ^= 1
+	tampered := base64.RawURLEncoding.EncodeToString(tamperedBytes)
 	if _, err := box.Decrypt(tampered); err == nil {
 		t.Fatal("Decrypt() accepted tampered ciphertext")
 	}
