@@ -23,11 +23,16 @@ type WorkflowRepository interface {
 	UpdateInstanceStatus(ctx context.Context, id uuid.UUID, status string, completedAt *time.Time) error
 
 	CreateInstanceStep(ctx context.Context, step *domain.InstanceStep) (*domain.InstanceStep, error)
+	GetInstanceStepByID(ctx context.Context, id uuid.UUID) (*domain.InstanceStep, error)
+	LockInstanceStepByID(ctx context.Context, id uuid.UUID) (*domain.InstanceStep, error)
 	ListInstanceSteps(ctx context.Context, instanceID uuid.UUID) ([]domain.InstanceStep, error)
 	UpdateInstanceStepStatus(ctx context.Context, id uuid.UUID, status string, completedAt *time.Time) error
 
 	CreateApprovalRequest(ctx context.Context, req *domain.ApprovalRequest) (*domain.ApprovalRequest, error)
 	GetApprovalRequestByID(ctx context.Context, id uuid.UUID) (*domain.ApprovalRequest, error)
+	LockApprovalRequestByID(ctx context.Context, id uuid.UUID) (*domain.ApprovalRequest, error)
+	ListApprovalRequestsByInstanceStep(ctx context.Context, instanceStepID uuid.UUID) ([]domain.ApprovalRequest, error)
+	CancelPendingApprovalRequestsForStep(ctx context.Context, instanceStepID uuid.UUID) error
 	ListPendingRequestsForUser(ctx context.Context, userID uuid.UUID) ([]domain.PendingApprovalItem, error)
 	UpdateApprovalRequestStatus(ctx context.Context, id uuid.UUID, status string) error
 

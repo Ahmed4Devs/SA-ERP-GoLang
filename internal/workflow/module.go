@@ -19,8 +19,8 @@ type Module struct {
 }
 
 func NewModule(cfg *config.Config, db *database.DB) *Module {
-	repo := postgres.NewWorkflowRepository(db.Pool)
-	service := services.NewWorkflowService(repo)
+	repo := postgres.NewWorkflowRepository(db)
+	service := services.NewWorkflowService(repo, db)
 	handler := workflowhttp.NewWorkflowHandler(service)
 
 	return &Module{

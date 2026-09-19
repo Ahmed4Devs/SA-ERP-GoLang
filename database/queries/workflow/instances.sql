@@ -45,6 +45,11 @@ RETURNING *;
 SELECT * FROM workflow.instance_steps
 WHERE id = $1;
 
+-- name: LockInstanceStepByID :one
+SELECT * FROM workflow.instance_steps
+WHERE id = $1
+FOR UPDATE;
+
 -- name: ListInstanceStepsByInstanceID :many
 SELECT * FROM workflow.instance_steps
 WHERE instance_id = $1
@@ -70,6 +75,21 @@ RETURNING *;
 -- name: GetApprovalRequestByID :one
 SELECT * FROM workflow.approval_requests
 WHERE id = $1;
+
+-- name: LockApprovalRequestByID :one
+SELECT * FROM workflow.approval_requests
+WHERE id = $1
+FOR UPDATE;
+
+-- name: ListApprovalRequestsByInstanceStep :many
+SELECT * FROM workflow.approval_requests
+WHERE instance_step_id = $1
+ORDER BY created_at ASC;
+
+-- name: CancelPendingApprovalRequestsForStep :exec
+UPDATE workflow.approval_requests
+SET status = 'CANCELLED'
+WHERE instance_step_id = $1 AND status = 'PENDING';
 
 -- name: ListPendingApprovalRequestsForUser :many
 SELECT ar.id,
@@ -130,11 +150,19 @@ ORDER BY ad.decided_at ASC;
 -- name: ListUserIDsByRoleInScope :many
 SELECT DISTINCT ura.user_id
 FROM authz.user_role_assignments ura
+JOIN iam.users u ON u.id = ura.user_id
 WHERE ura.role_id = $1
+  AND u.status = 'ACTIVE'
   AND (ura.legal_entity_id IS NULL OR ura.legal_entity_id = $2);
 
 -- name: GetFallbackAdminUserID :one
-SELECT u.id FROM iam.users u
+SELECT u.id
+FROM iam.users u
+JOIN authz.user_role_assignments ura ON ura.user_id = u.id
+JOIN authz.roles r ON r.id = ura.role_id
 WHERE u.status = 'ACTIVE'
+  AND r.code = 'SUPER_ADMIN'
+  AND ura.legal_entity_id IS NULL
+  AND ura.branch_id IS NULL
 ORDER BY u.created_at ASC
 LIMIT 1;

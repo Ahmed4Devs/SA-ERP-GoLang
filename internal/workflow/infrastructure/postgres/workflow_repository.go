@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"erp/internal/platform/database"
 	"erp/internal/platform/database/sqlc"
 	"erp/internal/workflow/domain"
 	"erp/internal/workflow/ports"
@@ -12,23 +13,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type workflowRepository struct {
-	pool    *pgxpool.Pool
-	queries *sqlc.Queries
+	db *database.DB
 }
 
-func NewWorkflowRepository(pool *pgxpool.Pool) ports.WorkflowRepository {
-	return &workflowRepository{
-		pool:    pool,
-		queries: sqlc.New(pool),
-	}
+func NewWorkflowRepository(db *database.DB) ports.WorkflowRepository {
+	return &workflowRepository{db: db}
+}
+
+func (r *workflowRepository) queries(ctx context.Context) *sqlc.Queries {
+	return sqlc.New(r.db.DBTX(ctx))
 }
 
 func (r *workflowRepository) GetDefinitionByCode(ctx context.Context, code string) (*domain.WorkflowDefinition, error) {
-	row, err := r.queries.GetWorkflowDefinitionByCode(ctx, code)
+	row, err := r.queries(ctx).GetWorkflowDefinitionByCode(ctx, code)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrWorkflowDefinitionNotFound
@@ -39,7 +39,7 @@ func (r *workflowRepository) GetDefinitionByCode(ctx context.Context, code strin
 }
 
 func (r *workflowRepository) GetDefinitionByID(ctx context.Context, id uuid.UUID) (*domain.WorkflowDefinition, error) {
-	row, err := r.queries.GetWorkflowDefinitionByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetWorkflowDefinitionByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrWorkflowDefinitionNotFound
@@ -50,7 +50,7 @@ func (r *workflowRepository) GetDefinitionByID(ctx context.Context, id uuid.UUID
 }
 
 func (r *workflowRepository) ListDefinitions(ctx context.Context) ([]domain.WorkflowDefinition, error) {
-	rows, err := r.queries.ListWorkflowDefinitions(ctx)
+	rows, err := r.queries(ctx).ListWorkflowDefinitions(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -58,21 +58,28 @@ func (r *workflowRepository) ListDefinitions(ctx context.Context) ([]domain.Work
 	result := make([]domain.WorkflowDefinition, 0, len(rows))
 	for _, row := range rows {
 		def := toDomainDefinition(&row)
-		// Load published version if exists
-		verRow, err := r.queries.GetPublishedVersionByDefinitionID(ctx, row.ID)
-		if err == nil {
-			ver := toDomainVersion(&verRow)
-			steps, _ := r.ListSteps(ctx, ver.ID)
-			ver.Steps = steps
-			def.Versions = []domain.DefinitionVersion{*ver}
+		verRow, err := r.queries(ctx).GetPublishedVersionByDefinitionID(ctx, row.ID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				result = append(result, *def)
+				continue
+			}
+			return nil, err
 		}
+		ver := toDomainVersion(&verRow)
+		steps, err := r.ListSteps(ctx, ver.ID)
+		if err != nil {
+			return nil, err
+		}
+		ver.Steps = steps
+		def.Versions = []domain.DefinitionVersion{*ver}
 		result = append(result, *def)
 	}
 	return result, nil
 }
 
 func (r *workflowRepository) GetPublishedVersion(ctx context.Context, defID uuid.UUID) (*domain.DefinitionVersion, error) {
-	row, err := r.queries.GetPublishedVersionByDefinitionID(ctx, toPgUUID(defID))
+	row, err := r.queries(ctx).GetPublishedVersionByDefinitionID(ctx, toPgUUID(defID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrPublishedVersionNotFound
@@ -83,7 +90,7 @@ func (r *workflowRepository) GetPublishedVersion(ctx context.Context, defID uuid
 }
 
 func (r *workflowRepository) ListSteps(ctx context.Context, versionID uuid.UUID) ([]domain.WorkflowStep, error) {
-	rows, err := r.queries.ListStepsByVersionID(ctx, toPgUUID(versionID))
+	rows, err := r.queries(ctx).ListStepsByVersionID(ctx, toPgUUID(versionID))
 	if err != nil {
 		return nil, err
 	}
@@ -93,13 +100,19 @@ func (r *workflowRepository) ListSteps(ctx context.Context, versionID uuid.UUID)
 		s := toDomainStep(&row)
 
 		// Load conditions
-		condRows, _ := r.queries.ListStepConditionsByStepID(ctx, row.ID)
+		condRows, err := r.queries(ctx).ListStepConditionsByStepID(ctx, row.ID)
+		if err != nil {
+			return nil, err
+		}
 		for _, c := range condRows {
 			s.Conditions = append(s.Conditions, *toDomainCondition(&c))
 		}
 
 		// Load approvers
-		appRows, _ := r.queries.ListStepApproversByStepID(ctx, row.ID)
+		appRows, err := r.queries(ctx).ListStepApproversByStepID(ctx, row.ID)
+		if err != nil {
+			return nil, err
+		}
 		for _, a := range appRows {
 			s.Approvers = append(s.Approvers, *toDomainApprover(&a))
 		}
@@ -115,7 +128,7 @@ func (r *workflowRepository) CreateInstance(ctx context.Context, inst *domain.Wo
 		contextData = []byte("{}")
 	}
 
-	row, err := r.queries.CreateWorkflowInstance(ctx, sqlc.CreateWorkflowInstanceParams{
+	row, err := r.queries(ctx).CreateWorkflowInstance(ctx, sqlc.CreateWorkflowInstanceParams{
 		DefinitionID:  toPgUUID(inst.DefinitionID),
 		VersionID:     toPgUUID(inst.VersionID),
 		LegalEntityID: toPgUUID(inst.LegalEntityID),
@@ -132,7 +145,7 @@ func (r *workflowRepository) CreateInstance(ctx context.Context, inst *domain.Wo
 }
 
 func (r *workflowRepository) GetInstanceByID(ctx context.Context, id uuid.UUID) (*domain.WorkflowInstance, error) {
-	row, err := r.queries.GetWorkflowInstanceByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetWorkflowInstanceByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrWorkflowInstanceNotFound
@@ -143,7 +156,7 @@ func (r *workflowRepository) GetInstanceByID(ctx context.Context, id uuid.UUID) 
 }
 
 func (r *workflowRepository) GetInstanceByResource(ctx context.Context, resourceType, resourceID string) (*domain.WorkflowInstance, error) {
-	row, err := r.queries.GetWorkflowInstanceByResource(ctx, sqlc.GetWorkflowInstanceByResourceParams{
+	row, err := r.queries(ctx).GetWorkflowInstanceByResource(ctx, sqlc.GetWorkflowInstanceByResourceParams{
 		ResourceType: resourceType,
 		ResourceID:   resourceID,
 	})
@@ -157,7 +170,7 @@ func (r *workflowRepository) GetInstanceByResource(ctx context.Context, resource
 }
 
 func (r *workflowRepository) UpdateInstanceStatus(ctx context.Context, id uuid.UUID, status string, completedAt *time.Time) error {
-	_, err := r.queries.UpdateWorkflowInstanceStatus(ctx, sqlc.UpdateWorkflowInstanceStatusParams{
+	_, err := r.queries(ctx).UpdateWorkflowInstanceStatus(ctx, sqlc.UpdateWorkflowInstanceStatusParams{
 		ID:          toPgUUID(id),
 		Status:      status,
 		CompletedAt: toPgTimestamptz(completedAt),
@@ -166,7 +179,7 @@ func (r *workflowRepository) UpdateInstanceStatus(ctx context.Context, id uuid.U
 }
 
 func (r *workflowRepository) CreateInstanceStep(ctx context.Context, step *domain.InstanceStep) (*domain.InstanceStep, error) {
-	row, err := r.queries.CreateInstanceStep(ctx, sqlc.CreateInstanceStepParams{
+	row, err := r.queries(ctx).CreateInstanceStep(ctx, sqlc.CreateInstanceStepParams{
 		InstanceID: toPgUUID(step.InstanceID),
 		StepID:     toPgUUID(step.StepID),
 		StepOrder:  int32(step.StepOrder),
@@ -178,8 +191,30 @@ func (r *workflowRepository) CreateInstanceStep(ctx context.Context, step *domai
 	return toDomainInstanceStep(&row), nil
 }
 
+func (r *workflowRepository) GetInstanceStepByID(ctx context.Context, id uuid.UUID) (*domain.InstanceStep, error) {
+	row, err := r.queries(ctx).GetInstanceStepByID(ctx, toPgUUID(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrWorkflowStepNotFound
+		}
+		return nil, err
+	}
+	return toDomainInstanceStep(&row), nil
+}
+
+func (r *workflowRepository) LockInstanceStepByID(ctx context.Context, id uuid.UUID) (*domain.InstanceStep, error) {
+	row, err := r.queries(ctx).LockInstanceStepByID(ctx, toPgUUID(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrWorkflowStepNotFound
+		}
+		return nil, err
+	}
+	return toDomainInstanceStep(&row), nil
+}
+
 func (r *workflowRepository) ListInstanceSteps(ctx context.Context, instanceID uuid.UUID) ([]domain.InstanceStep, error) {
-	rows, err := r.queries.ListInstanceStepsByInstanceID(ctx, toPgUUID(instanceID))
+	rows, err := r.queries(ctx).ListInstanceStepsByInstanceID(ctx, toPgUUID(instanceID))
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +227,7 @@ func (r *workflowRepository) ListInstanceSteps(ctx context.Context, instanceID u
 }
 
 func (r *workflowRepository) UpdateInstanceStepStatus(ctx context.Context, id uuid.UUID, status string, completedAt *time.Time) error {
-	_, err := r.queries.UpdateInstanceStepStatus(ctx, sqlc.UpdateInstanceStepStatusParams{
+	_, err := r.queries(ctx).UpdateInstanceStepStatus(ctx, sqlc.UpdateInstanceStepStatusParams{
 		ID:          toPgUUID(id),
 		Status:      status,
 		CompletedAt: toPgTimestamptz(completedAt),
@@ -201,7 +236,7 @@ func (r *workflowRepository) UpdateInstanceStepStatus(ctx context.Context, id uu
 }
 
 func (r *workflowRepository) CreateApprovalRequest(ctx context.Context, req *domain.ApprovalRequest) (*domain.ApprovalRequest, error) {
-	row, err := r.queries.CreateApprovalRequest(ctx, sqlc.CreateApprovalRequestParams{
+	row, err := r.queries(ctx).CreateApprovalRequest(ctx, sqlc.CreateApprovalRequestParams{
 		InstanceStepID: toPgUUID(req.InstanceStepID),
 		AssignedUserID: toPgUUID(req.AssignedUserID),
 		Status:         req.Status,
@@ -213,7 +248,7 @@ func (r *workflowRepository) CreateApprovalRequest(ctx context.Context, req *dom
 }
 
 func (r *workflowRepository) GetApprovalRequestByID(ctx context.Context, id uuid.UUID) (*domain.ApprovalRequest, error) {
-	row, err := r.queries.GetApprovalRequestByID(ctx, toPgUUID(id))
+	row, err := r.queries(ctx).GetApprovalRequestByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrApprovalRequestNotFound
@@ -223,8 +258,35 @@ func (r *workflowRepository) GetApprovalRequestByID(ctx context.Context, id uuid
 	return toDomainApprovalRequest(&row), nil
 }
 
+func (r *workflowRepository) LockApprovalRequestByID(ctx context.Context, id uuid.UUID) (*domain.ApprovalRequest, error) {
+	row, err := r.queries(ctx).LockApprovalRequestByID(ctx, toPgUUID(id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrApprovalRequestNotFound
+		}
+		return nil, err
+	}
+	return toDomainApprovalRequest(&row), nil
+}
+
+func (r *workflowRepository) ListApprovalRequestsByInstanceStep(ctx context.Context, instanceStepID uuid.UUID) ([]domain.ApprovalRequest, error) {
+	rows, err := r.queries(ctx).ListApprovalRequestsByInstanceStep(ctx, toPgUUID(instanceStepID))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]domain.ApprovalRequest, 0, len(rows))
+	for i := range rows {
+		result = append(result, *toDomainApprovalRequest(&rows[i]))
+	}
+	return result, nil
+}
+
+func (r *workflowRepository) CancelPendingApprovalRequestsForStep(ctx context.Context, instanceStepID uuid.UUID) error {
+	return r.queries(ctx).CancelPendingApprovalRequestsForStep(ctx, toPgUUID(instanceStepID))
+}
+
 func (r *workflowRepository) ListPendingRequestsForUser(ctx context.Context, userID uuid.UUID) ([]domain.PendingApprovalItem, error) {
-	rows, err := r.queries.ListPendingApprovalRequestsForUser(ctx, toPgUUID(userID))
+	rows, err := r.queries(ctx).ListPendingApprovalRequestsForUser(ctx, toPgUUID(userID))
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +312,7 @@ func (r *workflowRepository) ListPendingRequestsForUser(ctx context.Context, use
 }
 
 func (r *workflowRepository) UpdateApprovalRequestStatus(ctx context.Context, id uuid.UUID, status string) error {
-	_, err := r.queries.UpdateApprovalRequestStatus(ctx, sqlc.UpdateApprovalRequestStatusParams{
+	_, err := r.queries(ctx).UpdateApprovalRequestStatus(ctx, sqlc.UpdateApprovalRequestStatusParams{
 		ID:     toPgUUID(id),
 		Status: status,
 	})
@@ -258,7 +320,7 @@ func (r *workflowRepository) UpdateApprovalRequestStatus(ctx context.Context, id
 }
 
 func (r *workflowRepository) CreateApprovalDecision(ctx context.Context, dec *domain.ApprovalDecision) (*domain.ApprovalDecision, error) {
-	row, err := r.queries.CreateApprovalDecision(ctx, sqlc.CreateApprovalDecisionParams{
+	row, err := r.queries(ctx).CreateApprovalDecision(ctx, sqlc.CreateApprovalDecisionParams{
 		RequestID:  toPgUUID(dec.RequestID),
 		InstanceID: toPgUUID(dec.InstanceID),
 		ActorID:    toPgUUID(dec.ActorID),
@@ -272,7 +334,7 @@ func (r *workflowRepository) CreateApprovalDecision(ctx context.Context, dec *do
 }
 
 func (r *workflowRepository) ListApprovalDecisions(ctx context.Context, instanceID uuid.UUID) ([]domain.ApprovalDecision, error) {
-	rows, err := r.queries.ListApprovalDecisionsByInstanceID(ctx, toPgUUID(instanceID))
+	rows, err := r.queries(ctx).ListApprovalDecisionsByInstanceID(ctx, toPgUUID(instanceID))
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +355,7 @@ func (r *workflowRepository) ListApprovalDecisions(ctx context.Context, instance
 }
 
 func (r *workflowRepository) CreateDelegation(ctx context.Context, del *domain.Delegation) (*domain.Delegation, error) {
-	row, err := r.queries.CreateDelegation(ctx, sqlc.CreateDelegationParams{
+	row, err := r.queries(ctx).CreateDelegation(ctx, sqlc.CreateDelegationParams{
 		DelegatorID:   toPgUUID(del.DelegatorID),
 		DelegateID:    toPgUUID(del.DelegateID),
 		LegalEntityID: toPgUUIDPtr(del.LegalEntityID),
@@ -309,7 +371,7 @@ func (r *workflowRepository) CreateDelegation(ctx context.Context, del *domain.D
 }
 
 func (r *workflowRepository) GetActiveDelegation(ctx context.Context, delegatorID, delegateID uuid.UUID, leID *uuid.UUID) (*domain.Delegation, error) {
-	row, err := r.queries.GetActiveDelegation(ctx, sqlc.GetActiveDelegationParams{
+	row, err := r.queries(ctx).GetActiveDelegation(ctx, sqlc.GetActiveDelegationParams{
 		DelegatorID: toPgUUID(delegatorID),
 		DelegateID:  toPgUUID(delegateID),
 		Column3:     toPgUUIDPtr(leID),
@@ -324,7 +386,7 @@ func (r *workflowRepository) GetActiveDelegation(ctx context.Context, delegatorI
 }
 
 func (r *workflowRepository) ListActiveDelegationsForDelegate(ctx context.Context, delegateID uuid.UUID) ([]domain.Delegation, error) {
-	rows, err := r.queries.ListActiveDelegationsForDelegate(ctx, toPgUUID(delegateID))
+	rows, err := r.queries(ctx).ListActiveDelegationsForDelegate(ctx, toPgUUID(delegateID))
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +409,7 @@ func (r *workflowRepository) ListActiveDelegationsForDelegate(ctx context.Contex
 }
 
 func (r *workflowRepository) ListDelegationsByDelegator(ctx context.Context, delegatorID uuid.UUID) ([]domain.Delegation, error) {
-	rows, err := r.queries.ListDelegationsByDelegator(ctx, toPgUUID(delegatorID))
+	rows, err := r.queries(ctx).ListDelegationsByDelegator(ctx, toPgUUID(delegatorID))
 	if err != nil {
 		return nil, err
 	}
@@ -370,14 +432,14 @@ func (r *workflowRepository) ListDelegationsByDelegator(ctx context.Context, del
 }
 
 func (r *workflowRepository) RevokeDelegation(ctx context.Context, id, delegatorID uuid.UUID) error {
-	return r.queries.RevokeDelegation(ctx, sqlc.RevokeDelegationParams{
+	return r.queries(ctx).RevokeDelegation(ctx, sqlc.RevokeDelegationParams{
 		ID:          toPgUUID(id),
 		DelegatorID: toPgUUID(delegatorID),
 	})
 }
 
 func (r *workflowRepository) ListUserIDsByRoleInScope(ctx context.Context, roleID, leID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := r.queries.ListUserIDsByRoleInScope(ctx, sqlc.ListUserIDsByRoleInScopeParams{
+	rows, err := r.queries(ctx).ListUserIDsByRoleInScope(ctx, sqlc.ListUserIDsByRoleInScopeParams{
 		RoleID:        toPgUUID(roleID),
 		LegalEntityID: toPgUUID(leID),
 	})
@@ -392,7 +454,7 @@ func (r *workflowRepository) ListUserIDsByRoleInScope(ctx context.Context, roleI
 }
 
 func (r *workflowRepository) GetFallbackAdminUserID(ctx context.Context) (uuid.UUID, error) {
-	row, err := r.queries.GetFallbackAdminUserID(ctx)
+	row, err := r.queries(ctx).GetFallbackAdminUserID(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}

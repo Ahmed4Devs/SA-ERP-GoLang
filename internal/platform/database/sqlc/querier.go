@@ -16,6 +16,7 @@ type Querier interface {
 	AssignPermissionToRole(ctx context.Context, arg AssignPermissionToRoleParams) error
 	AssignUserRole(ctx context.Context, arg AssignUserRoleParams) (AuthzUserRoleAssignments, error)
 	AwardSupplierQuoteLine(ctx context.Context, arg AwardSupplierQuoteLineParams) (PurchasingSupplierQuoteLines, error)
+	CancelPendingApprovalRequestsForStep(ctx context.Context, instanceStepID pgtype.UUID) error
 	CompleteIdempotencyKey(ctx context.Context, arg CompleteIdempotencyKeyParams) error
 	CountAuditEvents(ctx context.Context, arg CountAuditEventsParams) (int64, error)
 	CountCustomers(ctx context.Context, arg CountCustomersParams) (int64, error)
@@ -445,6 +446,7 @@ type Querier interface {
 	ListAddressesByLegalEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationAddresses, error)
 	ListAllActiveLegalEntities(ctx context.Context) ([]OrganizationLegalEntities, error)
 	ListApprovalDecisionsByInstanceID(ctx context.Context, instanceID pgtype.UUID) ([]ListApprovalDecisionsByInstanceIDRow, error)
+	ListApprovalRequestsByInstanceStep(ctx context.Context, instanceStepID pgtype.UUID) ([]WorkflowApprovalRequests, error)
 	ListAssetCategories(ctx context.Context, legalEntityID pgtype.UUID) ([]FixedassetsCategories, error)
 	ListAssetLocations(ctx context.Context, legalEntityID pgtype.UUID) ([]FixedassetsAssetLocations, error)
 	ListAssetTransfers(ctx context.Context, legalEntityID pgtype.UUID) ([]ListAssetTransfersRow, error)
@@ -603,7 +605,9 @@ type Querier interface {
 	ListWarehousesByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]WarehouseWarehouses, error)
 	ListWorkflowDefinitions(ctx context.Context) ([]WorkflowDefinitions, error)
 	ListZeroRateReasons(ctx context.Context) ([]TaxZeroRateReasons, error)
+	LockApprovalRequestByID(ctx context.Context, id pgtype.UUID) (WorkflowApprovalRequests, error)
 	LockBalance(ctx context.Context, arg LockBalanceParams) (InventoryStockBalances, error)
+	LockInstanceStepByID(ctx context.Context, id pgtype.UUID) (WorkflowInstanceSteps, error)
 	LockOpenItem(ctx context.Context, id pgtype.UUID) (ReceivablesOpenItems, error)
 	LockPayablesOpenItem(ctx context.Context, id pgtype.UUID) (PayablesOpenItems, error)
 	MarkJournalEntryReversed(ctx context.Context, arg MarkJournalEntryReversedParams) (AccountingJournalEntries, error)

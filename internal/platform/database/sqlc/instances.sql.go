@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const cancelPendingApprovalRequestsForStep = `-- name: CancelPendingApprovalRequestsForStep :exec
+UPDATE workflow.approval_requests
+SET status = 'CANCELLED'
+WHERE instance_step_id = $1 AND status = 'PENDING'
+`
+
+func (q *Queries) CancelPendingApprovalRequestsForStep(ctx context.Context, instanceStepID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, cancelPendingApprovalRequestsForStep, instanceStepID)
+	return err
+}
+
 const createApprovalDecision = `-- name: CreateApprovalDecision :one
 INSERT INTO workflow.approval_decisions (
     request_id,
@@ -196,8 +207,14 @@ func (q *Queries) GetApprovalRequestByID(ctx context.Context, id pgtype.UUID) (W
 }
 
 const getFallbackAdminUserID = `-- name: GetFallbackAdminUserID :one
-SELECT u.id FROM iam.users u
+SELECT u.id
+FROM iam.users u
+JOIN authz.user_role_assignments ura ON ura.user_id = u.id
+JOIN authz.roles r ON r.id = ura.role_id
 WHERE u.status = 'ACTIVE'
+  AND r.code = 'SUPER_ADMIN'
+  AND ura.legal_entity_id IS NULL
+  AND ura.branch_id IS NULL
 ORDER BY u.created_at ASC
 LIMIT 1
 `
@@ -342,6 +359,38 @@ func (q *Queries) ListApprovalDecisionsByInstanceID(ctx context.Context, instanc
 	return items, nil
 }
 
+const listApprovalRequestsByInstanceStep = `-- name: ListApprovalRequestsByInstanceStep :many
+SELECT id, instance_step_id, assigned_user_id, status, created_at FROM workflow.approval_requests
+WHERE instance_step_id = $1
+ORDER BY created_at ASC
+`
+
+func (q *Queries) ListApprovalRequestsByInstanceStep(ctx context.Context, instanceStepID pgtype.UUID) ([]WorkflowApprovalRequests, error) {
+	rows, err := q.db.Query(ctx, listApprovalRequestsByInstanceStep, instanceStepID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorkflowApprovalRequests{}
+	for rows.Next() {
+		var i WorkflowApprovalRequests
+		if err := rows.Scan(
+			&i.ID,
+			&i.InstanceStepID,
+			&i.AssignedUserID,
+			&i.Status,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInstanceStepsByInstanceID = `-- name: ListInstanceStepsByInstanceID :many
 SELECT id, instance_id, step_id, step_order, status, started_at, completed_at FROM workflow.instance_steps
 WHERE instance_id = $1
@@ -455,7 +504,9 @@ func (q *Queries) ListPendingApprovalRequestsForUser(ctx context.Context, assign
 const listUserIDsByRoleInScope = `-- name: ListUserIDsByRoleInScope :many
 SELECT DISTINCT ura.user_id
 FROM authz.user_role_assignments ura
+JOIN iam.users u ON u.id = ura.user_id
 WHERE ura.role_id = $1
+  AND u.status = 'ACTIVE'
   AND (ura.legal_entity_id IS NULL OR ura.legal_entity_id = $2)
 `
 
@@ -482,6 +533,46 @@ func (q *Queries) ListUserIDsByRoleInScope(ctx context.Context, arg ListUserIDsB
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockApprovalRequestByID = `-- name: LockApprovalRequestByID :one
+SELECT id, instance_step_id, assigned_user_id, status, created_at FROM workflow.approval_requests
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockApprovalRequestByID(ctx context.Context, id pgtype.UUID) (WorkflowApprovalRequests, error) {
+	row := q.db.QueryRow(ctx, lockApprovalRequestByID, id)
+	var i WorkflowApprovalRequests
+	err := row.Scan(
+		&i.ID,
+		&i.InstanceStepID,
+		&i.AssignedUserID,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const lockInstanceStepByID = `-- name: LockInstanceStepByID :one
+SELECT id, instance_id, step_id, step_order, status, started_at, completed_at FROM workflow.instance_steps
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockInstanceStepByID(ctx context.Context, id pgtype.UUID) (WorkflowInstanceSteps, error) {
+	row := q.db.QueryRow(ctx, lockInstanceStepByID, id)
+	var i WorkflowInstanceSteps
+	err := row.Scan(
+		&i.ID,
+		&i.InstanceID,
+		&i.StepID,
+		&i.StepOrder,
+		&i.Status,
+		&i.StartedAt,
+		&i.CompletedAt,
+	)
+	return i, err
 }
 
 const updateApprovalRequestStatus = `-- name: UpdateApprovalRequestStatus :one
