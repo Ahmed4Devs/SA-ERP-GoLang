@@ -47,12 +47,13 @@ func NewModule(cfg *config.Config, db *database.DB) *Module {
 
 	var zatcaClient ports.ZATCAClient
 	var onboardingClient ports.ZATCAOnboardingClient
+	environment := domain.EnvironmentSimulation
 	if strings.EqualFold(cfg.ZATCA.Environment, "simulation") {
 		simClient := client.NewSimulatorClient()
 		zatcaClient = simClient
 		onboardingClient = simClient
 	} else {
-		environment := domain.EnvironmentSandbox
+		environment = domain.EnvironmentSandbox
 		if strings.EqualFold(cfg.ZATCA.Environment, "production") {
 			environment = domain.EnvironmentProduction
 		}
@@ -68,8 +69,8 @@ func NewModule(cfg *config.Config, db *database.DB) *Module {
 
 	allowSimulatedCredentials := strings.EqualFold(cfg.ZATCA.Environment, "simulation")
 	svc := services.NewZATCAService(repo, xmlGen, validator, signer, db, allowSimulatedCredentials)
-	onboardingSvc := onboarding.NewOnboardingService(repo, onboardingClient, xmlGen, signer)
-	submissionSvc := submission.NewSubmissionService(repo, subRepo, zatcaClient)
+	onboardingSvc := onboarding.NewOnboardingService(repo, onboardingClient, xmlGen, signer, environment)
+	submissionSvc := submission.NewSubmissionService(repo, subRepo, zatcaClient, environment)
 	retryWorker := jobs.NewRetryWorker(jobs.DefaultWorkerConfig(), subRepo, repo, submissionSvc)
 
 	handler := zhttp.NewZATCAHandler(svc, onboardingSvc, submissionSvc)

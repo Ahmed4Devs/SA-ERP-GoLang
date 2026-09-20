@@ -31,10 +31,10 @@ func (r *SubmissionRepository) CreateSubmission(ctx context.Context, sub *domain
 
 	query := `
 		INSERT INTO zatca.submissions (
-			id, document_id, submission_mode, zatca_status,
+			id, document_id, submission_mode, environment, zatca_status,
 			zatca_request_id, clearance_status, reporting_status, submitted_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, document_id, submission_mode, zatca_status, zatca_request_id, clearance_status, reporting_status, submitted_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, document_id, submission_mode, environment, zatca_status, zatca_request_id, clearance_status, reporting_status, submitted_at
 	`
 
 	var clearanceStatus, reportingStatus *string
@@ -45,7 +45,7 @@ func (r *SubmissionRepository) CreateSubmission(ctx context.Context, sub *domain
 	}
 
 	var savedID, docID uuid.UUID
-	var mode, status string
+	var mode, environment, status string
 	var reqID *string
 	var cStatus, rStatus *string
 	var submittedAt time.Time
@@ -54,12 +54,13 @@ func (r *SubmissionRepository) CreateSubmission(ctx context.Context, sub *domain
 		sub.ID,
 		sub.DocumentID,
 		string(sub.SubmissionMode),
+		string(sub.Environment),
 		sub.Status,
 		sub.ZATCARequestID,
 		clearanceStatus,
 		reportingStatus,
 		sub.SubmittedAt,
-	).Scan(&savedID, &docID, &mode, &status, &reqID, &cStatus, &rStatus, &submittedAt)
+	).Scan(&savedID, &docID, &mode, &environment, &status, &reqID, &cStatus, &rStatus, &submittedAt)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create submission: %w", err)
@@ -86,7 +87,7 @@ func (r *SubmissionRepository) UpdateSubmission(ctx context.Context, sub *domain
 
 func (r *SubmissionRepository) GetSubmissionByID(ctx context.Context, id, legalEntityID uuid.UUID) (*domain.ZATCASubmission, error) {
 	query := `
-		SELECT s.id, s.document_id, d.legal_entity_id, s.submission_mode, s.zatca_status,
+		SELECT s.id, s.document_id, d.legal_entity_id, s.submission_mode, s.environment, s.zatca_status,
 		       s.zatca_request_id, s.clearance_status, s.reporting_status, s.submitted_at
 		FROM zatca.submissions s
 		JOIN zatca.documents d ON d.id = s.document_id
@@ -94,7 +95,7 @@ func (r *SubmissionRepository) GetSubmissionByID(ctx context.Context, id, legalE
 	`
 
 	var sub domain.ZATCASubmission
-	var mode, status string
+	var mode, environment, status string
 	var reqID, cStatus, rStatus *string
 
 	err := r.db.Pool.QueryRow(ctx, query, id, legalEntityID).Scan(
@@ -102,6 +103,7 @@ func (r *SubmissionRepository) GetSubmissionByID(ctx context.Context, id, legalE
 		&sub.DocumentID,
 		&sub.LegalEntityID,
 		&mode,
+		&environment,
 		&status,
 		&reqID,
 		&cStatus,
@@ -116,6 +118,7 @@ func (r *SubmissionRepository) GetSubmissionByID(ctx context.Context, id, legalE
 	}
 
 	sub.SubmissionMode = domain.SubmissionMode(mode)
+	sub.Environment = domain.Environment(environment)
 	sub.Status = status
 	if reqID != nil {
 		sub.ZATCARequestID = *reqID
@@ -133,7 +136,7 @@ func (r *SubmissionRepository) GetSubmissionByID(ctx context.Context, id, legalE
 
 func (r *SubmissionRepository) GetSubmissionByDocumentID(ctx context.Context, docID, legalEntityID uuid.UUID) (*domain.ZATCASubmission, error) {
 	query := `
-		SELECT s.id, s.document_id, d.legal_entity_id, s.submission_mode, s.zatca_status,
+		SELECT s.id, s.document_id, d.legal_entity_id, s.submission_mode, s.environment, s.zatca_status,
 		       s.zatca_request_id, s.clearance_status, s.reporting_status, s.submitted_at
 		FROM zatca.submissions s
 		JOIN zatca.documents d ON d.id = s.document_id
@@ -143,7 +146,7 @@ func (r *SubmissionRepository) GetSubmissionByDocumentID(ctx context.Context, do
 	`
 
 	var sub domain.ZATCASubmission
-	var mode, status string
+	var mode, environment, status string
 	var reqID, cStatus, rStatus *string
 
 	err := r.db.Pool.QueryRow(ctx, query, docID, legalEntityID).Scan(
@@ -151,6 +154,7 @@ func (r *SubmissionRepository) GetSubmissionByDocumentID(ctx context.Context, do
 		&sub.DocumentID,
 		&sub.LegalEntityID,
 		&mode,
+		&environment,
 		&status,
 		&reqID,
 		&cStatus,
@@ -165,6 +169,7 @@ func (r *SubmissionRepository) GetSubmissionByDocumentID(ctx context.Context, do
 	}
 
 	sub.SubmissionMode = domain.SubmissionMode(mode)
+	sub.Environment = domain.Environment(environment)
 	sub.Status = status
 	if reqID != nil {
 		sub.ZATCARequestID = *reqID
@@ -186,7 +191,7 @@ func (r *SubmissionRepository) ListSubmissions(ctx context.Context, filter domai
 	}
 
 	query := `
-		SELECT s.id, s.document_id, d.legal_entity_id, s.submission_mode, s.zatca_status,
+		SELECT s.id, s.document_id, d.legal_entity_id, s.submission_mode, s.environment, s.zatca_status,
 		       s.zatca_request_id, s.clearance_status, s.reporting_status, s.submitted_at
 		FROM zatca.submissions s
 		JOIN zatca.documents d ON d.id = s.document_id
@@ -203,6 +208,11 @@ func (r *SubmissionRepository) ListSubmissions(ctx context.Context, filter domai
 	if filter.SubmissionMode != nil {
 		query += fmt.Sprintf(" AND s.submission_mode = $%d", argIdx)
 		args = append(args, string(*filter.SubmissionMode))
+		argIdx++
+	}
+	if filter.Environment != nil {
+		query += fmt.Sprintf(" AND s.environment = $%d", argIdx)
+		args = append(args, string(*filter.Environment))
 		argIdx++
 	}
 	if filter.Status != nil {
@@ -223,7 +233,7 @@ func (r *SubmissionRepository) ListSubmissions(ctx context.Context, filter domai
 	var results []*domain.ZATCASubmission
 	for rows.Next() {
 		var sub domain.ZATCASubmission
-		var mode, status string
+		var mode, environment, status string
 		var reqID, cStatus, rStatus *string
 
 		if err := rows.Scan(
@@ -231,6 +241,7 @@ func (r *SubmissionRepository) ListSubmissions(ctx context.Context, filter domai
 			&sub.DocumentID,
 			&sub.LegalEntityID,
 			&mode,
+			&environment,
 			&status,
 			&reqID,
 			&cStatus,
@@ -241,6 +252,7 @@ func (r *SubmissionRepository) ListSubmissions(ctx context.Context, filter domai
 		}
 
 		sub.SubmissionMode = domain.SubmissionMode(mode)
+		sub.Environment = domain.Environment(environment)
 		sub.Status = status
 		if reqID != nil {
 			sub.ZATCARequestID = *reqID
@@ -339,7 +351,7 @@ func (r *SubmissionRepository) GetPendingRetrySubmissions(ctx context.Context, l
 	}
 
 	query := `
-		SELECT s.id, s.document_id, d.legal_entity_id, s.submission_mode, s.zatca_status,
+		SELECT s.id, s.document_id, d.legal_entity_id, s.submission_mode, s.environment, s.zatca_status,
 		       s.zatca_request_id, s.clearance_status, s.reporting_status, s.submitted_at
 		FROM zatca.submissions s
 		JOIN zatca.documents d ON d.id = s.document_id
@@ -356,7 +368,7 @@ func (r *SubmissionRepository) GetPendingRetrySubmissions(ctx context.Context, l
 	var results []*domain.ZATCASubmission
 	for rows.Next() {
 		var sub domain.ZATCASubmission
-		var mode, status string
+		var mode, environment, status string
 		var reqID, cStatus, rStatus *string
 
 		if err := rows.Scan(
@@ -364,6 +376,7 @@ func (r *SubmissionRepository) GetPendingRetrySubmissions(ctx context.Context, l
 			&sub.DocumentID,
 			&sub.LegalEntityID,
 			&mode,
+			&environment,
 			&status,
 			&reqID,
 			&cStatus,
@@ -374,6 +387,7 @@ func (r *SubmissionRepository) GetPendingRetrySubmissions(ctx context.Context, l
 		}
 
 		sub.SubmissionMode = domain.SubmissionMode(mode)
+		sub.Environment = domain.Environment(environment)
 		sub.Status = status
 		if reqID != nil {
 			sub.ZATCARequestID = *reqID

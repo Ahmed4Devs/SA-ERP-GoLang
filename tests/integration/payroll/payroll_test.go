@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"erp/internal/accounting"
 	"erp/internal/hr"
 	hrdomain "erp/internal/hr/domain"
 	"erp/internal/iam"
@@ -41,6 +42,7 @@ func setupPayrollTest(t *testing.T) (*payroll.Module, *hr.Module, *database.DB, 
 
 	iamMod := iam.NewModule(cfg, db, txManager)
 	orgMod := organization.NewModule(cfg, db, txManager)
+	accountingMod := accounting.NewModule(cfg, db)
 	hrMod := hr.NewModule(cfg, db)
 	payrollMod := payroll.NewModule(cfg, db)
 
@@ -48,6 +50,9 @@ func setupPayrollTest(t *testing.T) (*payroll.Module, *hr.Module, *database.DB, 
 	le, err := orgMod.SeedDefaultStructure(ctx)
 	if err != nil {
 		t.Fatalf("failed to seed organization: %v", err)
+	}
+	if err := accountingMod.SeedDefaultCOA(ctx, le.ID); err != nil {
+		t.Fatalf("failed to seed payroll accounting defaults: %v", err)
 	}
 
 	// 2. Admin User

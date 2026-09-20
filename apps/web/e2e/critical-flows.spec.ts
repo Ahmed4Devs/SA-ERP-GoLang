@@ -24,11 +24,14 @@ const entities = [
   },
 ];
 
-async function json(route: Route, status: number, body: unknown) {
-  await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+async function json(route: Route, status: number, body: unknown, headers?: Record<string, string>) {
+  await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body), headers });
 }
 
 async function mockAuthenticatedSession(page: Page) {
+  await page.context().addCookies([
+    { name: "erp_session", value: "browser-test-session", domain: "127.0.0.1", path: "/", httpOnly: true, sameSite: "Lax" },
+  ]);
   await page.route("**/api/v1/auth/me", (route) => json(route, 200, { user }));
   await page.route("**/api/v1/authz/assignments/me", (route) => json(route, 200, { data: entities }));
 }
@@ -49,7 +52,7 @@ test("password login restores the requested route and exposes tenant selection",
   );
   await page.route("**/api/v1/auth/login", async (route) => {
     authenticated = true;
-    await json(route, 200, { user });
+    await json(route, 200, { user }, { "set-cookie": "erp_session=browser-test-session; Path=/; HttpOnly; SameSite=Lax" });
   });
   await page.route("**/api/v1/authz/assignments/me", (route) => json(route, 200, { data: entities }));
   await page.route("**/api/v1/accounting/**", (route) => json(route, 200, { data: [] }));
@@ -76,7 +79,7 @@ test("an MFA challenge does not create a session until the second factor succeed
   );
   await page.route("**/api/v1/auth/login/mfa", async (route) => {
     authenticated = true;
-    await json(route, 200, { user });
+    await json(route, 200, { user }, { "set-cookie": "erp_session=browser-test-session; Path=/; HttpOnly; SameSite=Lax" });
   });
   await page.route("**/api/v1/authz/assignments/me", (route) => json(route, 200, { data: entities }));
   await page.route("**/api/v1/dashboard**", (route) => json(route, 503, { error: "dashboard unavailable" }));
@@ -119,4 +122,30 @@ test("MFA settings expose enrollment secret and one-time recovery codes", async 
 
   await expect(page.getByTestId("mfa-secret")).toHaveText("JBSWY3DPEHPK3PXP");
   await expect(page.getByTestId("recovery-codes")).toContainText("AAAA-BBBB");
+});
+
+test("a module write is sent to the API with the selected tenant and refreshed", async ({ page }) => {
+  await mockAuthenticatedSession(page);
+  const created = { id: "40000000-0000-0000-0000-000000000001", code: "E2E-CAT", name_en: "E2E Category" };
+  let receivedBody: Record<string, unknown> | null = null;
+
+  await page.route("**/api/v1/products/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "POST" && new URL(request.url()).pathname.endsWith("/categories")) {
+      receivedBody = request.postDataJSON() as Record<string, unknown>;
+      await json(route, 201, { data: created });
+      return;
+    }
+    await json(route, 200, { data: receivedBody ? [created] : [] });
+  });
+
+  await page.goto("/products");
+  await page.getByRole("button", { name: /الفئات|categories/i }).click();
+  await page.getByRole("button", { name: /عملية جديدة|new operation/i }).click();
+  await page.locator("#operation-body").fill(JSON.stringify({ code: "E2E-CAT", name_en: "E2E Category", name_ar: "فئة اختبار" }));
+  await page.locator("#operation-submit").click();
+
+  await expect(page.getByTestId("operation-success")).toBeVisible();
+  await expect(page.getByText("E2E-CAT", { exact: true })).toBeVisible();
+  expect(receivedBody).toMatchObject({ legal_entity_id: entities[0].legal_entity_id, code: "E2E-CAT" });
 });

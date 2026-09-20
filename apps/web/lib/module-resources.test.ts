@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendTenant, normalizeRows } from "@/components/modules/module-api-view";
+import { appendTenant, buildMutationRequest, normalizeRows } from "@/components/modules/module-api-view";
 import { moduleResources } from "@/lib/module-resources";
 
 describe("module API resources", () => {
@@ -20,5 +20,20 @@ describe("module API resources", () => {
     expect(normalizeRows({ data: [{ id: "1" }] })).toEqual([{ id: "1" }]);
     expect(normalizeRows([{ id: "2" }])).toEqual([{ id: "2" }]);
     expect(normalizeRows({ total: 4 })).toEqual([{ total: 4 }]);
+  });
+
+  it("builds tenant-scoped mutation requests and rejects external endpoints", () => {
+    const request = buildMutationRequest(
+      "/api/v1/products/categories",
+      "POST",
+      JSON.stringify({ code: "TEST" }),
+      "entity-1",
+    );
+    expect(request.path).toBe("/api/v1/products/categories?legal_entity_id=entity-1");
+    expect(JSON.parse(String(request.init.body))).toEqual({ code: "TEST", legal_entity_id: "entity-1" });
+    expect(() => buildMutationRequest("https://example.com/api/v1/items", "POST", "{}", "entity-1")).toThrow(
+      /local \/api\/v1\//,
+    );
+    expect(() => buildMutationRequest("/api/v1/items", "PATCH", "not-json", "entity-1")).toThrow(/valid JSON/);
   });
 });

@@ -16,17 +16,20 @@ type SubmissionService struct {
 	repo        ports.Repository
 	subRepo     ports.SubmissionRepository
 	zatcaClient ports.ZATCAClient
+	environment domain.Environment
 }
 
 func NewSubmissionService(
 	repo ports.Repository,
 	subRepo ports.SubmissionRepository,
 	zatcaClient ports.ZATCAClient,
+	environment domain.Environment,
 ) *SubmissionService {
 	return &SubmissionService{
 		repo:        repo,
 		subRepo:     subRepo,
 		zatcaClient: zatcaClient,
+		environment: environment,
 	}
 }
 
@@ -57,7 +60,7 @@ func (s *SubmissionService) SubmitClearance(ctx context.Context, documentID, leg
 		DocumentID:     doc.ID,
 		LegalEntityID:  legalEntityID,
 		SubmissionMode: domain.SubmissionModeClearance,
-		Environment:    domain.EnvironmentSandbox,
+		Environment:    s.environment,
 		Status:         "PENDING",
 		SubmittedAt:    time.Now(),
 	}
@@ -150,7 +153,7 @@ func (s *SubmissionService) SubmitReporting(ctx context.Context, documentID, leg
 		DocumentID:     doc.ID,
 		LegalEntityID:  legalEntityID,
 		SubmissionMode: domain.SubmissionModeReporting,
-		Environment:    domain.EnvironmentSandbox,
+		Environment:    s.environment,
 		Status:         "PENDING",
 		SubmittedAt:    time.Now(),
 	}

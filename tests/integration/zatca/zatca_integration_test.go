@@ -161,6 +161,9 @@ func TestZATCA_OnboardingLifecycle(t *testing.T) {
 	if status.HasProductionCSID {
 		t.Errorf("expected new EGS to not have production CSID")
 	}
+	if status.CurrentEnvironment != domain.EnvironmentSimulation {
+		t.Errorf("expected simulation onboarding environment, got %s", status.CurrentEnvironment)
+	}
 
 	// 3. Execute Complete Automated Onboarding with OTP
 	res, err := zMod.OnboardingService.StartOnboarding(ctx, leID, egs.ID, "123456")
@@ -250,6 +253,9 @@ func TestZATCA_ClearanceWorkflow(t *testing.T) {
 	}
 	if sub.Status != "CLEARED" {
 		t.Errorf("expected submission status CLEARED, got %s", sub.Status)
+	}
+	if sub.Environment != domain.EnvironmentSimulation {
+		t.Errorf("expected simulation submission environment, got %s", sub.Environment)
 	}
 	if len(sub.Attempts) == 0 {
 		t.Errorf("expected submission attempt log")

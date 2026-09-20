@@ -41,17 +41,35 @@ jobs:
           go run ./cmd/openapi-gen
           git diff --exit-code -- api/openapi/openapi.yaml
       - run: go test -count=1 ./internal/...
-      # Integration packages share the same database and schema. Keep package
-      # execution serial so fixtures cannot exhaust connections or collide.
-      - run: go test -p 1 -count=1 -timeout 15m ./tests/...
+      # The test database helper serializes packages with a PostgreSQL advisory
+      # lock and rebuilds all application schemas before each package.
+      - run: go test -count=1 -timeout 20m ./tests/...
 
   web:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.2-alpine
+        env:
+          POSTGRES_USER: erp_web
+          POSTGRES_PASSWORD: erp_web_password
+          POSTGRES_DB: erp_web
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U erp_web -d erp_web"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -64,6 +82,36 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - name: Migrate browser-test database
+        working-directory: .
+        run: go run github.com/pressly/goose/v3/cmd/goose@v3.28.0 -dir database/migrations postgres "postgres://erp_web:erp_web_password@127.0.0.1:5432/erp_web?sslmode=disable" up
+      - name: Start real API for browser contract test
+        working-directory: .
+        env:
+          APP_ENV: development
+          DATABASE_URL: postgres://erp_web:erp_web_password@127.0.0.1:5432/erp_web?sslmode=disable
+          BOOTSTRAP_ADMIN_ENABLED: "true"
+          BOOTSTRAP_DEMO_DATA_ENABLED: "true"
+          STORAGE_LOCAL_DIR: /tmp/erp-web-e2e-storage
+          CORS_ALLOWED_ORIGINS: http://127.0.0.1:3100
+          MAIL_DRIVER: mock
+          ZATCA_ENVIRONMENT: simulation
+        run: |
+          nohup go run ./cmd/erp-api >/tmp/erp-api.log 2>&1 &
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8080/readyz >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/erp-api.log
+          exit 1
+      - name: Run browser flow against Go API and PostgreSQL
+        env:
+          E2E_REAL_BACKEND: "1"
+          E2E_USERNAME: admin
+          E2E_PASSWORD: Admin@ERP123!
+        run: npx playwright test e2e/real-backend.spec.ts
       - run: npm audit --audit-level=high
 
   containers:

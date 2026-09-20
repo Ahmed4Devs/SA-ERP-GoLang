@@ -22,6 +22,7 @@ type OnboardingService struct {
 	onboardingClient ports.ZATCAOnboardingClient
 	xmlGen           ports.XMLGenerator
 	signer           ports.InvoiceSigner
+	environment      domain.Environment
 }
 
 func NewOnboardingService(
@@ -29,12 +30,14 @@ func NewOnboardingService(
 	onboardingClient ports.ZATCAOnboardingClient,
 	xmlGen ports.XMLGenerator,
 	signer ports.InvoiceSigner,
+	environment domain.Environment,
 ) *OnboardingService {
 	return &OnboardingService{
 		repo:             repo,
 		onboardingClient: onboardingClient,
 		xmlGen:           xmlGen,
 		signer:           signer,
+		environment:      environment,
 	}
 }
 
@@ -49,7 +52,7 @@ func (s *OnboardingService) StartOnboarding(ctx context.Context, legalEntityID, 
 		return nil, fmt.Errorf("failed to retrieve EGS unit: %w", err)
 	}
 
-	// 2. Generate ECDSA Key Pair (secp256k1)
+	// 2. Generate the NIST P-256 ECDSA key pair required by ZATCA.
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate key pair: %w", err)
@@ -196,7 +199,7 @@ func (s *OnboardingService) GetOnboardingStatus(ctx context.Context, legalEntity
 
 	status := &domain.OnboardingStatus{
 		EGSUnitID:          egs.ID,
-		CurrentEnvironment: domain.EnvironmentSandbox,
+		CurrentEnvironment: s.environment,
 		Status:             "NOT_ONBOARDED",
 	}
 

@@ -74,9 +74,8 @@ func removeQRDocumentReferences(root *etree.Element) {
 	}
 }
 
-// GenerateECDSAKeyPair produces a secp256k1 (or P-256 standard) key pair for CSID generation.
+// GenerateECDSAKeyPair produces the NIST P-256 key pair required for CSID generation.
 func GenerateECDSAKeyPair() (privateKeyPEM string, publicKeyPEM string, err error) {
-	// Use standard P-256 for cryptographic compatibility
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return "", "", err

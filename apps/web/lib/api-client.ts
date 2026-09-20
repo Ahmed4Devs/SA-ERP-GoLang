@@ -34,6 +34,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     : await response.text();
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("erp:session-expired"));
+    }
     const message =
       typeof payload === "object" && payload !== null
         ? payload.error?.message ?? payload.error ?? `Request failed (${response.status})`

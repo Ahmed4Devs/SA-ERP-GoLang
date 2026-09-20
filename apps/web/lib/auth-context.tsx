@@ -119,6 +119,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
+    const handleExpiredSession = () => {
+      setUser(null);
+      setAssignments([]);
+      setLegalEntityId(null);
+      setAuthError(null);
+      setScopeError(null);
+      window.localStorage.removeItem("erp_legal_entity_id");
+      if (pathname !== "/login") {
+        router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      }
+    };
+    window.addEventListener("erp:session-expired", handleExpiredSession);
+    return () => window.removeEventListener("erp:session-expired", handleExpiredSession);
+  }, [pathname, router]);
+
+  useEffect(() => {
     if (!loading && !user && !authError && pathname !== "/login") {
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
     }
