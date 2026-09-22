@@ -1,79 +1,74 @@
-# Saudi Enterprise ERP - Disaster Recovery & Restore Guide
+# ERP-GO Disaster-Recovery Restore Guide
 
-## 1. Overview & Recovery Objectives
-This document provides technical instructions for restoring the Saudi Enterprise ERP relational database and application state during a disaster recovery (DR) event, hardware failure, or data corruption incident.
+## Scope
 
-### Target SLA
-- **RTO (Recovery Time Objective)**: `< 30 minutes` for complete logical restore.
-- **RPO (Recovery Point Objective)**: `< 5 minutes` with continuous WAL stream archiving.
+This guide restores the encrypted PostgreSQL custom-format archive produced by
+`scripts/backup.sh`. The checked-in deployment does not implement WAL archiving
+or point-in-time recovery. See the backup strategy before assigning RPO/RTO
+commitments.
 
----
+## Before restoring
 
-## 2. Pre-Restoration Checklist
-Before initiating any restore procedure:
-1. **Quarantine Application Traffic**: Stop or isolate incoming traffic at Nginx to prevent concurrent writes:
+1. Isolate incoming traffic and stop writers:
+
    ```bash
-   docker compose -f deployments/compose/docker-compose.prod.yml stop erp-api erp-worker
+   docker compose --env-file deployments/compose/.env.production \
+     -f deployments/compose/docker-compose.prod.yml stop erp-api erp-worker
    ```
-2. **Verify Backup Integrity**: Validate the SHA-256 checksum against the `.sha256` manifest:
-   ```bash
-   sha256sum -c erp_erp_db_20260918_020000.dump.sha256
-   ```
-3. **Backup Current Broken State**: Take a snapshot of the damaged database state before overwriting, in case forensic analysis is required.
 
----
+2. Preserve a forensic snapshot of the damaged state when safe.
+3. Confirm the target host, database name, owner, backup path, and encryption
+   key with the incident commander. Restoration drops and recreates the target
+   database.
+4. Verify that both the artifact and its adjacent `.sha256` file are present.
 
-## 3. Disaster Recovery Procedures
+## Restore an encrypted logical backup
 
-### Scenario A: Logical Restore from Dump Archive
-Use the tested restore utility for an unencrypted or encrypted custom-format dump:
+Run from the repository root with the production database variables loaded from
+the secret manager:
 
-```bash
-./scripts/restore.sh /backups/erp_erp_db_20260918_020000.dump --force
-```
-
-The utility verifies the required checksum, recreates the target database,
-restores through `pg_restore --exit-on-error --no-owner`, then runs migrations.
-
-### Scenario B: Decrypting an Encrypted Backup
-If the backup was encrypted with AES-256-CBC:
 ```bash
 export BACKUP_ENCRYPTION_KEY='read-from-your-secret-manager'
+export POSTGRES_HOST='database-host'
+export POSTGRES_PORT='5432'
+export POSTGRES_USER='erp_user'
+export POSTGRES_PASSWORD='read-from-your-secret-manager'
+export POSTGRES_DB='erp_db'
+export COMPOSE_ENV_FILE='deployments/compose/.env.production'
+
 ./scripts/restore.sh /backups/erp_erp_db_20260918_020000.dump.enc --force
 ```
 
-### Scenario C: Point-In-Time Recovery (PITR)
-For rolling back immediately prior to a catastrophic incident (e.g. accidental bulk deletion at 14:32:10):
-1. Stop PostgreSQL:
+The utility verifies SHA-256 before decryption, recreates the target database,
+runs `pg_restore --exit-on-error --no-owner`, and then runs the migration
+service. Unencrypted legacy archives remain readable, but new production
+backups are rejected unless encryption is configured.
+
+## Post-restore verification
+
+1. Confirm the schema version:
+
    ```bash
-   docker compose -f deployments/compose/docker-compose.prod.yml stop postgres
-   ```
-2. Place a `recovery.signal` file in the data directory.
-3. Configure `recovery_target_time = '2026-09-18 14:32:00+03'` in `postgresql.conf`.
-4. Start PostgreSQL and monitor recovery logs:
-   ```bash
-   docker compose -f deployments/compose/docker-compose.prod.yml logs -f postgres
+   docker compose --env-file deployments/compose/.env.production \
+     -f deployments/compose/docker-compose.prod.yml run --rm erp-migrate status
    ```
 
----
+2. Run the system doctor and the release smoke tests.
+3. Verify audit-chain integrity through `GET /api/v1/audit/verify`.
+4. Reconcile representative ledger, inventory, receivable, payable, payroll,
+   document, and outbox counts against the incident record.
+5. Record elapsed restore time and the newest recovered transaction timestamp.
+6. Restart writers only after business and technical owners sign off:
 
-## 4. Post-Restore Integrity Verification
-Once the database is restored:
-1. **Verify Schema Version**:
    ```bash
-   docker compose -f deployments/compose/docker-compose.prod.yml run --rm erp-migrate goose -dir /database/migrations postgres "$DATABASE_URL" status
+   docker compose --env-file deployments/compose/.env.production \
+     -f deployments/compose/docker-compose.prod.yml start erp-api erp-worker
    ```
-2. **Reconcile General Ledger Balances**:
-   Run database integrity checks to confirm debits match credits across all journal entries:
-   ```sql
-   SELECT sum(debit_amount) - sum(credit_amount) AS ledger_imbalance FROM journal_entry_lines;
-   ```
-   *Expected output: `0.0000`*.
-3. **Run System Doctor**:
-   ```bash
-   ./scripts/doctor.sh
-   ```
-4. **Restart Application Services**:
-   ```bash
-   docker compose -f deployments/compose/docker-compose.prod.yml start erp-api erp-worker
-   ```
+
+## Point-in-time recovery
+
+PITR is unavailable in the repository's standalone Compose baseline. If the
+production database platform provides WAL archiving, follow that platform's
+reviewed runbook and test it separately. Creating `recovery.signal` without a
+verified base backup, WAL archive, restore command, and timeline plan is not a
+valid recovery procedure.

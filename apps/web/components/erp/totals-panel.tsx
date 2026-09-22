@@ -81,7 +81,7 @@ export const TotalsPanel: React.FC<TotalsPanelProps> = ({
       </div>
 
       <p className="text-[10px] text-muted-foreground text-end pt-1">
-        {isArabic ? "حسابات دقيقة غير تقريبية متوافقة مع لوائح هيئة الزكاة" : "ZATCA Compliant Decimal Precision (Exact Math)"}
+        {isArabic ? "حسابات عشرية دقيقة غير تقريبية" : "Exact Decimal Precision (No Floating-Point Rounding)"}
       </p>
     </div>
   );

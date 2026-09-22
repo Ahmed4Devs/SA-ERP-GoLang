@@ -25,8 +25,6 @@ func NewAuditHandler(auditService ports.AuditService) *AuditHandler {
 func (h *AuditHandler) Routes(authMiddleware func(http.Handler) http.Handler) chi.Router {
 	r := chi.NewRouter()
 
-	r.Use(AuditAccessMiddleware(h.auditService))
-
 	r.Group(func(r chi.Router) {
 		if authMiddleware != nil {
 			r.Use(authMiddleware)

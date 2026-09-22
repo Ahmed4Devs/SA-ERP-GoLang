@@ -111,10 +111,12 @@ func main() {
 	// 8. Mount Domain Modules
 	if db != nil {
 		txManager := transaction.NewManager(db.Pool)
+		auditModule := audit.NewModule(cfg, db)
+		auditRequests := auditModule.AccessMiddleware()
 
 		// A. IAM Module
 		iamModule := iam.NewModule(cfg, db, txManager)
-		iamModule.RegisterRoutes(server.Router)
+		iamModule.RegisterRoutes(server.Router, auditRequests)
 
 		// Bootstrap is explicit in production and uses operator-provided values.
 		if cfg.Bootstrap.AdminEnabled {
@@ -151,11 +153,13 @@ func main() {
 		moduleAccess := func(viewPermission, managePermission string) func(http.Handler) http.Handler {
 			authorize := authzModule.RequireModuleAccess(viewPermission, managePermission)
 			return func(next http.Handler) http.Handler {
-				return authMiddleware(authorize(next))
+				return authMiddleware(authorize(auditRequests(next)))
 			}
 		}
 		orgModule.RegisterRoutes(server.Router, moduleAccess("org.view", "org.manage"))
-		authzModule.RegisterRoutes(server.Router, authMiddleware)
+		authzModule.RegisterRoutes(server.Router, func(next http.Handler) http.Handler {
+			return authMiddleware(auditRequests(next))
+		})
 
 		// Seed initial SUPER_ADMIN assignment for admin user
 		adminUser, _ := iamModule.AuthService.GetUserByIdentifier(ctx, cfg.Bootstrap.AdminUsername)
@@ -168,7 +172,6 @@ func main() {
 		}
 
 		// D. Audit Module (Append-Only Cryptographic Audit Trail)
-		auditModule := audit.NewModule(cfg, db)
 		auditModule.RegisterRoutes(server.Router, moduleAccess("audit.view", "audit.manage"))
 		logger.Info("Audit module and access trail registered")
 

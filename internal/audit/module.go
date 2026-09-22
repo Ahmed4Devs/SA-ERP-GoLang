@@ -34,5 +34,5 @@ func (m *Module) RegisterRoutes(r chi.Router, authMiddleware func(http.Handler) 
 }
 
 func (m *Module) AccessMiddleware() func(http.Handler) http.Handler {
-	return audithttp.AuditAccessMiddleware(m.Service)
+	return audithttp.AuditRequestMiddleware(m.Service)
 }

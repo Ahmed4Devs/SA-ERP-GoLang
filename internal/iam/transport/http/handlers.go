@@ -28,16 +28,24 @@ func NewAuthHandler(authService *services.AuthService, mfaService *services.MFAS
 	}
 }
 
-func (h *AuthHandler) Routes() http.Handler {
+func (h *AuthHandler) Routes(auditMiddleware ...func(http.Handler) http.Handler) http.Handler {
 	r := chi.NewRouter()
 
-	r.Post("/login", h.Login)
-	r.Post("/login/mfa", h.CompleteMFALogin)
-	r.Post("/logout", h.Logout)
+	r.Group(func(public chi.Router) {
+		if len(auditMiddleware) > 0 && auditMiddleware[0] != nil {
+			public.Use(auditMiddleware[0])
+		}
+		public.Post("/login", h.Login)
+		public.Post("/login/mfa", h.CompleteMFALogin)
+		public.Post("/logout", h.Logout)
+	})
 
 	// Protected routes
 	r.Group(func(protected chi.Router) {
 		protected.Use(RequireAuth(h.authService))
+		if len(auditMiddleware) > 0 && auditMiddleware[0] != nil {
+			protected.Use(auditMiddleware[0])
+		}
 		protected.Get("/me", h.Me)
 		protected.Post("/logout-all", h.LogoutAll)
 		protected.Get("/mfa/status", h.MFAStatus)

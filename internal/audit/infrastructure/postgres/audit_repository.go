@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"time"
 
 	"erp/internal/audit/domain"
 	"erp/internal/audit/ports"
@@ -23,6 +24,82 @@ func NewAuditRepository(pool *pgxpool.Pool) ports.AuditRepository {
 		pool:    pool,
 		queries: sqlc.New(pool),
 	}
+}
+
+// AppendEvent serializes the global hash chain with a PostgreSQL transaction
+// advisory lock. The event and all associated changes commit atomically, so
+// multiple API replicas cannot fork the chain or leave partial state diffs.
+func (r *auditRepository) AppendEvent(ctx context.Context, event *domain.AuditEvent, changes []domain.EntityChange) (*domain.AuditEvent, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended('audit.events.hash-chain', 0))"); err != nil {
+		return nil, err
+	}
+
+	qtx := r.queries.WithTx(tx)
+	previousHash := domain.GenesisHash
+	latest, err := qtx.GetLatestAuditEvent(ctx)
+	if err == nil {
+		previousHash = latest.RecordHash
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+
+	event.Payload = domain.CanonicalizeJSON(event.Payload)
+	event.PreviousHash = previousHash
+	event.OccurredAt = time.Now().UTC().Truncate(time.Microsecond)
+	event.RecordHash = domain.ComputeRecordHash(
+		event.PreviousHash,
+		event.UserID,
+		event.LegalEntityID,
+		event.Action,
+		event.ResourceType,
+		event.ResourceID,
+		event.Payload,
+		event.OccurredAt,
+	)
+
+	row, err := qtx.InsertAuditEvent(ctx, sqlc.InsertAuditEventParams{
+		UserID:        toPgUUIDPtr(event.UserID),
+		LegalEntityID: toPgUUIDPtr(event.LegalEntityID),
+		Action:        event.Action,
+		ResourceType:  event.ResourceType,
+		ResourceID:    event.ResourceID,
+		Payload:       event.Payload,
+		IpAddress:     toPgText(event.IPAddress),
+		UserAgent:     toPgText(event.UserAgent),
+		PreviousHash:  toPgText(event.PreviousHash),
+		RecordHash:    event.RecordHash,
+		OccurredAt:    toPgTimestamptz(&event.OccurredAt),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	inserted := toDomainAuditEvent(&row)
+	for i := range changes {
+		changes[i].EventID = inserted.ID
+		changeRow, err := qtx.InsertEntityChange(ctx, sqlc.InsertEntityChangeParams{
+			EventID:     toPgUUID(changes[i].EventID),
+			TableName:   changes[i].TableName,
+			RecordID:    changes[i].RecordID,
+			BeforeState: changes[i].BeforeState,
+			AfterState:  changes[i].AfterState,
+		})
+		if err != nil {
+			return nil, err
+		}
+		inserted.Changes = append(inserted.Changes, *toDomainEntityChange(&changeRow))
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return inserted, nil
 }
 
 func (r *auditRepository) InsertEvent(ctx context.Context, event *domain.AuditEvent) (*domain.AuditEvent, error) {

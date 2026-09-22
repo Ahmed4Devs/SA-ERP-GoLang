@@ -3,9 +3,11 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"erp/internal/platform/database"
 	"erp/internal/platform/database/sqlc"
+	platformsecurity "erp/internal/platform/security"
 	"erp/internal/zatca/domain"
 	"erp/internal/zatca/ports"
 
@@ -14,14 +16,20 @@ import (
 )
 
 type Repository struct {
-	db *database.DB
-	q  *sqlc.Queries
+	db             *database.DB
+	q              *sqlc.Queries
+	credentialsBox *platformsecurity.SecretBox
 }
 
-func NewRepository(db *database.DB) *Repository {
+func NewRepository(db *database.DB, credentialsBox ...*platformsecurity.SecretBox) *Repository {
+	var box *platformsecurity.SecretBox
+	if len(credentialsBox) > 0 {
+		box = credentialsBox[0]
+	}
 	return &Repository{
-		db: db,
-		q:  sqlc.New(db.Pool),
+		db:             db,
+		q:              sqlc.New(db.Pool),
+		credentialsBox: box,
 	}
 }
 
@@ -99,7 +107,7 @@ func (r *Repository) GetActiveCSID(ctx context.Context, egsUnitID uuid.UUID) (*d
 	if err != nil {
 		return nil, err
 	}
-	return mapCSIDToDomain(row), nil
+	return r.mapCSIDToDomain(row)
 }
 
 func (r *Repository) ListCSIDs(ctx context.Context, egsUnitID uuid.UUID) ([]*domain.CSID, error) {
@@ -109,7 +117,11 @@ func (r *Repository) ListCSIDs(ctx context.Context, egsUnitID uuid.UUID) ([]*dom
 	}
 	res := make([]*domain.CSID, len(rows))
 	for i, row := range rows {
-		res[i] = mapCSIDToDomain(row)
+		mapped, err := r.mapCSIDToDomain(row)
+		if err != nil {
+			return nil, err
+		}
+		res[i] = mapped
 	}
 	return res, nil
 }
@@ -119,13 +131,17 @@ func (r *Repository) CreateCSID(ctx context.Context, csid *domain.CSID) (*domain
 	if csid.ExpiresAt != nil {
 		exp = toPgTimestamptz(*csid.ExpiresAt)
 	}
+	secret, privateKey, err := r.encryptCredentials(csid.Secret, csid.PrivateKeyPEM)
+	if err != nil {
+		return nil, err
+	}
 	row, err := r.q.CreateCSID(ctx, sqlc.CreateCSIDParams{
 		ID:                  toPgUUID(csid.ID),
 		EgsUnitID:           toPgUUID(csid.EGSUnitID),
 		CsidType:            string(csid.CSIDType),
 		BinarySecurityToken: csid.BinarySecurityToken,
-		Secret:              csid.Secret,
-		PrivateKeyPem:       csid.PrivateKeyPEM,
+		Secret:              secret,
+		PrivateKeyPem:       privateKey,
 		PublicKeyPem:        csid.PublicKeyPEM,
 		CertificatePem:      toPgText(csid.CertificatePEM),
 		RequestID:           toPgText(csid.RequestID),
@@ -136,7 +152,7 @@ func (r *Repository) CreateCSID(ctx context.Context, csid *domain.CSID) (*domain
 	if err != nil {
 		return nil, err
 	}
-	return mapCSIDToDomain(row), nil
+	return r.mapCSIDToDomain(row)
 }
 
 func (r *Repository) ReserveNextSequence(ctx context.Context, egsUnitID uuid.UUID, invoiceType string) (int64, string, error) {
@@ -370,14 +386,18 @@ func mapEGSToDomain(row sqlc.ZatcaEgsUnits) *domain.EGSUnit {
 	}
 }
 
-func mapCSIDToDomain(row sqlc.ZatcaCsids) *domain.CSID {
+func (r *Repository) mapCSIDToDomain(row sqlc.ZatcaCsids) (*domain.CSID, error) {
+	secret, privateKey, err := r.decryptCredentials(row.Secret, row.PrivateKeyPem)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt CSID %s credentials: %w", toUUID(row.ID), err)
+	}
 	return &domain.CSID{
 		ID:                  toUUID(row.ID),
 		EGSUnitID:           toUUID(row.EgsUnitID),
 		CSIDType:            domain.CSIDType(row.CsidType),
 		BinarySecurityToken: row.BinarySecurityToken,
-		Secret:              row.Secret,
-		PrivateKeyPEM:       row.PrivateKeyPem,
+		Secret:              secret,
+		PrivateKeyPEM:       privateKey,
 		PublicKeyPEM:        row.PublicKeyPem,
 		CertificatePEM:      fromPgText(row.CertificatePem),
 		RequestID:           fromPgText(row.RequestID),
@@ -385,7 +405,42 @@ func mapCSIDToDomain(row sqlc.ZatcaCsids) *domain.CSID {
 		ExpiresAt:           fromPgTimestamptzPtr(row.ExpiresAt),
 		Status:              row.Status,
 		CreatedAt:           fromPgTimestamptz(row.CreatedAt),
+	}, nil
+}
+
+const encryptedCredentialPrefix = "enc:v1:"
+
+func (r *Repository) encryptCredentials(secret, privateKey string) (string, string, error) {
+	if r.credentialsBox == nil {
+		return secret, privateKey, nil
 	}
+	encryptedSecret, err := r.credentialsBox.Encrypt(secret)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to encrypt CSID secret: %w", err)
+	}
+	encryptedPrivateKey, err := r.credentialsBox.Encrypt(privateKey)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to encrypt CSID private key: %w", err)
+	}
+	return encryptedCredentialPrefix + encryptedSecret, encryptedCredentialPrefix + encryptedPrivateKey, nil
+}
+
+func (r *Repository) decryptCredentials(secret, privateKey string) (string, string, error) {
+	if r.credentialsBox == nil {
+		return secret, privateKey, nil
+	}
+	if !strings.HasPrefix(secret, encryptedCredentialPrefix) || !strings.HasPrefix(privateKey, encryptedCredentialPrefix) {
+		return "", "", fmt.Errorf("unencrypted CSID credentials are not accepted when credential encryption is enabled")
+	}
+	decryptedSecret, err := r.credentialsBox.Decrypt(strings.TrimPrefix(secret, encryptedCredentialPrefix))
+	if err != nil {
+		return "", "", err
+	}
+	decryptedPrivateKey, err := r.credentialsBox.Decrypt(strings.TrimPrefix(privateKey, encryptedCredentialPrefix))
+	if err != nil {
+		return "", "", err
+	}
+	return decryptedSecret, decryptedPrivateKey, nil
 }
 
 func mapDocToDomain(row sqlc.ZatcaDocuments) *domain.ZATCADocument {

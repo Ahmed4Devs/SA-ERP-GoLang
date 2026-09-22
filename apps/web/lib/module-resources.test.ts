@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { appendTenant, buildMutationRequest, normalizeRows } from "@/components/modules/module-api-view";
+import {
+  appendQueryParams,
+  appendTenant,
+  buildMutationRequest,
+  buildResourcePath,
+  normalizeRows,
+} from "@/components/modules/module-api-view";
 import { moduleResources } from "@/lib/module-resources";
 
 describe("module API resources", () => {
@@ -14,6 +20,22 @@ describe("module API resources", () => {
     expect(appendTenant("/api/v1/items", "entity-1")).toBe("/api/v1/items?legal_entity_id=entity-1");
     expect(appendTenant("/api/v1/items?limit=20", "entity-1")).toBe("/api/v1/items?limit=20&legal_entity_id=entity-1");
     expect(appendTenant("/api/v1/auth/me", "entity-1", false)).toBe("/api/v1/auth/me");
+  });
+
+  it("builds required dependent-filter paths without sending incomplete requests", () => {
+    const statements = moduleResources.banking.find((resource) => resource.key === "statements");
+    const payslips = moduleResources.payroll.find((resource) => resource.key === "payslips");
+    expect(statements?.filters?.[0]?.optionsPath).toBe("/api/v1/banking/bank-accounts");
+    expect(payslips?.filters?.[0]?.optionsPath).toBe("/api/v1/payroll/periods");
+    expect(buildResourcePath(statements!, "entity-1", { bank_account_id: "bank-1" })).toBe(
+      "/api/v1/banking/statements?legal_entity_id=entity-1&bank_account_id=bank-1",
+    );
+    expect(buildResourcePath(payslips!, "entity-1", { period_id: "period-1" })).toBe(
+      "/api/v1/payroll/payslips?legal_entity_id=entity-1&period_id=period-1",
+    );
+    expect(appendQueryParams("/api/v1/items?limit=20", { status: "ACTIVE" })).toBe(
+      "/api/v1/items?limit=20&status=ACTIVE",
+    );
   });
 
   it("normalizes common API envelopes", () => {

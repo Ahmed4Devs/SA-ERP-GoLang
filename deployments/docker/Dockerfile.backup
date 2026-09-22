@@ -1,0 +1,12 @@
+FROM alpine:3.23
+
+RUN apk --no-cache add bash coreutils openssl postgresql18-client tzdata && \
+    addgroup -S backupgroup && adduser -S backupuser -G backupgroup
+
+COPY scripts/backup.sh /usr/local/bin/erp-backup
+RUN chmod 0555 /usr/local/bin/erp-backup && \
+    mkdir -p /backups && chown backupuser:backupgroup /backups
+
+USER backupuser
+
+ENTRYPOINT ["/usr/local/bin/erp-backup"]

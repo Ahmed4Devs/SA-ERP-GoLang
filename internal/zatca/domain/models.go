@@ -87,8 +87,8 @@ type CSID struct {
 	EGSUnitID           uuid.UUID  `json:"egs_unit_id"`
 	CSIDType            CSIDType   `json:"csid_type"`
 	BinarySecurityToken string     `json:"binary_security_token"`
-	Secret              string     `json:"secret"`
-	PrivateKeyPEM       string     `json:"private_key_pem"`
+	Secret              string     `json:"-"`
+	PrivateKeyPEM       string     `json:"-"`
 	PublicKeyPEM        string     `json:"public_key_pem"`
 	CertificatePEM      string     `json:"certificate_pem"`
 	RequestID           string     `json:"request_id,omitempty"`

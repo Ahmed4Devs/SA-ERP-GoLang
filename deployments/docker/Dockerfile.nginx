@@ -1,0 +1,5 @@
+FROM nginx:1.30.0-alpine
+
+# Refresh distribution packages because the upstream immutable image can lag
+# Alpine security updates between Nginx releases.
+RUN apk --no-cache upgrade

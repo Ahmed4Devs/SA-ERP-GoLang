@@ -1,7 +1,10 @@
 services:
   # 1. Primary Relational Database (PostgreSQL 18)
   postgres:
-    image: postgres:18.2-alpine
+    image: erp-postgres:18.6
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile.postgres
     restart: unless-stopped
     shm_size: 256mb
     environment:
@@ -10,8 +13,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
       TZ: Asia/Riyadh
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - pgbackups:/backups
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:?required} -d ${POSTGRES_DB:?required}"]
       interval: 10s
@@ -63,6 +65,7 @@ services:
       ZATCA_ENABLED: "${ZATCA_ENABLED:-false}"
       ZATCA_ENVIRONMENT: "${ZATCA_ENVIRONMENT:-simulation}"
       ZATCA_PRODUCTION_ACKNOWLEDGED: "${ZATCA_PRODUCTION_ACKNOWLEDGED:-false}"
+      ZATCA_CREDENTIALS_ENCRYPTION_KEY: "${ZATCA_CREDENTIALS_ENCRYPTION_KEY:-}"
       ZATCA_BASE_URL: "${ZATCA_BASE_URL:-https://gw-fatoora.zatca.gov.sa/e-invoicing/core}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
       OTEL_EXPORTER_OTLP_INSECURE: "${OTEL_EXPORTER_OTLP_INSECURE:-false}"
@@ -100,6 +103,7 @@ services:
       ZATCA_ENABLED: "${ZATCA_ENABLED:-false}"
       ZATCA_ENVIRONMENT: "${ZATCA_ENVIRONMENT:-simulation}"
       ZATCA_PRODUCTION_ACKNOWLEDGED: "${ZATCA_PRODUCTION_ACKNOWLEDGED:-false}"
+      ZATCA_CREDENTIALS_ENCRYPTION_KEY: "${ZATCA_CREDENTIALS_ENCRYPTION_KEY:-}"
       ZATCA_BASE_URL: "${ZATCA_BASE_URL:-https://gw-fatoora.zatca.gov.sa/e-invoicing/core}"
       TZ: Asia/Riyadh
     depends_on:
@@ -108,7 +112,32 @@ services:
     networks:
       - erp-internal
 
-  # 5. Next.js Web Frontend
+  # 5. On-demand encrypted database backup job. Invoke this service from a
+  # host scheduler; the "operations" profile keeps it out of normal startup.
+  erp-backup:
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile.backup
+    profiles: ["operations"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: "${POSTGRES_USER:?POSTGRES_USER is required}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
+      POSTGRES_DB: "${POSTGRES_DB:?POSTGRES_DB is required}"
+      BACKUP_ENCRYPTION_KEY: "${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY is required}"
+      RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}"
+      BACKUP_DIR: /backups
+      TZ: Asia/Riyadh
+    volumes:
+      - pgbackups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - erp-internal
+
+  # 6. Next.js Web Frontend
   erp-web:
     build:
       context: ../../
@@ -123,9 +152,12 @@ services:
     networks:
       - erp-internal
 
-  # 6. Production Reverse Proxy (Nginx)
+  # 7. Production Reverse Proxy (Nginx)
   nginx:
-    image: nginx:1.27-alpine
+    image: erp-nginx:1.30.0
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile.nginx
     restart: always
     ports:
       - "${HTTP_PORT:-80}:80"
@@ -136,8 +168,10 @@ services:
       - "${TLS_CERT_PATH:?TLS_CERT_PATH is required}:/etc/nginx/ssl/erp.crt:ro"
       - "${TLS_KEY_PATH:?TLS_KEY_PATH is required}:/etc/nginx/ssl/erp.key:ro"
     depends_on:
-      - erp-web
-      - erp-api
+      erp-web:
+        condition: service_healthy
+      erp-api:
+        condition: service_healthy
     networks:
       - erp-internal
       - erp-public

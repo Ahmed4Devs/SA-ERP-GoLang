@@ -5,8 +5,12 @@ bin
 data
 docs
 context
+.tmp-backup-drill
 **/node_modules
 **/.next
+**/test-results
+**/playwright-report
+**/blob-report
 **/*.exe
 **/*.exe~
 **/*.test

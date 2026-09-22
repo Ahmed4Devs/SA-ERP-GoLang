@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "Saudi Commercial ERP Platform",
-    "subtitle": "Integrated Enterprise Platform compliant with ZATCA Phase 2 and GOSI standards",
+    "subtitle": "Integrated enterprise platform designed to support Saudi tax, social-insurance, and business workflows",
     "phase": "Phase 7: Versioned Approval Workflow Engine",
     "ready": "System Operational & Ready",
     "current_status": "Operational Status"
@@ -25,7 +25,7 @@
     "attendance": "Attendance & Time",
     "leave": "Leave & Balances",
     "payroll": "Payroll Engine",
-    "gosi": "GOSI Compliance",
+    "gosi": "GOSI Processing",
     "fixedAssets": "Fixed Assets & Depreciation",
     "budgets": "Budgeting & Financial Control",
     "zatca": "ZATCA E-Invoicing",
@@ -51,7 +51,7 @@
     "api_connected": "Connected to Backend (Go API)",
     "db_ready": "Database Ready (PostgreSQL)",
     "audit_active": "Audit Engine Active",
-    "zatca_compliant": "ZATCA Phase 2 Ready",
+    "zatca_compliant": "ZATCA Integration Available",
     "uptime": "Uptime"
   },
   "metrics": {
@@ -115,7 +115,7 @@
   },
   "audit": {
     "title": "Immutable Financial & Security Audit Trail",
-    "subtitle": "Append-only tamper-evident audit history protected by cryptographic SHA-256 hash chaining compliant with Saudi regulatory and financial governance standards",
+    "subtitle": "Append-only tamper-evident audit history protected by cryptographic SHA-256 hash chaining",
     "integrity_title": "Audit Cryptographic Chain Integrity",
     "integrity_valid": "Audit Hash Chain 100% Verified & Intact",
     "integrity_broken": "Warning: Cryptographic Chain Tampering Detected",
@@ -245,7 +245,7 @@
   },
   "tax": {
     "title": "VAT Management & ZATCA Tax Engine",
-    "subtitle": "Saudi ZATCA-compliant indirect tax engine featuring effective-dated historical rates and 16-box VAT return declaration",
+    "subtitle": "Saudi indirect-tax engine featuring effective-dated historical rates and a 16-box VAT return declaration",
     "tab_overview": "Overview & Metrics",
     "tab_codes": "Tax Codes & Rates",
     "tab_calculator": "Live VAT Calculator",
@@ -387,7 +387,7 @@
   },
   "customers": {
     "title": "Customer Master & Accounts Receivable (AR)",
-    "subtitle": "ZATCA Phase 2 compliant customer master, open invoice tracking, payment receipt vouchers, and dynamic aging analysis",
+    "subtitle": "Customer master, open invoice tracking, payment receipt vouchers, and dynamic aging analysis",
     "kpi_total_receivables": "Total Receivables (AR)",
     "kpi_active_customers": "Active Customers",
     "kpi_overdue_invoices": "Overdue Invoices",
@@ -433,7 +433,7 @@
   },
   "sales": {
     "title": "Sales & Order-to-Cash Workflow (ZATCA Invoicing)",
-    "subtitle": "Quotations, Sales Orders, Goods Deliveries, ZATCA Phase 2 Compliant Standard & Simplified Invoices, and Credit Notes",
+    "subtitle": "Quotations, sales orders, deliveries, standard and simplified invoice workflows, and credit notes",
     "kpi_total_invoiced": "Total Invoiced Revenue",
     "kpi_open_orders": "Active Sales Orders",
     "kpi_deliveries": "Completed Goods Shipments",
@@ -464,7 +464,7 @@
     "status_posted": "Posted to GL",
     "status_delivered": "Delivered",
     "status_cancelled": "Cancelled",
-    "zatca_compliant": "ZATCA Phase 2 Compliant",
+    "zatca_compliant": "ZATCA Submission Status",
     "view_qr": "View QR Code",
     "post_invoice": "Post to General Ledger",
     "confirm_order": "Confirm & Check Credit",
@@ -640,7 +640,7 @@
   },
   "hr": {
     "title": "Human Resources & Contracts Management",
-    "description": "Unified employee master, Qiwa-compliant contracts with salary breakdown, privacy-first ID/IBAN masking, and Nitaqat Saudization metrics",
+    "description": "Unified employee master, contract salary breakdown, privacy-first ID/IBAN masking, and Nitaqat Saudization metrics",
     "kpi_total_employees": "Total Employees",
     "kpi_saudization_rate": "Saudization Rate",
     "kpi_nitaqat_tier": "Nitaqat Tier",
@@ -740,11 +740,11 @@
   "payroll": {
     "badge": "Payroll Engine & Wage Protection (WPS)",
     "title": "Payroll Management & Disbursement Runs",
-    "subtitle": "Deterministic, immutable payroll calculation engine compliant with Saudi Wage Protection System (WPS / SIF), GOSI, and Labor Law EOS Award",
+    "subtitle": "Deterministic payroll calculations with WPS/SIF export, GOSI inputs, and end-of-service award workflows",
     "kpi_total_payroll": "Total Monthly Payroll (Gross)",
     "kpi_total_net": "Net Payable Salaries",
     "kpi_gosi_deductions": "GOSI Deductions",
-    "kpi_wps_compliance": "WPS Compliance Rate",
+    "kpi_wps_compliance": "WPS Export Coverage",
     "tab_runs": "Payroll Runs",
     "tab_payslips": "Individual Payslips",
     "tab_components": "Salary Structures & Components",
@@ -769,7 +769,7 @@
   "dashboard": {
     "badge": "Unified Financial & Operational Command Center",
     "title": "Executive ERP Dashboard",
-    "subtitle": "Real-time aggregated KPIs for financial performance, treasury liquidity, open ledgers, stock alerts, and tax compliance",
+    "subtitle": "Real-time aggregated KPIs for financial performance, treasury liquidity, open ledgers, stock alerts, and tax filing status",
     "refresh": "Refresh Data",
     "last_updated": "Last Updated",
     "financial_overview": "Financial Overview",
@@ -812,7 +812,7 @@
     "col_requested_at": "Requested At",
     "col_action": "Action",
     "btn_review": "Review & Decide",
-    "zatca_status": "ZATCA E-Invoicing Compliance",
+    "zatca_status": "ZATCA E-Invoicing Status",
     "zatca_desc": "Zakat, Tax & Customs Authority Phase 2 Clearance & Reporting Status",
     "zatca_compliance_rate": "Clearance & Filing Rate",
     "zatca_cleared": "Cleared & Reported",
@@ -838,5 +838,3 @@
     "action_view_reports": "Financial Reports"
   }
 }
-
-

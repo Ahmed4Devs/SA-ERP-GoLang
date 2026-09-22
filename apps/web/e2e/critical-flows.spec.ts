@@ -149,3 +149,38 @@ test("a module write is sent to the API with the selected tenant and refreshed",
   await expect(page.getByText("E2E-CAT", { exact: true })).toBeVisible();
   expect(receivedBody).toMatchObject({ legal_entity_id: entities[0].legal_entity_id, code: "E2E-CAT" });
 });
+
+test("dependent module filters never send an incomplete banking request", async ({ page }) => {
+  await mockAuthenticatedSession(page);
+  const bankAccounts = [
+    { id: "50000000-0000-0000-0000-000000000001", bank_name_ar: "البنك الأول", bank_name_en: "First Bank", account_code: "B1" },
+    { id: "50000000-0000-0000-0000-000000000002", bank_name_ar: "البنك الثاني", bank_name_en: "Second Bank", account_code: "B2" },
+  ];
+  const statementRequests: URL[] = [];
+
+  await page.route("**/api/v1/banking/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/bank-accounts")) {
+      await json(route, 200, { data: bankAccounts });
+      return;
+    }
+    if (url.pathname.endsWith("/statements")) {
+      statementRequests.push(url);
+      await json(route, 200, { data: [] });
+      return;
+    }
+    await json(route, 200, { data: [] });
+  });
+
+  await page.goto("/banking");
+  await page.getByRole("button", { name: /كشوف الحساب|statements/i }).click();
+
+  const accountSelector = page.getByLabel(/الحساب البنكي|bank account/i);
+  await expect(accountSelector).toHaveValue(bankAccounts[0].id);
+  await expect.poll(() => statementRequests.length).toBeGreaterThan(0);
+  expect(statementRequests.every((url) => url.searchParams.has("bank_account_id"))).toBe(true);
+  expect(statementRequests.at(-1)?.searchParams.get("legal_entity_id")).toBe(entities[0].legal_entity_id);
+
+  await accountSelector.selectOption(bankAccounts[1].id);
+  await expect.poll(() => statementRequests.at(-1)?.searchParams.get("bank_account_id")).toBe(bankAccounts[1].id);
+});

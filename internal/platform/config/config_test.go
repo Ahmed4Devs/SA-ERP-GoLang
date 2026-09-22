@@ -2,15 +2,16 @@ package config
 
 import (
 	"encoding/base64"
-	"os"
 	"testing"
 	"time"
 )
 
 func TestConfigLoadDefault(t *testing.T) {
-	// Clear env vars that might interfere
-	os.Unsetenv("APP_ENV")
-	os.Unsetenv("HTTP_PORT")
+	// Isolate the default-loading contract from CI and integration-test
+	// environment variables inherited by the test process.
+	t.Setenv("APP_ENV", "")
+	t.Setenv("HTTP_PORT", "")
+	t.Setenv("TEST_DATABASE_URL", "")
 
 	cfg, err := Load()
 	if err != nil {
@@ -71,8 +72,7 @@ func TestConfigValidation(t *testing.T) {
 }
 
 func TestGetDurationEnv(t *testing.T) {
-	os.Setenv("TEST_DURATION", "30s")
-	defer os.Unsetenv("TEST_DURATION")
+	t.Setenv("TEST_DURATION", "30s")
 
 	d := getDurationEnv("TEST_DURATION", 10*time.Second)
 	if d != 30*time.Second {
@@ -103,6 +103,7 @@ func TestProductionZATCAPolicy(t *testing.T) {
 			Telemetry: TelemetryConfig{SampleRatio: 0.1},
 		}
 	}
+	zatcaKey := base64.StdEncoding.EncodeToString([]byte("01234567890123456789012345678901"))
 
 	t.Run("disabled integration is allowed", func(t *testing.T) {
 		cfg := newProductionConfig()
@@ -116,6 +117,7 @@ func TestProductionZATCAPolicy(t *testing.T) {
 		cfg.ZATCA.Enabled = true
 		cfg.ZATCA.Environment = "production"
 		cfg.ZATCA.BaseURL = "https://gw-fatoora.zatca.gov.sa/e-invoicing/core"
+		cfg.ZATCA.CredentialsKey = zatcaKey
 		if err := cfg.Validate(); err == nil {
 			t.Fatal("expected enabled ZATCA integration without acknowledgement to be rejected")
 		}
@@ -127,6 +129,7 @@ func TestProductionZATCAPolicy(t *testing.T) {
 		cfg.ZATCA.Environment = "production"
 		cfg.ZATCA.ProductionAcknowledged = true
 		cfg.ZATCA.BaseURL = "http://zatca.example.sa"
+		cfg.ZATCA.CredentialsKey = zatcaKey
 		if err := cfg.Validate(); err == nil {
 			t.Fatal("expected enabled ZATCA integration with an HTTP endpoint to be rejected")
 		}
@@ -138,8 +141,30 @@ func TestProductionZATCAPolicy(t *testing.T) {
 		cfg.ZATCA.Environment = "production"
 		cfg.ZATCA.ProductionAcknowledged = true
 		cfg.ZATCA.BaseURL = "https://gw-fatoora.zatca.gov.sa/e-invoicing/core"
+		cfg.ZATCA.CredentialsKey = zatcaKey
 		if err := cfg.Validate(); err != nil {
 			t.Fatalf("expected acknowledged HTTPS ZATCA integration to be valid, got %v", err)
+		}
+	})
+
+	t.Run("enabled live integration requires a credential encryption key", func(t *testing.T) {
+		cfg := newProductionConfig()
+		cfg.ZATCA.Enabled = true
+		cfg.ZATCA.Environment = "production"
+		cfg.ZATCA.ProductionAcknowledged = true
+		cfg.ZATCA.BaseURL = "https://gw-fatoora.zatca.gov.sa/e-invoicing/core"
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("expected live ZATCA integration without credential encryption to be rejected")
+		}
+	})
+
+	t.Run("configured credential encryption key is always validated", func(t *testing.T) {
+		cfg := newProductionConfig()
+		cfg.ZATCA.Enabled = false
+		cfg.ZATCA.Environment = "simulation"
+		cfg.ZATCA.CredentialsKey = "not-a-valid-key"
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("expected an invalid optional credential encryption key to be rejected")
 		}
 	})
 }

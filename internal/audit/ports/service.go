@@ -10,13 +10,11 @@ import (
 
 // AuditRepository defines the persistence operations for audit trail data.
 type AuditRepository interface {
-	InsertEvent(ctx context.Context, event *domain.AuditEvent) (*domain.AuditEvent, error)
-	GetLatestEvent(ctx context.Context) (*domain.AuditEvent, error)
+	AppendEvent(ctx context.Context, event *domain.AuditEvent, changes []domain.EntityChange) (*domain.AuditEvent, error)
 	GetEventByID(ctx context.Context, id uuid.UUID) (*domain.AuditEvent, error)
 	ListEvents(ctx context.Context, filter domain.AuditFilter) ([]domain.AuditEvent, int64, error)
 	ListEventsChronological(ctx context.Context, limit, offset int32) ([]domain.AuditEvent, error)
 
-	InsertEntityChange(ctx context.Context, change *domain.EntityChange) (*domain.EntityChange, error)
 	ListEntityChanges(ctx context.Context, eventID uuid.UUID) ([]domain.EntityChange, error)
 
 	InsertSecurityEvent(ctx context.Context, event *domain.SecurityEvent) (*domain.SecurityEvent, error)

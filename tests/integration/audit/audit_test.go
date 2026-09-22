@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -139,6 +140,47 @@ func TestAudit_CryptographicHashChaining(t *testing.T) {
 		if !domain.ValidateRecordHash(events[i]) {
 			t.Fatalf("event %d record hash validation failed", i)
 		}
+	}
+}
+
+func TestAudit_ConcurrentWritersAcrossServiceInstancesKeepSingleChain(t *testing.T) {
+	auditMod, _, _, db, ctx := setupAuditTest(t)
+	secondInstance := audit.NewModule(&config.Config{}, db)
+
+	const writerCount = 24
+	errors := make(chan error, writerCount)
+	var wg sync.WaitGroup
+	for i := 0; i < writerCount; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			service := auditMod.Service
+			if index%2 == 1 {
+				service = secondInstance.Service
+			}
+			_, err := service.RecordEvent(ctx, ports.RecordEventCommand{
+				Action:       "CONCURRENT_WRITE",
+				ResourceType: "AUDIT_CHAIN_TEST",
+				ResourceID:   uuid.NewString(),
+				Payload:      []byte(`{"writer": "concurrent"}`),
+			})
+			errors <- err
+		}(i)
+	}
+	wg.Wait()
+	close(errors)
+
+	for err := range errors {
+		if err != nil {
+			t.Fatalf("concurrent audit write failed: %v", err)
+		}
+	}
+	result, err := auditMod.Service.VerifyChainIntegrity(ctx)
+	if err != nil {
+		t.Fatalf("verify concurrent chain: %v", err)
+	}
+	if !result.IsValid {
+		t.Fatalf("concurrent writers forked the audit chain: %s", result.Details)
 	}
 }
 

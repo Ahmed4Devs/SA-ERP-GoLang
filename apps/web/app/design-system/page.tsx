@@ -445,7 +445,7 @@ export default function DesignSystemPage() {
           />
 
           <KPIMetricCard
-            title={isAr ? "الامتثال لزاتكا (المرحلة 2)" : "ZATCA Compliance"}
+            title={isAr ? "تكامل زاتكا (المرحلة 2)" : "ZATCA Integration"}
             value="98.5%"
             change="142 مخلصة"
             changeType="positive"

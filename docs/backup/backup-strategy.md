@@ -1,61 +1,67 @@
-# Saudi Enterprise ERP - Backup & Archiving Strategy
+# ERP-GO Backup and Recovery Baseline
 
-## 1. Regulatory Compliance (Saudi ZATCA & Data Retention)
-Under ZATCA (Zakat, Tax and Customs Authority) regulations and the Saudi Electronic Transactions Law:
-- All accounting books, invoices, credit/debit notes, and audit logs must be securely retained for **minimum 6 to 10 years**.
-- Data must reside within Kingdom of Saudi Arabia sovereign cloud boundaries or conform to the Saudi Personal Data Protection Law (PDPL).
-- Immutable, tamper-evident backups must be taken continuously.
+## Implemented capability
 
----
-
-## 2. Backup Topology & Frequency
+The repository implements an encrypted PostgreSQL logical backup in custom
+`pg_dump` format. Each final `.dump.enc` artifact receives a SHA-256 manifest,
+and CI recreates a dedicated database from the encrypted artifact and verifies
+a marker row.
 
 ```mermaid
-graph TD
-    DB[(PostgreSQL 18 Primary)] -->|Daily pg_dump custom format| FullDump[Encrypted Full Dump .dump.enc]
-    DB -->|Continuous pg_receivewal| WALArchive[WAL Archive Stream]
-    FullDump --> S3Local[Primary Storage /backups]
-    WALArchive --> S3Local
-    S3Local -->|Replication| S3Riyadh[Saudi Sovereign Cloud S3 Bucket]
+graph LR
+    DB[(PostgreSQL 18)] -->|pg_dump custom format| Dump[Temporary .dump]
+    Dump -->|AES-256-CBC + PBKDF2| Encrypted[.dump.enc]
+    Encrypted --> Checksum[.sha256]
+    Encrypted --> Volume[pgbackups volume]
 ```
 
-### Schedule & Granularity
-1. **Continuous WAL Archiving**:
-   - PostgreSQL WAL archiving allows **Point-In-Time Recovery (PITR)** down to the exact transaction before any incident or data corruption.
-   - Target RPO (Recovery Point Objective): `< 5 minutes`.
-2. **Daily Full Logical Backup**:
-   - Automated `pg_dump` executed every midnight at **02:00 AST (Asia/Riyadh)**.
-   - Target RTO (Recovery Time Objective): `< 30 minutes`.
-3. **Weekly Storage Snapshot**:
-   - Snapshot of persistent PostgreSQL and document-storage volumes.
+Encryption is mandatory by default. `scripts/backup.sh` exits unless
+`BACKUP_ENCRYPTION_KEY` is present. `ALLOW_UNENCRYPTED_BACKUP=true` is reserved
+for an explicitly approved non-production drill.
 
----
+## Recovery objectives
 
-## 3. Security, Encryption & Integrity
-- **Compression**: PostgreSQL custom-format compression (`pg_dump --format=custom --compress=9`) keeps the archive compatible with `pg_restore` and supports selective/parallel restore.
-- **Encryption**: AES-256 encryption via OpenSSL or GPG using dual-key split custody before writing to disk or cloud storage.
-- **Integrity**: Every backup archive generates a companion `.sha256` checksum file to guarantee that archives have not suffered bitrot or tampering.
+The checked-in deployment does **not** configure continuous WAL archiving,
+point-in-time recovery, immutable object storage, or cross-region replication.
+Accordingly:
 
----
+- A daily schedule has a worst-case logical-backup RPO of approximately 24
+  hours, not five minutes.
+- RTO is environment- and data-size-dependent and must be measured by a restore
+  drill; the repository does not promise a fixed 30-minute RTO.
+- PITR and off-site retention remain deployment architecture requirements. Do
+  not claim them until the selected PostgreSQL platform is configured and a
+  timed recovery exercise has passed.
 
-## 4. Retention Policy Matrix
+For financial production use, the operator must add a Saudi-region backup
+target (or another approved data-residency location), immutable retention,
+separate credentials, alerting, and WAL-based PITR through the managed database
+or a reviewed tool such as pgBackRest/WAL-G.
 
-| Tier | Frequency | Retention Duration | Target Storage |
-| :--- | :--- | :--- | :--- |
-| **Hot (Daily)** | Every 24 hours | 30 days | High-speed local SSD (`/backups`) |
-| **Warm (Monthly)** | End-of-month snapshot | 12 months | Cloud S3 Standard (Riyadh region) |
-| **Cold / Archive (Annual)** | End-of-fiscal-year | 10 years | S3 Glacier Flexible / Deep Archive (Saudi DC) |
+## Running the backup job
 
----
+From the repository root, create
+`deployments/compose/.env.production` from the root template and load actual
+secrets from the deployment secret manager. Then run:
 
-## 5. Automated Backup Script Execution
-Backups are orchestrated via `scripts/backup.sh` scheduled via cron or systemd timer:
 ```bash
-# Example crontab entry for 02:00 AM Riyadh time
-0 2 * * * /opt/erp/scripts/backup.sh >> /var/log/erp-backup.log 2>&1
+docker compose --env-file deployments/compose/.env.production \
+  -f deployments/compose/docker-compose.prod.yml \
+  --profile operations run --rm erp-backup
 ```
 
-The script creates `erp_<database>_<timestamp>.dump` (or `.dump.enc` when
-`BACKUP_ENCRYPTION_KEY` is set) and a checksum named after the final artifact,
-for example `erp_erp_db_20260918_020000.dump.enc.sha256`. A backup is not
-considered valid until `sha256sum -c` succeeds and a restore drill has passed.
+Schedule that exact one-shot command at 02:00 Asia/Riyadh using the host's
+systemd timer, cron service, or the production orchestrator. Alert on any
+non-zero exit and on backup age exceeding 26 hours.
+
+The local retention default is 30 days (`BACKUP_RETENTION_DAYS`). This is an
+operational cache, not a regulatory archive. Copy verified encrypted artifacts
+and their `.sha256` files to the approved immutable off-site tier before local
+pruning.
+
+## Required verification
+
+At least monthly, restore the newest encrypted artifact into an isolated
+database, run migrations, verify application invariants, and record the actual
+RPO/RTO. CI tests the mechanics on every change, but it does not substitute for
+a production-volume disaster-recovery exercise.

@@ -12,6 +12,18 @@ export interface ResourceDefinition {
   labelEn: string;
   path: string;
   tenant?: boolean;
+  filters?: ResourceFilterDefinition[];
+}
+
+export interface ResourceFilterDefinition {
+  key: string;
+  labelAr: string;
+  labelEn: string;
+  optionsPath: string;
+  tenant?: boolean;
+  valueKey?: string;
+  optionLabelKeysAr?: string[];
+  optionLabelKeysEn?: string[];
 }
 
 interface ModuleAPIViewProps {
@@ -24,6 +36,7 @@ interface ModuleAPIViewProps {
 
 type RecordRow = Record<string, unknown>;
 type MutationMethod = "POST" | "PUT" | "PATCH" | "DELETE";
+const noResourceFilters: ResourceFilterDefinition[] = [];
 
 export interface MutationRequest {
   path: string;
@@ -50,6 +63,27 @@ export function appendTenant(path: string, legalEntityId: string | null, tenant 
   if (!tenant || !legalEntityId) return path;
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}legal_entity_id=${encodeURIComponent(legalEntityId)}`;
+}
+
+export function appendQueryParams(path: string, params: Record<string, string>): string {
+  const [pathname, rawQuery = ""] = path.split("?", 2);
+  const query = new URLSearchParams(rawQuery);
+  for (const [key, value] of Object.entries(params)) {
+    if (value) query.set(key, value);
+  }
+  const serialized = query.toString();
+  return serialized ? `${pathname}?${serialized}` : pathname;
+}
+
+export function buildResourcePath(
+  resource: ResourceDefinition,
+  legalEntityId: string | null,
+  filterValues: Record<string, string> = {},
+): string {
+  return appendQueryParams(
+    appendTenant(resource.path, legalEntityId, resource.tenant !== false),
+    Object.fromEntries((resource.filters ?? []).map((filter) => [filter.key, filterValues[filter.key] ?? ""])),
+  );
 }
 
 export function normalizeRows(payload: unknown): RecordRow[] {
@@ -114,6 +148,20 @@ function displayValue(value: unknown): string {
   return String(value);
 }
 
+function optionValue(row: RecordRow, filter: ResourceFilterDefinition): string {
+  const value = row[filter.valueKey ?? "id"];
+  return value === null || value === undefined ? "" : String(value);
+}
+
+function optionLabel(row: RecordRow, filter: ResourceFilterDefinition, isAr: boolean): string {
+  const keys = isAr ? filter.optionLabelKeysAr : filter.optionLabelKeysEn;
+  const parts = (keys ?? [])
+    .map((key) => row[key])
+    .filter((value) => value !== null && value !== undefined && value !== "")
+    .map(String);
+  return parts.length > 0 ? parts.join(" · ") : optionValue(row, filter);
+}
+
 export function ModuleAPIView({
   titleAr,
   titleEn,
@@ -126,6 +174,10 @@ export function ModuleAPIView({
   const isAr = locale === "ar";
   const [activeKey, setActiveKey] = useState(resources[0]?.key ?? "");
   const [rows, setRows] = useState<RecordRow[]>([]);
+  const [filterOptions, setFilterOptions] = useState<Record<string, RecordRow[]>>({});
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  const [filtersLoading, setFiltersLoading] = useState(false);
+  const [filterError, setFilterError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -140,6 +192,74 @@ export function ModuleAPIView({
   const [selectedRow, setSelectedRow] = useState<RecordRow | null>(null);
 
   const activeResource = resources.find((resource) => resource.key === activeKey) ?? resources[0];
+  const activeFilters = activeResource?.filters ?? noResourceFilters;
+  const filtersReady = activeFilters.every((filter) => Boolean(filterValues[filter.key]));
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFilterOptions = async () => {
+      if (!activeResource || activeFilters.length === 0) {
+        setFilterOptions({});
+        setFilterValues({});
+        setFilterError(null);
+        setFiltersLoading(false);
+        return;
+      }
+      if (activeResource.tenant !== false && !legalEntityId) {
+        setFilterOptions({});
+        setFilterValues({});
+        setFilterError(null);
+        setFiltersLoading(false);
+        return;
+      }
+
+      setFiltersLoading(true);
+      setFilterError(null);
+      try {
+        const loaded = await Promise.all(
+          activeFilters.map(async (filter) => {
+            const payload = await apiFetch<unknown>(
+              appendTenant(filter.optionsPath, legalEntityId, filter.tenant !== false),
+            );
+            return [filter.key, normalizeRows(payload)] as const;
+          }),
+        );
+        if (cancelled) return;
+
+        const nextOptions = Object.fromEntries(loaded);
+        setFilterOptions(nextOptions);
+        setFilterValues((current) =>
+          Object.fromEntries(
+            activeFilters.map((filter) => {
+              const options = nextOptions[filter.key] ?? [];
+              const currentValue = current[filter.key] ?? "";
+              const currentStillExists = options.some((row) => optionValue(row, filter) === currentValue);
+              return [filter.key, currentStillExists ? currentValue : optionValue(options[0] ?? {}, filter)];
+            }),
+          ),
+        );
+      } catch (requestError) {
+        if (cancelled) return;
+        setFilterOptions({});
+        setFilterValues({});
+        setFilterError(
+          requestError instanceof Error
+            ? requestError.message
+            : isAr
+              ? "تعذر تحميل خيارات التصفية."
+              : "Unable to load filter options.",
+        );
+      } finally {
+        if (!cancelled) setFiltersLoading(false);
+      }
+    };
+
+    void loadFilterOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeResource, activeFilters, isAr, legalEntityId]);
 
   const load = useCallback(async () => {
     if (!activeResource) return;
@@ -148,11 +268,17 @@ export function ModuleAPIView({
       setError(isAr ? "اختر كياناً قانونياً لعرض البيانات." : "Select a legal entity to load data.");
       return;
     }
+    if (!filtersReady) {
+      setRows([]);
+      setLastUpdated(null);
+      setError(null);
+      return;
+    }
 
     setLoading(true);
     setError(null);
     try {
-      const payload = await apiFetch<unknown>(appendTenant(activeResource.path, legalEntityId, activeResource.tenant !== false));
+      const payload = await apiFetch<unknown>(buildResourcePath(activeResource, legalEntityId, filterValues));
       setRows(normalizeRows(payload));
       setLastUpdated(new Date());
     } catch (requestError) {
@@ -161,7 +287,7 @@ export function ModuleAPIView({
     } finally {
       setLoading(false);
     }
-  }, [activeResource, isAr, legalEntityId]);
+  }, [activeResource, filterValues, filtersReady, isAr, legalEntityId]);
 
   useEffect(() => {
     void load();
@@ -278,6 +404,42 @@ export function ModuleAPIView({
         ))}
       </div>
 
+      {activeFilters.length > 0 && (
+        <section className="rounded-xl border bg-card p-4 shadow-sm" aria-label={isAr ? "مرشحات البيانات" : "Data filters"}>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {activeFilters.map((filter) => {
+              const options = filterOptions[filter.key] ?? [];
+              return (
+                <label key={filter.key} className="space-y-1.5 text-xs font-semibold">
+                  <span>{isAr ? filter.labelAr : filter.labelEn}</span>
+                  <select
+                    value={filterValues[filter.key] ?? ""}
+                    onChange={(event) => {
+                      setFilterValues((current) => ({ ...current, [filter.key]: event.target.value }));
+                      setSelectedRow(null);
+                    }}
+                    disabled={filtersLoading || options.length === 0}
+                    className="h-10 w-full rounded-lg border bg-background px-3 disabled:opacity-60"
+                  >
+                    {options.length === 0 && (
+                      <option value="">
+                        {filtersLoading
+                          ? isAr ? "جاري تحميل الخيارات…" : "Loading options…"
+                          : isAr ? "لا توجد خيارات متاحة" : "No options available"}
+                      </option>
+                    )}
+                    {options.map((row) => {
+                      const value = optionValue(row, filter);
+                      return <option key={value} value={value}>{optionLabel(row, filter, isAr)}</option>;
+                    })}
+                  </select>
+                </label>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {operationOpen && activeResource && (
         <section id="module-operation-panel" className="rounded-xl border bg-card p-5 shadow-sm" aria-label={isAr ? "تنفيذ عملية API" : "Run API operation"}>
           <div className="mb-4">
@@ -369,10 +531,10 @@ export function ModuleAPIView({
         </section>
       )}
 
-      {error && (
+      {(filterError || error) && (
         <div role="alert" className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{error}</span>
+          <span>{filterError || error}</span>
         </div>
       )}
 
@@ -394,7 +556,7 @@ export function ModuleAPIView({
         </div>
 
         <div className="overflow-x-auto">
-          {loading ? (
+          {loading || filtersLoading ? (
             <div className="p-10 text-center text-sm text-muted-foreground">{isAr ? "جاري تحميل البيانات…" : "Loading data…"}</div>
           ) : filteredRows.length === 0 ? (
             <div className="p-10 text-center text-sm text-muted-foreground">

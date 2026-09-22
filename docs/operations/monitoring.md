@@ -82,7 +82,7 @@ groups:
 
       # 5. Disk Space Low (PostgreSQL Data Volume)
       - alert: DiskSpaceLow
-        expr: (node_filesystem_free_bytes{mountpoint="/var/lib/postgresql/data"} / node_filesystem_size_bytes) * 100 < 15
+        expr: (node_filesystem_free_bytes{mountpoint="/var/lib/postgresql"} / node_filesystem_size_bytes) * 100 < 15
         for: 10m
         labels:
           severity: critical

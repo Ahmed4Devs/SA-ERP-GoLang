@@ -135,10 +135,10 @@ cp ../../.env.production.example .env.production
 # Edit .env.production and provide all required credentials and service URLs
 
 # 3. Launch Full Production Stack
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 
 # 4. Verify Stack Status
-docker compose -f docker-compose.prod.yml ps
+docker compose --env-file .env.production -f docker-compose.prod.yml ps
 ```
 
 ---
@@ -158,13 +158,17 @@ pwsh -File ./scripts/doctor.ps1
 ### 2. Automated Production Backup
 Performs encrypted PostgreSQL backups with SHA-256 checksums and automated retention pruning:
 ```bash
-./scripts/backup.sh
+docker compose --env-file deployments/compose/.env.production \
+  -f deployments/compose/docker-compose.prod.yml \
+  --profile operations run --rm erp-backup
 ```
 
 ### 3. Disaster Recovery Restore
-Performs verified point-in-time or dump restorations:
+Performs a checksum-verified, encrypted logical-dump restoration. The checked-in
+Compose baseline does not provide WAL archiving or point-in-time recovery:
 ```bash
-./scripts/restore.sh /backups/erp_erp_db_20260918_020000.dump --force
+BACKUP_ENCRYPTION_KEY='read-from-your-secret-manager' \
+  ./scripts/restore.sh /backups/erp_erp_db_20260918_020000.dump.enc --force
 ```
 
 ---
@@ -186,7 +190,7 @@ npm run build
 
 ## 📄 API Documentation
 
-The partial REST API specification is maintained in OpenAPI 3.1 format at:
+The generated REST API specification is maintained in OpenAPI 3.1 format at:
 - File: [`api/openapi/openapi.yaml`](api/openapi/openapi.yaml)
 - Production Endpoint: `https://erp.example.sa/api/v1`
 

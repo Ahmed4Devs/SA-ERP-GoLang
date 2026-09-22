@@ -7,6 +7,7 @@ import (
 
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
+	platformsecurity "erp/internal/platform/security"
 	"erp/internal/zatca/application/onboarding"
 	"erp/internal/zatca/application/services"
 	"erp/internal/zatca/application/submission"
@@ -39,7 +40,11 @@ type Module struct {
 }
 
 func NewModule(cfg *config.Config, db *database.DB) *Module {
-	repo := postgres.NewRepository(db)
+	var credentialsBox *platformsecurity.SecretBox
+	if cfg.ZATCA.CredentialsKey != "" {
+		credentialsBox, _ = platformsecurity.NewSecretBox(cfg.ZATCA.CredentialsKey)
+	}
+	repo := postgres.NewRepository(db, credentialsBox)
 	subRepo := postgres.NewSubmissionRepository(db)
 	xmlGen := xml.NewUBLGenerator()
 	validator := validation.NewInvoiceValidator()

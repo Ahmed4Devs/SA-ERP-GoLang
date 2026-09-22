@@ -100,8 +100,8 @@ export const AuditDrawer: React.FC<AuditDrawerProps> = ({
           {/* Footer note */}
           <div className="p-4 border-t bg-muted/30 text-[11px] text-muted-foreground text-center">
             {isArabic
-              ? "سجل غير قابل للتعديل أو الحذف وفقاً للمعيار القياسي 40.50"
-              : "Append-only, immutable audit trail compliant with Section 40.50"}
+              ? "سجل تدقيق مترابط ببصمات تشفيرية وقابل لكشف العبث"
+              : "Append-only audit trail with cryptographic tamper evidence"}
           </div>
         </div>
       </div>

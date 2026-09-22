@@ -1,0 +1,6 @@
+misconfigurations:
+  - id: AVD-DS-0002
+    paths:
+      - "deployments/docker/Dockerfile.nginx"
+    statement: "The Nginx master reads host-mounted TLS keys and binds ports 80/443; worker processes drop to the nginx user in nginx.conf."
+    expired_at: 2027-01-01

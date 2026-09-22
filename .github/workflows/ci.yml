@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18.2-alpine
+        image: postgres:18.6-alpine
         env:
           POSTGRES_USER: erp_test
           POSTGRES_PASSWORD: erp_test_password
@@ -27,8 +27,8 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://erp_test:erp_test_password@127.0.0.1:5432/erp_test?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
@@ -40,16 +40,24 @@ jobs:
         run: |
           go run ./cmd/openapi-gen
           git diff --exit-code -- api/openapi/openapi.yaml
-      - run: go test -count=1 ./internal/...
+      - name: Unit tests with race detector
+        run: go test -race -count=1 ./internal/...
       # The test database helper serializes packages with a PostgreSQL advisory
       # lock and rebuilds all application schemas before each package.
-      - run: go test -count=1 -timeout 20m ./tests/...
+      - name: Integration tests and coverage gate
+        run: |
+          go test -race -p 1 -count=1 -timeout 30m -coverpkg=./internal/... -coverprofile=coverage.out ./tests/...
+          coverage="$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%", "", $3); print $3}')"
+          echo "Integration coverage: ${coverage}%"
+          awk -v coverage="${coverage}" 'BEGIN { if (coverage + 0 < 45) exit 1 }'
+      - name: Reachable Go vulnerability scan
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
   web:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18.2-alpine
+        image: postgres:18.6-alpine
         env:
           POSTGRES_USER: erp_web
           POSTGRES_PASSWORD: erp_web_password
@@ -65,12 +73,12 @@ jobs:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -98,7 +106,7 @@ jobs:
           ZATCA_ENVIRONMENT: simulation
         run: |
           nohup go run ./cmd/erp-api >/tmp/erp-api.log 2>&1 &
-          for attempt in {1..60}; do
+          for _ in {1..60}; do
             if curl --fail --silent http://127.0.0.1:8080/readyz >/dev/null; then
               exit 0
             fi
@@ -117,7 +125,7 @@ jobs:
   containers:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Validate development Compose
         run: docker compose config --quiet
       - name: Validate production Compose
@@ -131,6 +139,7 @@ jobs:
           TLS_KEY_PATH: /tmp/ci-key.pem
           MFA_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
           METRICS_BEARER_TOKEN: ci-only-metrics-token-at-least-32-characters
+          BACKUP_ENCRYPTION_KEY: ci-only-backup-encryption-key-at-least-32-characters
           SMTP_HOST: smtp.example.test
           SMTP_USERNAME: ci-user
           SMTP_PASSWORD: ci-only-smtp-password
@@ -138,7 +147,177 @@ jobs:
         run: docker compose -f deployments/compose/docker-compose.prod.yml config --quiet
       - name: Build deployable images
         run: |
+          docker build -f deployments/docker/Dockerfile.postgres -t erp-postgres:ci .
           docker build -f deployments/docker/Dockerfile.api -t erp-api:ci .
           docker build -f deployments/docker/Dockerfile.worker -t erp-worker:ci .
           docker build -f deployments/docker/Dockerfile.migrate -t erp-migrate:ci .
+          docker build -f deployments/docker/Dockerfile.backup -t erp-backup:ci .
           docker build -f deployments/docker/Dockerfile.web -t erp-web:ci .
+          docker build -f deployments/docker/Dockerfile.nginx -t erp-nginx:ci .
+      - name: Scan API image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.74.0
+          image-ref: erp-api:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Scan worker image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.74.0
+          image-ref: erp-worker:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan migration image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.74.0
+          image-ref: erp-migrate:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Scan web image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.74.0
+          image-ref: erp-web:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Scan backup image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.74.0
+          image-ref: erp-backup:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Scan PostgreSQL runtime image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.74.0
+          image-ref: erp-postgres:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Scan Nginx runtime image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.74.0
+          image-ref: erp-nginx:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Generate API image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: erp-api:ci
+          artifact-name: erp-api.spdx.json
+      - name: Generate web image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: erp-web:ci
+          artifact-name: erp-web.spdx.json
+      - name: Generate worker image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: erp-worker:ci
+          artifact-name: erp-worker.spdx.json
+      - name: Generate migration image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: erp-migrate:ci
+          artifact-name: erp-migrate.spdx.json
+      - name: Generate backup image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: erp-backup:ci
+          artifact-name: erp-backup.spdx.json
+      - name: Generate PostgreSQL image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: erp-postgres:ci
+          artifact-name: erp-postgres.spdx.json
+      - name: Generate Nginx image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: erp-nginx:ci
+          artifact-name: erp-nginx.spdx.json
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+      - name: Scan repository dependencies, secrets, and configuration
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.74.0
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          trivyignores: .trivyignore.yaml
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  backup-restore-drill:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: erp_backup
+          POSTGRES_PASSWORD: erp_backup_password
+          POSTGRES_DB: erp_backup_drill
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U erp_backup -d erp_backup_drill"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: erp_backup
+      POSTGRES_PASSWORD: erp_backup_password
+      POSTGRES_DB: erp_backup_drill
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: erp_backup
+      PGPASSWORD: erp_backup_password
+      PGDATABASE: erp_backup_drill
+      BACKUP_ENCRYPTION_KEY: ci-backup-drill-encryption-key
+      RUN_MIGRATIONS_AFTER_RESTORE: "false"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - name: Seed drill marker and create encrypted backup
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "${POSTGRES_CONTAINER}" psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -v ON_ERROR_STOP=1 \
+            -c "CREATE TABLE backup_drill_marker (id integer PRIMARY KEY, value text NOT NULL);"
+          docker exec "${POSTGRES_CONTAINER}" psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -v ON_ERROR_STOP=1 \
+            -c "INSERT INTO backup_drill_marker VALUES (1, 'verified');"
+          BACKUP_DIR="${RUNNER_TEMP}/backups" ./scripts/backup.sh
+      - name: Restore and verify encrypted backup
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          backup_file="$(find "${RUNNER_TEMP}/backups" -name '*.dump.enc' -type f -print -quit)"
+          test -n "${backup_file}"
+          ./scripts/restore.sh "${backup_file}" --force
+          test "$(docker exec "${POSTGRES_CONTAINER}" psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -Atqc 'SELECT value FROM backup_drill_marker WHERE id = 1')" = "verified"

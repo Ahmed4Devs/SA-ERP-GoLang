@@ -84,6 +84,7 @@ type ZATCAConfig struct {
 	BaseURL                string
 	Timeout                time.Duration
 	ProductionAcknowledged bool
+	CredentialsKey         string
 }
 
 type TelemetryConfig struct {
@@ -159,6 +160,7 @@ func Load() (*Config, error) {
 			BaseURL:                getEnv("ZATCA_BASE_URL", ""),
 			Timeout:                getDurationEnv("ZATCA_HTTP_TIMEOUT", 30*time.Second),
 			ProductionAcknowledged: getBoolEnv("ZATCA_PRODUCTION_ACKNOWLEDGED", false),
+			CredentialsKey:         strings.TrimSpace(getEnv("ZATCA_CREDENTIALS_ENCRYPTION_KEY", "")),
 		},
 		Telemetry: TelemetryConfig{
 			OTLPEndpoint: strings.TrimSpace(getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "")),
@@ -224,6 +226,15 @@ func (c *Config) Validate() error {
 	}
 	if c.ZATCA.Environment != "sandbox" && c.ZATCA.Environment != "simulation" && c.ZATCA.Environment != "production" {
 		return fmt.Errorf("invalid ZATCA environment: %q", c.ZATCA.Environment)
+	}
+	if c.ZATCA.CredentialsKey != "" {
+		decoded, err := base64.StdEncoding.DecodeString(c.ZATCA.CredentialsKey)
+		if err != nil || len(decoded) != 32 {
+			return errors.New("ZATCA_CREDENTIALS_ENCRYPTION_KEY must be a base64-encoded 32-byte key")
+		}
+	}
+	if c.ZATCA.Enabled && c.ZATCA.Environment != "simulation" && c.ZATCA.CredentialsKey == "" {
+		return errors.New("ZATCA_CREDENTIALS_ENCRYPTION_KEY is required when live ZATCA is enabled")
 	}
 	if c.Telemetry.SampleRatio < 0 || c.Telemetry.SampleRatio > 1 {
 		return errors.New("OTEL_TRACES_SAMPLER_RATIO must be between 0 and 1")

@@ -4,13 +4,14 @@
 This document provides standard operating procedures (SOP) for the 24/7 operations, maintenance, and incident response of the Saudi Enterprise ERP production system.
 
 ### Container Topology
-The production deployment orchestrates 6 primary containers via Docker Compose or Kubernetes:
+The production deployment orchestrates 6 primary containers and one optional operations container via Docker Compose:
 - **`erp-nginx`**: Edge reverse proxy handling TLS termination, rate limiting, and HTTP/2 routing.
 - **`erp-web`**: Next.js 16 standalone frontend web server (Port 3000).
 - **`erp-api`**: Go core backend API service with pgx connection pooling (Port 8080).
 - **`erp-worker`**: Go background worker that dispatches the transactional outbox, delivers queued email notifications, and—when enabled—retries pending ZATCA submissions.
 - **`erp-migrate`**: Ephemeral schema migration runner executing Goose database migrations before API launch.
 - **`erp-postgres`**: PostgreSQL 18 relational database with Saudi localized schema (`Asia/Riyadh` TZ).
+- **`erp-backup`**: On-demand encrypted logical-backup job in the `operations` profile; an external scheduler must invoke it.
 
 ---
 
@@ -26,36 +27,36 @@ cp ../../.env.production.example .env.production
 # Ensure secrets and credentials are fully set
 
 # Pull & build containers with zero cache
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml build --no-cache
+docker compose --env-file .env.production -f docker-compose.prod.yml pull
+docker compose --env-file .env.production -f docker-compose.prod.yml build --no-cache
 
 # Start stack in background
-docker compose -f docker-compose.prod.yml up -d
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 ```
 
 ### Checking Stack Status & Health
 ```bash
 # View running status and container health
-docker compose -f docker-compose.prod.yml ps
+docker compose --env-file .env.production -f docker-compose.prod.yml ps
 
 # Follow logs across all services
-docker compose -f docker-compose.prod.yml logs -f --tail=100
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f --tail=100
 
 # Inspect specific service logs (e.g. API or Worker)
-docker compose -f docker-compose.prod.yml logs -f erp-api
-docker compose -f docker-compose.prod.yml logs -f erp-worker
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f erp-api
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f erp-worker
 ```
 
 ### Stopping & Graceful Restart
 ```bash
 # Graceful restart of API service
-docker compose -f docker-compose.prod.yml restart erp-api
+docker compose --env-file .env.production -f docker-compose.prod.yml restart erp-api
 
 # Stop full stack without data deletion
-docker compose -f docker-compose.prod.yml down
+docker compose --env-file .env.production -f docker-compose.prod.yml down
 
 # Graceful reload of Nginx configurations without dropping connections
-docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
+docker compose --env-file .env.production -f docker-compose.prod.yml exec nginx nginx -s reload
 ```
 
 ---
@@ -74,13 +75,13 @@ docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
 ## 4. Scaling Guidelines
 
 ### Horizontal Scaling
-- **`erp-api`**: The Go backend is stateless. Scale to multiple instances behind Nginx or an AWS/GCP Application Load Balancer:
+- **`erp-api`**: API request processing is stateless, but uploaded documents use the Compose `document_data` volume. Multiple instances on one Docker host can share that volume. Cross-host scaling requires a reviewed shared filesystem or object-storage implementation before rollout:
   ```bash
-  docker compose -f docker-compose.prod.yml up -d --scale erp-api=4
+  docker compose --env-file .env.production -f docker-compose.prod.yml up -d --scale erp-api=4
   ```
 - **`erp-worker`**: Workers lease outbox rows with `FOR UPDATE SKIP LOCKED`, so notification delivery can scale horizontally. SMTP is an at-least-once external transport; recipients can see a duplicate only in the narrow case where SMTP accepts a message and the worker crashes before recording success:
   ```bash
-  docker compose -f docker-compose.prod.yml up -d --scale erp-worker=3
+  docker compose --env-file .env.production -f docker-compose.prod.yml up -d --scale erp-worker=3
   ```
 
 ### Database Tuning (PostgreSQL 18)
@@ -116,11 +117,11 @@ Ensure `postgresql.conf` parameters match host hardware:
 1. Inspect failed and pending submissions in PostgreSQL and correlate them with worker logs.
 2. Verify ZATCA endpoint connectivity from an approved diagnostic environment:
    ```bash
-   docker compose -f docker-compose.prod.yml exec erp-api curl -I https://gw-fatoora.zatca.gov.sa/e-invoicing/simulation/invoices/clearance/single
+   docker compose --env-file .env.production -f docker-compose.prod.yml exec erp-api curl -I https://gw-fatoora.zatca.gov.sa/e-invoicing/simulation/invoices/clearance/single
    ```
 3. Check worker error logs:
    ```bash
-   docker compose -f docker-compose.prod.yml logs --tail=200 erp-worker | grep -i "zatca"
+   docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=200 erp-worker | grep -i "zatca"
    ```
 
 ### Scenario C: Notification or Outbox Backlog
@@ -133,8 +134,8 @@ Ensure `postgresql.conf` parameters match host hardware:
    ```
 2. Verify the worker is running even when `ZATCA_ENABLED=false`, then inspect dispatch errors:
    ```bash
-   docker compose -f docker-compose.prod.yml ps erp-worker
-   docker compose -f docker-compose.prod.yml logs --tail=200 erp-worker | grep -i "outbox\|notification"
+   docker compose --env-file .env.production -f docker-compose.prod.yml ps erp-worker
+   docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=200 erp-worker | grep -i "outbox\|notification"
    ```
 3. Resolve SMTP credentials/connectivity before re-queuing a dead-letter row. Re-queue only the exact reviewed event:
    ```sql

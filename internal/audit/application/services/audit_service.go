@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"erp/internal/audit/domain"
@@ -14,7 +13,6 @@ import (
 
 type auditService struct {
 	repo ports.AuditRepository
-	mu   sync.Mutex // Serializes in-process chain computation for high concurrency
 }
 
 func NewAuditService(repo ports.AuditRepository) ports.AuditService {
@@ -24,32 +22,7 @@ func NewAuditService(repo ports.AuditRepository) ports.AuditService {
 }
 
 func (s *auditService) RecordEvent(ctx context.Context, cmd ports.RecordEventCommand) (*domain.AuditEvent, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	latest, err := s.repo.GetLatestEvent(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve latest audit event: %w", err)
-	}
-
-	prevHash := domain.GenesisHash
-	if latest != nil && latest.RecordHash != "" {
-		prevHash = latest.RecordHash
-	}
-
-	occurredAt := time.Now().UTC().Truncate(time.Microsecond)
 	canonicalPayload := domain.CanonicalizeJSON(cmd.Payload)
-
-	recordHash := domain.ComputeRecordHash(
-		prevHash,
-		cmd.UserID,
-		cmd.LegalEntityID,
-		cmd.Action,
-		cmd.ResourceType,
-		cmd.ResourceID,
-		canonicalPayload,
-		occurredAt,
-	)
 
 	eventToInsert := &domain.AuditEvent{
 		UserID:        cmd.UserID,
@@ -60,17 +33,9 @@ func (s *auditService) RecordEvent(ctx context.Context, cmd ports.RecordEventCom
 		Payload:       canonicalPayload,
 		IPAddress:     cmd.IPAddress,
 		UserAgent:     cmd.UserAgent,
-		PreviousHash:  prevHash,
-		RecordHash:    recordHash,
-		OccurredAt:    occurredAt,
 	}
 
-	insertedEvent, err := s.repo.InsertEvent(ctx, eventToInsert)
-	if err != nil {
-		return nil, fmt.Errorf("failed to persist audit event: %w", err)
-	}
-
-	// Persist associated entity changes (state diffs)
+	changes := make([]domain.EntityChange, 0, len(cmd.Changes))
 	for _, change := range cmd.Changes {
 		beforeState := change.BeforeState
 		if len(beforeState) == 0 {
@@ -81,21 +46,18 @@ func (s *auditService) RecordEvent(ctx context.Context, cmd ports.RecordEventCom
 			afterState = []byte("null")
 		}
 
-		ec := &domain.EntityChange{
-			EventID:     insertedEvent.ID,
+		changes = append(changes, domain.EntityChange{
 			TableName:   change.TableName,
 			RecordID:    change.RecordID,
 			BeforeState: beforeState,
 			AfterState:  afterState,
-		}
-
-		persistedChange, err := s.repo.InsertEntityChange(ctx, ec)
-		if err != nil {
-			return nil, fmt.Errorf("failed to persist entity change: %w", err)
-		}
-		insertedEvent.Changes = append(insertedEvent.Changes, *persistedChange)
+		})
 	}
 
+	insertedEvent, err := s.repo.AppendEvent(ctx, eventToInsert, changes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to atomically persist audit event: %w", err)
+	}
 	return insertedEvent, nil
 }
 

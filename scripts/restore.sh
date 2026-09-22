@@ -16,7 +16,10 @@ if [ ! -f "${CHECKSUM_FILE}" ]; then
     echo "Error: required checksum file is missing: ${CHECKSUM_FILE}" >&2
     exit 1
 fi
-sha256sum -c "${CHECKSUM_FILE}"
+(
+    cd "$(dirname "${BACKUP_FILE}")"
+    sha256sum -c "$(basename "${CHECKSUM_FILE}")"
+)
 
 WORKING_FILE="${BACKUP_FILE}"
 TEMP_FILE=""
@@ -52,6 +55,7 @@ DB_PORT="${POSTGRES_PORT:-5432}"
 DB_USER="${POSTGRES_USER:-erp_user}"
 DB_NAME="${POSTGRES_DB:-erp_db}"
 COMPOSE_FILE="${COMPOSE_FILE:-$(dirname "$0")/../deployments/compose/docker-compose.prod.yml}"
+COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-}"
 POSTGRES_SERVICE="${POSTGRES_SERVICE:-postgres}"
 MIGRATE_SERVICE="${MIGRATE_SERVICE:-erp-migrate}"
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-}"
@@ -62,6 +66,14 @@ if [[ ! "${DB_USER}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || [[ ! "${DB_NAME}" =~ ^[A-
 fi
 
 TERMINATE_SQL="SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}' AND pid <> pg_backend_pid();"
+
+compose() {
+    if [ -n "${COMPOSE_ENV_FILE}" ]; then
+        docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
+    else
+        docker compose -f "${COMPOSE_FILE}" "$@"
+    fi
+}
 
 if [ -n "${POSTGRES_CONTAINER}" ]; then
     docker exec "${POSTGRES_CONTAINER}" \
@@ -83,13 +95,13 @@ elif command -v psql >/dev/null 2>&1 && command -v pg_restore >/dev/null 2>&1; t
     pg_restore --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" \
         --dbname="${DB_NAME}" --exit-on-error --no-owner "${WORKING_FILE}"
 elif command -v docker >/dev/null 2>&1; then
-    docker compose -f "${COMPOSE_FILE}" exec -T "${POSTGRES_SERVICE}" \
+    compose exec -T "${POSTGRES_SERVICE}" \
         psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="${TERMINATE_SQL}"
-    docker compose -f "${COMPOSE_FILE}" exec -T "${POSTGRES_SERVICE}" \
+    compose exec -T "${POSTGRES_SERVICE}" \
         psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="DROP DATABASE IF EXISTS \"${DB_NAME}\";"
-    docker compose -f "${COMPOSE_FILE}" exec -T "${POSTGRES_SERVICE}" \
+    compose exec -T "${POSTGRES_SERVICE}" \
         psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_USER}\";"
-    docker compose -f "${COMPOSE_FILE}" exec -T "${POSTGRES_SERVICE}" \
+    compose exec -T "${POSTGRES_SERVICE}" \
         pg_restore --username="${DB_USER}" --dbname="${DB_NAME}" --exit-on-error --no-owner < "${WORKING_FILE}"
 else
     echo "Error: PostgreSQL client tools or Docker are required." >&2
@@ -101,7 +113,7 @@ if [ "${RUN_MIGRATIONS_AFTER_RESTORE:-true}" = "true" ]; then
         echo "Error: Docker is required to run post-restore migrations. Set RUN_MIGRATIONS_AFTER_RESTORE=false only for a controlled drill." >&2
         exit 1
     }
-    docker compose -f "${COMPOSE_FILE}" run --rm "${MIGRATE_SERVICE}"
+    compose run --rm "${MIGRATE_SERVICE}"
 fi
 
 echo "Restore completed successfully: ${DB_NAME}"

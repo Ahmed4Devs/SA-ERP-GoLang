@@ -45,6 +45,9 @@ func (s *OnboardingService) StartOnboarding(ctx context.Context, legalEntityID, 
 	if otp == "" {
 		return nil, fmt.Errorf("FATOORA portal OTP is required for onboarding")
 	}
+	if s.environment != domain.EnvironmentSimulation {
+		return nil, fmt.Errorf("live automatic onboarding is disabled: the repository does not contain the official signed compliance sample suite required for FATOORA certification")
+	}
 
 	// 1. Verify EGS Unit
 	egs, err := s.repo.GetEGSUnitByID(ctx, egsUnitID, legalEntityID)
@@ -101,7 +104,6 @@ func (s *OnboardingService) StartOnboarding(ctx context.Context, legalEntityID, 
 	}
 
 	// 5. Save Compliance CSID
-	expDate := time.Now().AddDate(1, 0, 0)
 	compCSID := &domain.CSID{
 		ID:                  uuid.New(),
 		EGSUnitID:           egs.ID,
@@ -113,7 +115,7 @@ func (s *OnboardingService) StartOnboarding(ctx context.Context, legalEntityID, 
 		CertificatePEM:      compResp.BinarySecurityToken,
 		RequestID:           compResp.RequestID,
 		ComplianceRequestID: compResp.RequestID,
-		ExpiresAt:           &expDate,
+		ExpiresAt:           certificateExpiry(compResp.BinarySecurityToken),
 		Status:              "ACTIVE",
 		CreatedAt:           time.Now(),
 	}
@@ -122,7 +124,8 @@ func (s *OnboardingService) StartOnboarding(ctx context.Context, legalEntityID, 
 		return nil, fmt.Errorf("failed to store compliance CSID: %w", err)
 	}
 
-	// 6. Run Compliance Checks (Standard and Simplified Invoices)
+	// 6. Exercise the simulator-only compliance path. Live environments are
+	// rejected above because placeholder XML must never be presented to FATOORA.
 	checkReq := domain.ComplianceCheckRequest{
 		InvoiceHash: "SAMPLE_HASH_" + egs.CustomID,
 		UUID:        uuid.New().String(),
@@ -150,7 +153,6 @@ func (s *OnboardingService) StartOnboarding(ctx context.Context, legalEntityID, 
 	}
 
 	// 8. Save Production CSID
-	prodExpDate := time.Now().AddDate(5, 0, 0) // Production cert valid for 5 years
 	prodCSID := &domain.CSID{
 		ID:                  uuid.New(),
 		EGSUnitID:           egs.ID,
@@ -162,7 +164,7 @@ func (s *OnboardingService) StartOnboarding(ctx context.Context, legalEntityID, 
 		CertificatePEM:      prodResp.BinarySecurityToken,
 		RequestID:           prodResp.RequestID,
 		ComplianceRequestID: compResp.RequestID,
-		ExpiresAt:           &prodExpDate,
+		ExpiresAt:           certificateExpiry(prodResp.BinarySecurityToken),
 		Status:              "ACTIVE",
 		CreatedAt:           time.Now(),
 	}
@@ -184,6 +186,19 @@ func (s *OnboardingService) StartOnboarding(ctx context.Context, legalEntityID, 
 		Status:              "COMPLETED",
 		Message:             "EGS unit onboarded successfully and Production CSID issued",
 	}, nil
+}
+
+func certificateExpiry(binarySecurityToken string) *time.Time {
+	der, err := base64.StdEncoding.DecodeString(binarySecurityToken)
+	if err != nil {
+		return nil
+	}
+	certificate, err := x509.ParseCertificate(der)
+	if err != nil {
+		return nil
+	}
+	expiresAt := certificate.NotAfter.UTC()
+	return &expiresAt
 }
 
 func (s *OnboardingService) GetOnboardingStatus(ctx context.Context, legalEntityID, egsUnitID uuid.UUID) (*domain.OnboardingStatus, error) {

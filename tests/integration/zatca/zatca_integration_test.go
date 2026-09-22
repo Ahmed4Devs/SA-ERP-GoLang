@@ -3,6 +3,7 @@ package zatca_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -191,6 +192,60 @@ func TestZATCA_OnboardingLifecycle(t *testing.T) {
 	}
 	if finalStatus.Status != "ONBOARDED" {
 		t.Errorf("expected status ONBOARDED, got %s", finalStatus.Status)
+	}
+}
+
+func TestZATCA_CSIDCredentialsAreEncryptedAtRestAndHiddenFromJSON(t *testing.T) {
+	t.Setenv("ZATCA_CREDENTIALS_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString([]byte("01234567890123456789012345678901")))
+	zMod, db, leID, _, ctx := setupZATCAIntegrationTest(t)
+
+	egs, err := zMod.Service.RegisterEGSUnit(ctx, ports.RegisterEGSRequest{
+		LegalEntityID:        leID,
+		CustomID:             "EGS-ENCRYPT-" + uuid.NewString()[:6],
+		Model:                "Encryption-Test",
+		SerialNumber:         "SN-" + uuid.NewString()[:8],
+		SolutionName:         "ERP Credential Encryption Test",
+		VATNumber:            "300012345600003",
+		OrganizationName:     "شركة اختبار التشفير",
+		OrganizationUnitName: "الرياض",
+		InvoiceTypeMask:      "1100",
+	})
+	if err != nil {
+		t.Fatalf("register EGS: %v", err)
+	}
+	if _, err := zMod.OnboardingService.StartOnboarding(ctx, leID, egs.ID, "123456"); err != nil {
+		t.Fatalf("simulation onboarding: %v", err)
+	}
+
+	csid, err := zMod.Repo.GetActiveCSID(ctx, egs.ID)
+	if err != nil {
+		t.Fatalf("load decrypted CSID: %v", err)
+	}
+	if csid.Secret == "" || csid.PrivateKeyPEM == "" {
+		t.Fatal("expected repository to decrypt credentials for internal use")
+	}
+
+	var storedSecret, storedPrivateKey string
+	if err := db.Pool.QueryRow(ctx, `
+		SELECT secret, private_key_pem
+		FROM zatca.csids
+		WHERE id = $1
+	`, csid.ID).Scan(&storedSecret, &storedPrivateKey); err != nil {
+		t.Fatalf("inspect stored CSID: %v", err)
+	}
+	if storedSecret == csid.Secret || storedPrivateKey == csid.PrivateKeyPEM {
+		t.Fatal("CSID secret or private key was stored in plaintext")
+	}
+	if len(storedSecret) < len("enc:v1:") || storedSecret[:len("enc:v1:")] != "enc:v1:" {
+		t.Fatalf("stored secret does not use the versioned encrypted format: %q", storedSecret)
+	}
+
+	serialized, err := json.Marshal(csid)
+	if err != nil {
+		t.Fatalf("marshal CSID: %v", err)
+	}
+	if bytes.Contains(serialized, []byte(csid.Secret)) || bytes.Contains(serialized, []byte("PRIVATE KEY")) {
+		t.Fatal("CSID JSON exposed secret credential material")
 	}
 }
 

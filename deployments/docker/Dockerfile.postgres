@@ -1,0 +1,8 @@
+FROM postgres:18.6-alpine
+
+# The official entrypoint only needs gosu when the container starts as root.
+# Compose uses a named volume initialized from this image, so run the server
+# directly as the postgres user and remove the unused Go binary from runtime.
+RUN rm -f /usr/local/bin/gosu
+
+USER postgres
