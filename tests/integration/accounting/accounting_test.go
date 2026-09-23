@@ -30,7 +30,7 @@ func setupAccountingTest(t *testing.T) (*accounting.Module, *organization.Module
 
 	db, err := database.NewPool(ctx, cfg)
 	if err != nil {
-		t.Skipf("PostgreSQL not accessible: %v", err)
+		t.Fatalf("integration database setup failed: %v", err)
 	}
 	if err := database.MigrateUp(ctx, cfg.Database.URL, "../../../database/migrations"); err != nil {
 		db.Close()

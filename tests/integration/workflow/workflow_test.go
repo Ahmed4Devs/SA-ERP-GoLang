@@ -30,7 +30,7 @@ func setupWorkflowTest(t *testing.T) (*workflow.Module, *authorization.Module, *
 
 	db, err := database.NewPool(ctx, cfg)
 	if err != nil {
-		t.Skipf("PostgreSQL not accessible, skipping integration test: %v", err)
+		t.Fatalf("integration database setup failed: %v", err)
 	}
 
 	txManager := transaction.NewManager(db.Pool)

@@ -52,7 +52,7 @@ An Enterprise Resource Planning (ERP) platform for Saudi organizations. It provi
 
 | # | Module | Package Path | Regulatory / Business Function |
 | :-: | :--- | :--- | :--- |
-| **1** | **IAM & Auth** | `internal/iam` | Secure authentication, opaque session management, Argon2id hashing. MFA is not implemented. |
+| **1** | **IAM & Auth** | `internal/iam` | Argon2id authentication, opaque sessions, and TOTP MFA with recovery codes. |
 | **2** | **Organization** | `internal/organization` | Multi-tenant legal entity boundaries, branches, cost centers, and CR numbers. |
 | **3** | **Authorization** | `internal/authorization` | Role-Based Access Control (RBAC) with granular functional permissions. |
 | **4** | **Audit Trail** | `internal/audit` | Append-only tamper-evident audit logging of all data mutations. |
@@ -177,8 +177,10 @@ BACKUP_ENCRYPTION_KEY='read-from-your-secret-manager' \
 
 Run the comprehensive test suite across all modules:
 ```bash
-# Run all Go backend integration & domain test suites
-go test -timeout 900s ./tests/...
+# Use an empty, disposable PostgreSQL database. Integration tests drop and
+# rebuild their application schemas, so never point this at development data.
+export TEST_DATABASE_URL='postgres://erp_test:your_test_password@localhost:5432/erp_test?sslmode=disable'
+go test -race -p 1 -timeout 30m ./cmd/... ./internal/... ./tests/...
 
 # Frontend static type check and Next.js production build
 cd apps/web

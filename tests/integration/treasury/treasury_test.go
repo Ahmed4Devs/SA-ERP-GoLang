@@ -32,7 +32,7 @@ func setupTreasuryTest(t *testing.T) (*treasury.Module, *banking.Module, *databa
 
 	db, err := database.NewPool(ctx, cfg)
 	if err != nil {
-		t.Skipf("PostgreSQL not accessible: %v", err)
+		t.Fatalf("integration database setup failed: %v", err)
 	}
 	t.Cleanup(db.Close)
 

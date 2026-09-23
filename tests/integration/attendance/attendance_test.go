@@ -30,7 +30,7 @@ func setupAttendanceTest(t *testing.T) (*attendance.Module, *hr.Module, *databas
 
 	db, err := database.NewPool(ctx, cfg)
 	if err != nil {
-		t.Skipf("PostgreSQL not accessible: %v", err)
+		t.Fatalf("integration database setup failed: %v", err)
 	}
 
 	txManager := transaction.NewManager(db.Pool)

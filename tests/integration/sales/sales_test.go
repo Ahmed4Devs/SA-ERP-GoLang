@@ -36,7 +36,7 @@ func setupSalesTest(t *testing.T) (*sales.Module, *receivables.Module, *database
 
 	db, err := database.NewPool(ctx, cfg)
 	if err != nil {
-		t.Skipf("PostgreSQL not accessible: %v", err)
+		t.Fatalf("integration database setup failed: %v", err)
 	}
 
 	txManager := transaction.NewManager(db.Pool)

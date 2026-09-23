@@ -10,7 +10,7 @@ Building an enterprise ERP system requires high consistency, strict transaction 
 1. **Architecture:** Modular Monolith in Go instead of microservices.
 2. **Backend:** Go 1.27+, net/http with Chi router, pgxpool, and sqlc.
 3. **Database:** PostgreSQL 18 with relational integrity constraints and schema partitioning per domain.
-4. **Queue Worker:** River (PostgreSQL-backed transactional queue) to ensure transactional event publishing and processing without distributed transactions.
+4. **Queue Worker:** The original River decision is superseded by [ADR 0004](0004-postgresql-transactional-outbox.md).
 
 ## Consequences
 - Simplifies atomic multi-table operations across modules (e.g., invoice posting generating general ledger lines and stock movements in a single transaction).

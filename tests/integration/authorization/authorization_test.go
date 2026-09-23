@@ -30,7 +30,7 @@ func setupAuthzTest(t *testing.T) (*authorization.Module, *organization.Module, 
 
 	db, err := database.NewPool(ctx, cfg)
 	if err != nil {
-		t.Skipf("PostgreSQL not accessible, skipping integration test: %v", err)
+		t.Fatalf("integration database setup failed: %v", err)
 	}
 	t.Cleanup(db.Close)
 

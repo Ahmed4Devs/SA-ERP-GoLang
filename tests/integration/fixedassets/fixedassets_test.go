@@ -31,7 +31,7 @@ func setupFixedAssetsTest(t *testing.T) (*fixedassets.Module, *hr.Module, *datab
 
 	db, err := database.NewPool(ctx, cfg)
 	if err != nil {
-		t.Skipf("PostgreSQL not accessible: %v", err)
+		t.Fatalf("integration database setup failed: %v", err)
 	}
 
 	txManager := transaction.NewManager(db.Pool)

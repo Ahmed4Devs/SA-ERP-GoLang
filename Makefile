@@ -9,7 +9,8 @@ build:
 	go build -o bin/erp-cli.exe ./cmd/erp-cli
 
 test:
-	go test -v -race ./...
+	@test -n "$(TEST_DATABASE_URL)" || (echo "Set TEST_DATABASE_URL to a disposable PostgreSQL database; integration tests rebuild its application schemas." >&2; exit 1)
+	go test -v -race -p 1 -timeout 30m ./cmd/... ./internal/... ./tests/...
 
 # Frontend
 web-install:

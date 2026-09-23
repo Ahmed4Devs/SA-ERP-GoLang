@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"erp/internal/platform/config"
@@ -44,8 +46,14 @@ ON CONFLICT DO NOTHING;
 `
 
 func prepareIntegrationTestDatabase(cfg *config.Config) error {
-	if cfg.Environment != config.EnvTesting {
+	if !testing.Testing() {
 		return nil
+	}
+	if err := requireIsolatedTestDatabaseURL(cfg.Database.URL); err != nil {
+		return err
+	}
+	if cfg.Environment != config.EnvTesting {
+		return fmt.Errorf("database integration tests require APP_ENV=testing, got %q", cfg.Environment)
 	}
 
 	testDatabaseOnce.Do(func() {
@@ -86,6 +94,22 @@ func prepareIntegrationTestDatabase(cfg *config.Config) error {
 	})
 
 	return testDatabaseInitErr
+}
+
+// Test binaries must never fall back to DATABASE_URL or the development default.
+// The integration setup drops application schemas before applying migrations.
+func requireIsolatedTestDatabaseURL(databaseURL string) error {
+	if !testing.Testing() {
+		return nil
+	}
+	testURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
+	if testURL == "" {
+		return fmt.Errorf("database tests require an explicit TEST_DATABASE_URL for a disposable database")
+	}
+	if databaseURL != testURL {
+		return fmt.Errorf("database test URL does not match TEST_DATABASE_URL")
+	}
+	return nil
 }
 
 func findMigrationsDir() (string, error) {

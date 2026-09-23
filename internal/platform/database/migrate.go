@@ -15,6 +15,9 @@ import (
 const migrationAdvisoryLockID int64 = 675270348994611997
 
 func MigrateUp(ctx context.Context, databaseURL string, migrationsDir string) error {
+	if err := requireIsolatedTestDatabaseURL(databaseURL); err != nil {
+		return err
+	}
 	ctx, cancel := migrationContext(ctx)
 	defer cancel()
 	db, err := sql.Open("pgx", databaseURL)
@@ -22,10 +25,15 @@ func MigrateUp(ctx context.Context, databaseURL string, migrationsDir string) er
 		return fmt.Errorf("failed to open database for migration: %w", err)
 	}
 	defer db.Close()
-	if err := lockMigrations(ctx, db); err != nil {
+	lockConn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to reserve migration lock connection: %w", err)
+	}
+	defer lockConn.Close()
+	if err := lockMigrations(ctx, lockConn); err != nil {
 		return err
 	}
-	defer unlockMigrations(ctx, db)
+	defer unlockMigrations(lockConn)
 
 	if err := goose.SetDialect("postgres"); err != nil {
 		return err
@@ -35,6 +43,9 @@ func MigrateUp(ctx context.Context, databaseURL string, migrationsDir string) er
 }
 
 func MigrateDown(ctx context.Context, databaseURL string, migrationsDir string) error {
+	if err := requireIsolatedTestDatabaseURL(databaseURL); err != nil {
+		return err
+	}
 	ctx, cancel := migrationContext(ctx)
 	defer cancel()
 	db, err := sql.Open("pgx", databaseURL)
@@ -42,10 +53,15 @@ func MigrateDown(ctx context.Context, databaseURL string, migrationsDir string) 
 		return fmt.Errorf("failed to open database for migration: %w", err)
 	}
 	defer db.Close()
-	if err := lockMigrations(ctx, db); err != nil {
+	lockConn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to reserve migration lock connection: %w", err)
+	}
+	defer lockConn.Close()
+	if err := lockMigrations(ctx, lockConn); err != nil {
 		return err
 	}
-	defer unlockMigrations(ctx, db)
+	defer unlockMigrations(lockConn)
 
 	if err := goose.SetDialect("postgres"); err != nil {
 		return err
@@ -55,6 +71,9 @@ func MigrateDown(ctx context.Context, databaseURL string, migrationsDir string) 
 }
 
 func MigrateStatus(ctx context.Context, databaseURL string, migrationsDir string) error {
+	if err := requireIsolatedTestDatabaseURL(databaseURL); err != nil {
+		return err
+	}
 	ctx, cancel := migrationContext(ctx)
 	defer cancel()
 	db, err := sql.Open("pgx", databaseURL)
@@ -70,15 +89,17 @@ func MigrateStatus(ctx context.Context, databaseURL string, migrationsDir string
 	return goose.StatusContext(ctx, db, migrationsDir)
 }
 
-func lockMigrations(ctx context.Context, db *sql.DB) error {
-	if _, err := db.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationAdvisoryLockID); err != nil {
+func lockMigrations(ctx context.Context, conn *sql.Conn) error {
+	if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationAdvisoryLockID); err != nil {
 		return fmt.Errorf("failed to acquire migration advisory lock: %w", err)
 	}
 	return nil
 }
 
-func unlockMigrations(ctx context.Context, db *sql.DB) {
-	_, _ = db.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", migrationAdvisoryLockID)
+func unlockMigrations(conn *sql.Conn) {
+	unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, _ = conn.ExecContext(unlockCtx, "SELECT pg_advisory_unlock($1)", migrationAdvisoryLockID)
 }
 
 func migrationContext(ctx context.Context) (context.Context, context.CancelFunc) {

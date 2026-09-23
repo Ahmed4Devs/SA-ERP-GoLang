@@ -37,7 +37,7 @@ func setupSecurityTest(t *testing.T) (*platformhttp.Server, *database.DB, uuid.U
 
 	db, err := database.NewPool(ctx, cfg)
 	if err != nil {
-		t.Skipf("PostgreSQL not accessible: %v", err)
+		t.Fatalf("integration database setup failed: %v", err)
 	}
 	t.Cleanup(db.Close)
 
