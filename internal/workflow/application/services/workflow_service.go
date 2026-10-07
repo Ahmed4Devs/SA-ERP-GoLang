@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -290,7 +291,9 @@ func (s *workflowService) SubmitDecision(ctx context.Context, cmd ports.SubmitDe
 		}
 
 		contextData := make(map[string]any)
-		if err := json.Unmarshal(inst.ContextData, &contextData); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(inst.ContextData))
+		decoder.UseNumber()
+		if err := decoder.Decode(&contextData); err != nil {
 			return fmt.Errorf("failed to decode workflow context: %w", err)
 		}
 		var nextStep *domain.WorkflowStep

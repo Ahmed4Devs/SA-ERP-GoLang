@@ -137,7 +137,7 @@ func TestWorkflow_MakerCheckerEnforcement(t *testing.T) {
 		ResourceID:     "INV-2026-TEST01",
 		InitiatorID:    makerUser.ID,
 		ContextData: map[string]any{
-			"amount": 15000.00,
+			"amount": "15000.00",
 		},
 	})
 	if err != nil {
@@ -225,7 +225,7 @@ func TestWorkflow_AdvancesConditionalStepAtomically(t *testing.T) {
 		ResourceType:   "SALES_INVOICE",
 		ResourceID:     "INV-HIGH-" + uid,
 		InitiatorID:    maker.ID,
-		ContextData:    map[string]any{"amount": 75000.00},
+		ContextData:    map[string]any{"amount": "75000.00"},
 	})
 	if err != nil {
 		t.Fatalf("failed to start workflow: %v", err)
@@ -296,7 +296,7 @@ func TestWorkflow_ConcurrentAnyApprovalsCreateOneDecision(t *testing.T) {
 		ResourceType:   "SALES_INVOICE",
 		ResourceID:     "INV-CONCURRENT-" + uid,
 		InitiatorID:    maker.ID,
-		ContextData:    map[string]any{"amount": 100.00},
+		ContextData:    map[string]any{"amount": "100.00"},
 	})
 	if err != nil {
 		t.Fatalf("failed to start workflow: %v", err)
@@ -454,7 +454,7 @@ func TestWorkflow_ConditionsEvaluation(t *testing.T) {
 
 	// Case 1: Amount = 30000 -> Should NOT meet condition
 	metLow, err := domain.EvaluateConditions(conditions, map[string]any{
-		"amount": 30000.00,
+		"amount": "30000.00",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -465,7 +465,7 @@ func TestWorkflow_ConditionsEvaluation(t *testing.T) {
 
 	// Case 2: Amount = 75000 -> SHOULD meet condition
 	metHigh, err := domain.EvaluateConditions(conditions, map[string]any{
-		"amount": 75000.00,
+		"amount": "75000.00",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

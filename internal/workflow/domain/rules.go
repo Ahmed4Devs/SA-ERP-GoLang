@@ -1,11 +1,12 @@
 package domain
 
 import (
+	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 // ValidateMakerChecker enforces Section 55: cannot_approve_own_document.
@@ -43,24 +44,28 @@ func EvaluateConditions(conditions []StepCondition, contextData map[string]any) 
 }
 
 func compareValues(actual any, operator string, targetStr string) (bool, error) {
+	switch actual.(type) {
+	case float32, float64:
+		return false, fmt.Errorf("workflow numbers must be exact decimal strings or JSON numbers")
+	}
 	// 1. Try numeric comparison if applicable
-	actualNum, actualIsNum := toFloat64(actual)
-	targetNum, targetErr := strconv.ParseFloat(targetStr, 64)
+	actualNum, actualIsNum := toDecimal(actual)
+	targetNum, targetErr := decimal.NewFromString(targetStr)
 
 	if actualIsNum && targetErr == nil {
 		switch operator {
 		case "GT":
-			return actualNum > targetNum, nil
+			return actualNum.GreaterThan(targetNum), nil
 		case "GTE":
-			return actualNum >= targetNum, nil
+			return actualNum.GreaterThanOrEqual(targetNum), nil
 		case "LT":
-			return actualNum < targetNum, nil
+			return actualNum.LessThan(targetNum), nil
 		case "LTE":
-			return actualNum <= targetNum, nil
+			return actualNum.LessThanOrEqual(targetNum), nil
 		case "EQ":
-			return actualNum == targetNum, nil
+			return actualNum.Equal(targetNum), nil
 		case "NEQ":
-			return actualNum != targetNum, nil
+			return !actualNum.Equal(targetNum), nil
 		default:
 			return false, fmt.Errorf("unsupported operator: %s", operator)
 		}
@@ -78,21 +83,22 @@ func compareValues(actual any, operator string, targetStr string) (bool, error) 
 	}
 }
 
-func toFloat64(v any) (float64, bool) {
+func toDecimal(v any) (decimal.Decimal, bool) {
 	switch n := v.(type) {
-	case float64:
+	case decimal.Decimal:
 		return n, true
-	case float32:
-		return float64(n), true
+	case json.Number:
+		d, err := decimal.NewFromString(n.String())
+		return d, err == nil
 	case int:
-		return float64(n), true
+		return decimal.NewFromInt(int64(n)), true
 	case int64:
-		return float64(n), true
+		return decimal.NewFromInt(n), true
 	case string:
-		f, err := strconv.ParseFloat(n, 64)
-		return f, err == nil
+		d, err := decimal.NewFromString(n)
+		return d, err == nil
 	default:
-		return 0, false
+		return decimal.Zero, false
 	}
 }
 

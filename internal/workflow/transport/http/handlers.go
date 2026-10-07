@@ -73,7 +73,9 @@ func (h *WorkflowHandler) StartWorkflow(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req StartWorkflowRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.UseNumber()
+	if err := decoder.Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
