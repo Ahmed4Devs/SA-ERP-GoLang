@@ -1,3 +1,4 @@
+import { ApprovalWorkspace } from "@/features/workflow/approval-workspace";
 import { ModuleAPIView } from "@/components/modules/module-api-view";
 import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
@@ -8,5 +9,5 @@ export const metadata: Metadata = {
 };
 
 export default function WorkflowPage() {
-  return <ModuleAPIView titleAr="مسارات الموافقة" titleEn="Workflow" descriptionAr="صندوق الموافقات وتعريفات المسارات والتفويضات الفعلية." descriptionEn="Live approval inbox, definitions, and delegations." resources={moduleResources.workflow} />;
+  return <div className="space-y-6"><ApprovalWorkspace /><ModuleAPIView titleAr="مسارات الموافقة" titleEn="Workflow" descriptionAr="صندوق الموافقات وتعريفات المسارات والتفويضات الفعلية." descriptionEn="Live approval inbox, definitions, and delegations." resources={moduleResources.workflow.filter(resource => resource.key !== "inbox")} /></div>;
 }

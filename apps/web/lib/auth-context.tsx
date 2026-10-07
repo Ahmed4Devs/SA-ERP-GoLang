@@ -17,6 +17,9 @@ export interface RoleAssignment {
   legal_entity_id?: string;
   legal_entity_name_ar?: string;
   legal_entity_name_en?: string;
+  branch_id?: string;
+  branch_name_ar?: string;
+  branch_name_en?: string;
 }
 
 interface Organization {
@@ -29,10 +32,18 @@ interface LegalEntity {
   name_en?: string;
 }
 
+export interface Branch { id: string; name_ar?: string; name_en?: string; code?: string }
+
 interface AuthContextValue {
   user: SessionUser | null;
   assignments: RoleAssignment[];
   legalEntityId: string | null;
+  branchId: string | null;
+  branches: Branch[];
+  branchesLoading: boolean;
+  branchError: string | null;
+  canSelectAllBranches: boolean;
+  selectBranch: (id: string) => void;
   loading: boolean;
   authError: string | null;
   scopeError: string | null;
@@ -49,6 +60,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [assignments, setAssignments] = useState<RoleAssignment[]>([]);
   const [legalEntityId, setLegalEntityId] = useState<string | null>(null);
+  const [branchId, setBranchId] = useState<string | null>(null);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchError, setBranchError] = useState<string | null>(null);
+  const canSelectAllBranches = assignments.some(assignment => !assignment.branch_id && (!assignment.legal_entity_id || assignment.legal_entity_id === legalEntityId));
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [scopeError, setScopeError] = useState<string | null>(null);
@@ -140,10 +156,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [authError, loading, pathname, router, user]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    setBranches([]); setBranchId(null); setBranchError(null);
+    if (!legalEntityId || !user) { setBranchesLoading(false); return; }
+    const entity = legalEntityId;
+    setBranchesLoading(true);
+    async function loadBranches() {
+      try {
+        const scoped = assignments.filter(item => item.legal_entity_id === entity && item.branch_id);
+        const available = canSelectAllBranches
+          ? (await apiFetch<{ data?: Branch[] }>(`/api/v1/org/branches?legal_entity_id=${encodeURIComponent(entity)}`, { signal: controller.signal })).data ?? []
+          : scoped.map(item => ({ id: item.branch_id!, name_ar: item.branch_name_ar, name_en: item.branch_name_en }));
+        if (controller.signal.aborted) return;
+        const unique = available.filter((branch, index, all) => all.findIndex(other => other.id === branch.id) === index);
+        setBranches(unique);
+        const saved = window.localStorage.getItem(`erp_branch_${entity}`);
+        setBranchId(unique.some(branch => branch.id === saved) ? saved : canSelectAllBranches ? null : unique[0]?.id ?? null);
+      } catch (failure) {
+        if (!controller.signal.aborted) setBranchError(failure instanceof Error ? failure.message : "Unable to load branches");
+      } finally { if (!controller.signal.aborted) setBranchesLoading(false); }
+    }
+    void loadBranches();
+    return () => controller.abort();
+  }, [assignments, canSelectAllBranches, legalEntityId, user]);
+
+  const selectBranch = useCallback((id: string) => {
+    if (!legalEntityId || (id ? !branches.some(branch => branch.id === id) : !canSelectAllBranches)) return;
+    setBranchId(id || null);
+    window.localStorage.setItem(`erp_branch_${legalEntityId}`, id);
+  }, [branches, canSelectAllBranches, legalEntityId]);
+
   const selectLegalEntity = useCallback((id: string) => {
+    if (!assignments.some(assignment => assignment.legal_entity_id === id)) return;
+    setBranchId(null); setBranches([]);
     setLegalEntityId(id);
     window.localStorage.setItem("erp_legal_entity_id", id);
-  }, []);
+  }, [assignments]);
 
   const logout = useCallback(async () => {
     try {
@@ -160,8 +209,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const value = useMemo(
-    () => ({ user, assignments, legalEntityId, loading, authError, scopeError, refresh, selectLegalEntity, logout }),
-    [user, assignments, legalEntityId, loading, authError, scopeError, refresh, selectLegalEntity, logout],
+    () => ({ user, assignments, legalEntityId, branchId, branches, branchesLoading, branchError, canSelectAllBranches, selectBranch, loading, authError, scopeError, refresh, selectLegalEntity, logout }),
+    [user, assignments, legalEntityId, branchId, branches, branchesLoading, branchError, canSelectAllBranches, selectBranch, loading, authError, scopeError, refresh, selectLegalEntity, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

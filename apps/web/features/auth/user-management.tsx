@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useLocale } from "@/components/layout/shell";
 import { apiFetch } from "@/lib/api-client";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, type Branch } from "@/lib/auth-context";
 
 interface ManagedUser {
   id: string;
@@ -61,6 +61,10 @@ export function UserManagement() {
   const [password, setPassword] = useState("");
   const [roleID, setRoleID] = useState("");
   const [entityID, setEntityID] = useState(legalEntityId ?? "");
+  const [roleBranchID, setRoleBranchID] = useState("");
+  const [roleBranches, setRoleBranches] = useState<Branch[]>([]);
+  const [roleBranchError, setRoleBranchError] = useState<string | null>(null);
+  const [roleBranchesLoading, setRoleBranchesLoading] = useState(false);
   const [userAssignments, setUserAssignments] = useState<UserRoleAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
@@ -110,6 +114,18 @@ export function UserManagement() {
       .finally(() => { if (!controller.signal.aborted) setAssignmentsLoading(false); });
     return () => controller.abort();
   }, [selected?.id, assignmentsRevision, copy.unavailable]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setRoleBranchID(""); setRoleBranches([]); setRoleBranchError(null);
+    if (!entityID || !selected) { setRoleBranchesLoading(false); return; }
+    setRoleBranchesLoading(true);
+    apiFetch<{ data?: Branch[] }>(`/api/v1/org/branches?legal_entity_id=${encodeURIComponent(entityID)}`, { signal: controller.signal })
+      .then(result => { if (!controller.signal.aborted) setRoleBranches(result.data ?? []); })
+      .catch(failure => { if (!controller.signal.aborted) setRoleBranchError(failure instanceof Error ? failure.message : copy.unavailable); })
+      .finally(() => { if (!controller.signal.aborted) setRoleBranchesLoading(false); });
+    return () => controller.abort();
+  }, [entityID, selected, copy.unavailable]);
 
   const create = async (values: CreateValues) => {
     setError(null); setSuccess(null);
@@ -173,11 +189,13 @@ export function UserManagement() {
         <form onSubmit={(event) => { event.preventDefault(); void update(`/api/v1/auth/users/${selected.id}/password`, { password, expected_version: selected.version }); }} className="space-y-2 border-t pt-4">
           <div className="flex flex-wrap items-end gap-3"><label className="min-w-48 space-y-1.5 text-sm">{copy.newPassword}<input aria-label={copy.newPassword} type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} maxLength={1024} required disabled={busy} className={control} /></label><button type="submit" disabled={busy || password.length < 8} className={button}>{copy.resetPassword}</button></div><p className="text-xs text-muted-foreground">{copy.passwordHint}</p>
         </form>
-        <form onSubmit={(event) => { event.preventDefault(); void update("/api/v1/authz/assignments", { user_id: selected.id, role_id: roleID, ...(entityID ? { legal_entity_id: entityID } : {}) }); }} className="flex flex-wrap items-end gap-3 border-t pt-4">
+        <form onSubmit={(event) => { event.preventDefault(); void update("/api/v1/authz/assignments", { user_id: selected.id, role_id: roleID, ...(entityID ? { legal_entity_id: entityID } : {}), ...(entityID && roleBranchID ? { branch_id: roleBranchID } : {}) }); }} className="flex flex-wrap items-end gap-3 border-t pt-4">
           <label className="min-w-48 space-y-1.5 text-sm">{copy.role}<select aria-label={copy.role} value={roleID} onChange={(event) => setRoleID(event.target.value)} required disabled={busy || Boolean(roleError)} className={control}><option value="">{copy.chooseRole}</option>{roles.map((role) => <option key={role.id} value={role.id}>{(locale === "ar" ? role.name_ar : role.name_en) || role.code}</option>)}</select></label>
           <label className="min-w-48 space-y-1.5 text-sm">{copy.scope}<select aria-label={copy.scope} value={entityID} onChange={(event) => setEntityID(event.target.value)} disabled={busy} className={control}><option value="">{copy.globalScope}</option>{entityOptions.map((entity) => <option key={entity.id} value={entity.legal_entity_id}>{(locale === "ar" ? entity.legal_entity_name_ar : entity.legal_entity_name_en) || entity.legal_entity_id}</option>)}</select></label>
-          <button type="submit" disabled={busy || !roleID || Boolean(roleError)} className={button}>{copy.assignRole}</button>
+          {entityID && <label className="min-w-48 space-y-1.5 text-sm">{t.business.branch}<select aria-label={t.business.branch} value={roleBranchID} onChange={event => setRoleBranchID(event.target.value)} disabled={busy || roleBranchesLoading || Boolean(roleBranchError)} className={control}><option value="">{t.business.allEntity}</option>{roleBranches.map(branch => <option key={branch.id} value={branch.id}>{(locale === "ar" ? branch.name_ar : branch.name_en) || branch.code || branch.id}</option>)}</select></label>}
+          <button type="submit" disabled={busy || roleBranchesLoading || !roleID || Boolean(roleError)} className={button}>{copy.assignRole}</button>
         </form>
+        {roleBranchError && <p role="alert" className="text-sm text-destructive">{t.business.branchError}: {roleBranchError}</p>}
         {roleError && <p role="alert" className="text-sm text-destructive">{roleError}</p>}
         <section aria-label={copy.viewAssignments} className="space-y-2 border-t pt-4">
           <h3 className="text-sm font-semibold">{copy.viewAssignments}</h3>

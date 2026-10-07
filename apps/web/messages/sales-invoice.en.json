@@ -1,6 +1,6 @@
 {
   "title": "Sales invoices",
-  "description": "Create a draft, review its calculated amounts, and post it to the ledger.",
+  "description": "Create a draft, submit it for independent approval, then post the approved invoice.",
   "newInvoice": "New invoice",
   "refresh": "Refresh invoices",
   "empty": "No invoices found.",
@@ -46,7 +46,7 @@
   "netAmount": "Line total",
   "post": "Post invoice",
   "posting": "Posting…",
-  "postConfirm": "I have reviewed this draft. Posting records the invoice in the ledger; corrections require a credit note.",
+  "postConfirm": "I have reviewed the approved invoice. Posting records it in the ledger; corrections require a credit note.",
   "posted": "Invoice posted successfully.",
   "draft": "Draft",
   "postedStatus": "Posted",
@@ -62,6 +62,17 @@
   "next": "Next page",
   "previous": "Previous page",
   "page": "Page",
-  "saved": "Draft saved. Review the calculated invoice before posting.",
-  "savedRounded": "Draft saved. Some entered amounts were rounded; review the saved values before posting."
+  "saved": "Draft saved. Review the calculated invoice before submitting it for approval.",
+  "savedRounded": "Draft saved. Some entered amounts were rounded; review the saved values before submitting.",
+  "submit": "Submit for approval",
+  "submitting": "Submitting…",
+  "submitConfirm": "I have reviewed this invoice and want to submit it for independent approval.",
+  "submitted": "Invoice submitted for approval.",
+  "submittedStatus": "Awaiting approval",
+  "approvedStatus": "Approved",
+  "rejectedStatus": "Rejected",
+  "waitingApproval": "This invoice is awaiting an independent approver in the approval inbox.",
+  "openInbox": "Open approval inbox",
+  "makerOnly": "Only the creator can submit this draft.",
+  "independentPost": "A different user must post this approved invoice."
 }

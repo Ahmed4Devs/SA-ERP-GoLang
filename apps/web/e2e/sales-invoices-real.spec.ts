@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-test("real backend: create, review, and post a sales invoice", async ({ page }) => {
+test("real backend: submit, independently approve, and post a sales invoice", async ({ page }) => {
   test.skip(process.env.E2E_REAL_BACKEND !== "1", "Requires a disposable seeded PostgreSQL database and Go API.");
+  test.skip(!process.env.E2E_APPROVER_USERNAME || !process.env.E2E_APPROVER_PASSWORD, "Requires a separate approver with the invoice workflow role and configured amount limit.");
   await page.addInitScript(() => localStorage.setItem("erp_locale", "en"));
   await page.goto("/login");
   await page.locator("#login-identifier").fill(process.env.E2E_USERNAME || "admin");
@@ -20,10 +21,30 @@ test("real backend: create, review, and post a sales invoice", async ({ page }) 
   await form.getByRole("textbox", { name: "Quantity", exact: true }).fill("2");
   await form.getByRole("textbox", { name: "Unit price", exact: true }).fill("123.4567");
   await form.getByRole("textbox", { name: "Notes", exact: true }).fill(`Browser integration ${Date.now()}`);
+  const creationResponse = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/v1/sales/invoices");
   await form.getByRole("button", { name: "Save draft and review" }).click();
+  const savedInvoice = await (await creationResponse).json();
+  const savedInvoiceId = savedInvoice.ID ?? savedInvoice.id ?? savedInvoice.data?.ID ?? savedInvoice.data?.id;
   const review = page.getByRole("region", { name: "Invoice review", exact: true });
   await expect(review).toBeVisible();
   await expect(review).toContainText("123.4567");
+  await review.getByRole("checkbox").check();
+  await review.getByRole("button", { name: "Submit for approval", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Invoice submitted for approval." })).toBeVisible();
+  const invoiceNumber = await review.locator("h2 bdi").innerText();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await page.locator("#login-identifier").fill(process.env.E2E_APPROVER_USERNAME!);
+  await page.locator("#login-password").fill(process.env.E2E_APPROVER_PASSWORD!);
+  await page.locator("#login-submit-btn").click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto("/workflow");
+  const row = page.locator(`tr[data-document-id="${savedInvoiceId}"]`);
+  await row.getByRole("button", { name: "Review request", exact: true }).click();
+  await page.getByRole("button", { name: "Approve request", exact: true }).click();
+  await page.getByRole("button", { name: "Confirm decision", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Decision recorded." })).toBeVisible();
+  await page.goto("/sales");
+  await page.getByRole("row").filter({ hasText: invoiceNumber }).getByRole("button", { name: "Open invoice", exact: true }).click();
   await review.getByRole("checkbox").check();
   await review.getByRole("button", { name: "Post invoice", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "Invoice posted successfully." })).toBeVisible();

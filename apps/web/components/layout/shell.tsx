@@ -105,9 +105,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const { locale, setLocale, t, dir } = useLocale();
   const isAr = locale === "ar";
   const { theme, setTheme } = useTheme();
+  const [navigationSearch, setNavigationSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const { user, assignments, legalEntityId, loading, authError, scopeError, refresh, selectLegalEntity, logout } = useAuth();
+  const { user, assignments, legalEntityId, branchId, branches, branchesLoading, branchError, canSelectAllBranches, selectBranch, loading, authError, scopeError, refresh, selectLegalEntity, logout } = useAuth();
 
   useEffect(() => {
     setMounted(true);
@@ -225,6 +226,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 <span>{activeEntity?.legal_entity_name_ar ?? t.topbar.legal_entity}</span>
               )}
             </div>
+            <label className="inline-flex items-center gap-2 rounded-full border bg-secondary px-3 py-1 text-xs">
+              <span>{t.business.branch}</span>
+              <select aria-label={t.business.branch} value={branchId ?? ""} disabled={branchesLoading || Boolean(branchError)} onChange={event => selectBranch(event.target.value)} className="max-w-48 bg-transparent outline-none disabled:opacity-50">
+                {canSelectAllBranches && <option value="">{t.business.allBranches}</option>}
+                {!canSelectAllBranches && !branches.length && <option value="">{branchesLoading ? t.business.branchLoading : t.business.noValues}</option>}
+                {branches.map(branch => <option key={branch.id} value={branch.id}>{(isAr ? branch.name_ar : branch.name_en) || branch.code || branch.id}</option>)}
+              </select>
+            </label>
           </div>
 
           {/* Search Box */}
@@ -233,9 +242,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <Search className="absolute inset-inline-start-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder={t.topbar.search}
+                aria-label={t.business.searchModules}
+                value={navigationSearch}
+                onChange={event => setNavigationSearch(event.target.value)}
+                onKeyDown={event => { if (event.key === "Escape") setNavigationSearch(""); }}
+                placeholder={t.business.searchModules}
                 className="w-full rounded-lg border bg-background ps-9 pe-4 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring transition-all"
               />
+              {navigationSearch.trim() && <div role="region" aria-label={t.business.searchModules} className="absolute top-full z-50 mt-2 max-h-80 w-full overflow-y-auto rounded-lg border bg-card p-2 shadow-lg">
+                {navItems.filter(item => `${item.label} ${item.key}`.toLocaleLowerCase().includes(navigationSearch.toLocaleLowerCase().trim())).map(item => <Link key={item.key} href={item.href} onClick={() => setNavigationSearch("")} className="block rounded px-3 py-2 text-sm hover:bg-muted">{item.label}</Link>)}
+                {!navItems.some(item => `${item.label} ${item.key}`.toLocaleLowerCase().includes(navigationSearch.toLocaleLowerCase().trim())) && <p className="p-3 text-sm text-muted-foreground">{t.business.noPages}</p>}
+              </div>}
             </div>
           </div>
 
@@ -361,6 +378,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         {/* Content Workspace */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto space-y-4">
+            {branchError && <p role="alert" className="rounded-lg border border-amber-500/40 p-3 text-sm">{t.business.branchError}: {branchError}</p>}
             {scopeError && (
               <div role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
                 {isAr ? "تم تسجيل الدخول، لكن تعذر تحميل نطاقات الوصول: " : "Signed in, but access scopes could not be loaded: "}

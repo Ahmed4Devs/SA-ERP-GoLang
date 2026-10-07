@@ -1,12 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, Database, Play, Plus, RefreshCw, Search, Settings2, X } from "lucide-react";
+import { AlertCircle, Database, Plus, RefreshCw, Search, X } from "lucide-react";
 import { useLocale } from "@/components/layout/shell";
 import { apiFetch } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { ResourceCreateForm } from "@/components/forms/resource-create-form";
+import { fieldKey, fieldLabel, stateLabel } from "@/lib/record-presentation";
+import { ResourceActions } from "@/components/modules/resource-actions";
+import { transactionForms } from "@/lib/transaction-forms";
 import { resourceForms } from "@/lib/resource-forms";
+import { hasServerPagination, hasServerSearch, normalizeRows, responseTotal, loadReferenceRows } from "@/lib/resource-data";
+import { RecordDetails } from "@/components/modules/record-details";
+export { normalizeRows } from "@/lib/resource-data";
 
 export interface ResourceDefinition {
   key: string;
@@ -46,7 +52,6 @@ export interface MutationRequest {
 }
 
 const preferredColumns = [
-  "id",
   "code",
   "number",
   "name_ar",
@@ -87,20 +92,6 @@ export function buildResourcePath(
   );
 }
 
-export function normalizeRows(payload: unknown): RecordRow[] {
-  if (Array.isArray(payload)) return payload.map(toRecord);
-  if (payload === null || payload === undefined) return [];
-  if (typeof payload !== "object") return [{ value: payload }];
-
-  const envelope = payload as RecordRow;
-  for (const key of ["data", "items", "results", "records"]) {
-    if (Array.isArray(envelope[key])) return (envelope[key] as unknown[]).map(toRecord);
-    if (key in envelope && envelope[key] === null) return [];
-  }
-  if (envelope.data && typeof envelope.data === "object") return [toRecord(envelope.data)];
-  return [envelope];
-}
-
 export function buildMutationRequest(
   rawPath: string,
   method: MutationMethod,
@@ -139,31 +130,24 @@ export function buildMutationRequest(
   };
 }
 
-function toRecord(value: unknown): RecordRow {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as RecordRow)
-    : { value };
-}
-
 function displayValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "✓" : "✕";
   if (typeof value === "object") {
-    const serialized = JSON.stringify(value);
-    return serialized.length > 160 ? `${serialized.slice(0, 157)}…` : serialized;
+    return Array.isArray(value) ? String(value.length) : "…";
   }
   return String(value);
 }
 
 function optionValue(row: RecordRow, filter: ResourceFilterDefinition): string {
-  const value = row[filter.valueKey ?? "id"];
+  const value = row[fieldKey(filter.valueKey ?? "id")];
   return value === null || value === undefined ? "" : String(value);
 }
 
 function optionLabel(row: RecordRow, filter: ResourceFilterDefinition, isAr: boolean): string {
   const keys = isAr ? filter.optionLabelKeysAr : filter.optionLabelKeysEn;
   const parts = (keys ?? [])
-    .map((key) => row[key])
+    .map((key) => row[fieldKey(key)])
     .filter((value) => value !== null && value !== undefined && value !== "")
     .map(String);
   return parts.length > 0 ? parts.join(" · ") : optionValue(row, filter);
@@ -177,9 +161,11 @@ export function ModuleAPIView({
   resources,
 }: ModuleAPIViewProps) {
   const { locale, dir, t } = useLocale();
-  const { legalEntityId, refresh } = useAuth();
+  const { legalEntityId, branchId, refresh } = useAuth();
   const isAr = locale === "ar";
   const [activeKey, setActiveKey] = useState(resources[0]?.key ?? "");
+  const [total, setTotal] = useState<number | null>(null);
+  const [paging, setPaging] = useState({ scope: "", index: 0, size: 25 });
   const [rows, setRows] = useState<RecordRow[]>([]);
   const [filterOptions, setFilterOptions] = useState<Record<string, RecordRow[]>>({});
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
@@ -190,13 +176,6 @@ export function ModuleAPIView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [operationOpen, setOperationOpen] = useState(false);
-  const [operationMethod, setOperationMethod] = useState<MutationMethod>("POST");
-  const [operationPath, setOperationPath] = useState(resources[0]?.path ?? "/api/v1/");
-  const [operationBody, setOperationBody] = useState("{\n  \n}");
-  const [operationLoading, setOperationLoading] = useState(false);
-  const [operationError, setOperationError] = useState<string | null>(null);
-  const [operationResult, setOperationResult] = useState<unknown>(null);
   const [selectedRow, setSelectedRow] = useState<RecordRow | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(false);
@@ -204,8 +183,13 @@ export function ModuleAPIView({
 
   const activeResource = resources.find((resource) => resource.key === activeKey) ?? resources[0];
   const activeFilters = activeResource?.filters ?? noResourceFilters;
-  const createDefinition = activeResource ? resourceForms[activeResource.path] : undefined;
-  const filterScope = `${activeResource?.path}:${legalEntityId}`;
+  const createDefinition = activeResource ? (resourceForms[activeResource.path] ?? transactionForms[activeResource.path]) : undefined;
+  const filterScope = `${activeResource?.path}:${legalEntityId}:${branchId}`;
+  const serverPagination = hasServerPagination(activeResource?.path ?? "");
+  const serverSearch = hasServerSearch(activeResource?.path ?? "");
+  const pageScope = `${filterScope}:${JSON.stringify(filterValues)}:${search}`;
+  const pageIndex = paging.scope === pageScope ? paging.index : 0;
+  const pageSize = paging.size;
   const filtersReady = activeFilters.length === 0 || (loadedFilterScope === filterScope && activeFilters.every((filter) => Boolean(filterValues[filter.key])));
 
   useEffect(() => {
@@ -233,10 +217,8 @@ export function ModuleAPIView({
       try {
         const loaded = await Promise.all(
           activeFilters.map(async (filter) => {
-            const payload = await apiFetch<unknown>(
-              appendTenant(filter.optionsPath, legalEntityId, filter.tenant !== false),
-            );
-            return [filter.key, normalizeRows(payload)] as const;
+            const options = await loadReferenceRows(filter.optionsPath, legalEntityId, new AbortController().signal, filter.tenant !== false);
+            return [filter.key, options] as const;
           }),
         );
         if (cancelled) return;
@@ -300,9 +282,14 @@ export function ModuleAPIView({
     setLoading(true);
     setError(null);
     try {
-      const payload = await apiFetch<unknown>(buildResourcePath(activeResource, legalEntityId, filterValues), { signal: controller.signal });
+      const requestPath = appendQueryParams(buildResourcePath(activeResource, legalEntityId, filterValues), {
+        ...(serverPagination ? { limit: String(pageSize), offset: String(pageIndex * pageSize) } : {}),
+        ...(serverSearch && search.trim() ? { search: search.trim() } : {}),
+      });
+      const payload = await apiFetch<unknown>(requestPath, { signal: controller.signal });
       if (controller.signal.aborted) return;
       setRows(normalizeRows(payload));
+      setTotal(responseTotal(payload));
       setLastUpdated(new Date());
     } catch (requestError) {
       if (controller.signal.aborted) return;
@@ -311,7 +298,7 @@ export function ModuleAPIView({
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [activeResource, filterValues, filtersReady, isAr, legalEntityId]);
+  }, [activeResource, filterValues, filtersReady, isAr, legalEntityId, serverPagination, serverSearch, pageSize, pageIndex, search]);
 
   useEffect(() => {
     void load();
@@ -320,53 +307,22 @@ export function ModuleAPIView({
 
   useEffect(() => {
     if (!activeResource) return;
-    setOperationPath(activeResource.path);
-    setOperationError(null);
-    setOperationResult(null);
     setSelectedRow(null);
     setCreateOpen(false);
     setCreateSuccess(false);
-    setOperationOpen(false);
-    setOperationBody("{\n  \n}");
-  }, [activeResource, legalEntityId]);
-
-  const runOperation = async () => {
-    if (!activeResource) return;
-    setOperationLoading(true);
-    setOperationError(null);
-    setOperationResult(null);
-    try {
-      const request = buildMutationRequest(
-        operationPath,
-        operationMethod,
-        operationBody,
-        legalEntityId,
-        activeResource.tenant !== false,
-      );
-      const result = await apiFetch<unknown>(request.path, request.init);
-      setOperationResult(result ?? { ok: true });
-      await load();
-    } catch (requestError) {
-      setOperationError(requestError instanceof Error ? requestError.message : isAr ? "تعذر تنفيذ العملية." : "Operation failed.");
-    } finally {
-      setOperationLoading(false);
-    }
-  };
-
-  const useSelectedRecord = () => {
-    const id = selectedRow?.id;
-    if (!id || !activeResource) return;
-    setOperationPath(`${activeResource.path.replace(/\/$/, "")}/${encodeURIComponent(String(id))}`);
-  };
+  }, [activeResource, legalEntityId, branchId]);
 
   const filteredRows = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    if (!query) return rows;
+    if (!query || serverSearch) return rows;
     return rows.filter((row) => JSON.stringify(row).toLocaleLowerCase().includes(query));
-  }, [rows, search]);
+  }, [rows, search, serverSearch]);
+  const visibleRows = serverPagination ? filteredRows : filteredRows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
+  const recordCount = serverPagination ? total : filteredRows.length;
+  const hasNext = serverPagination ? total === null ? rows.length === pageSize : (pageIndex + 1) * pageSize < total : (pageIndex + 1) * pageSize < filteredRows.length;
 
   const columns = useMemo(() => {
-    const keys = Array.from(new Set(filteredRows.flatMap((row) => Object.keys(row))));
+    const keys = Array.from(new Set(filteredRows.flatMap((row) => Object.keys(row)))).filter(key => !["legal_entity_id", "created_by", "created_by_user_id", "updated_by", "journal_entry_id", "version"].includes(key));
     return keys
       .sort((left, right) => {
         const leftIndex = preferredColumns.indexOf(left);
@@ -392,7 +348,7 @@ export function ModuleAPIView({
             <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{isAr ? descriptionAr : descriptionEn}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {createDefinition && <button type="button" onClick={() => { setCreateOpen(true); setCreateSuccess(false); setOperationOpen(false); }} disabled={activeResource.tenant !== false && !legalEntityId} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"><Plus className="h-4 w-4" />{t.resourceForm.create}</button>}
+            {createDefinition && <button type="button" onClick={() => { setCreateOpen(true); setCreateSuccess(false); }} disabled={activeResource.tenant !== false && !legalEntityId} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"><Plus className="h-4 w-4" />{t.resourceForm.create}</button>}
             <button
               type="button"
               onClick={() => void load()}
@@ -402,16 +358,7 @@ export function ModuleAPIView({
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               {isAr ? "تحديث" : "Refresh"}
             </button>
-            <button
-              type="button"
-              onClick={() => setOperationOpen((open) => !open)}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border bg-background px-4 py-2 text-sm font-semibold hover:bg-muted"
-              aria-expanded={operationOpen}
-              aria-controls="module-operation-panel"
-            >
-              {operationOpen ? <X className="h-4 w-4" /> : <Settings2 className="h-4 w-4" />}
-              {operationOpen ? (isAr ? "إغلاق العملية" : "Close operation") : (isAr ? "عملية جديدة" : "New operation")}
-            </button>
+
           </div>
         </div>
       </div>
@@ -436,7 +383,7 @@ export function ModuleAPIView({
 
       {createSuccess && <p role="status" className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">{t.resourceForm.success}</p>}
       {createOpen && createDefinition && activeResource && (
-        <ResourceCreateForm key={`${activeResource.key}-${legalEntityId}`} definition={createDefinition} path={activeResource.path} title={isAr ? activeResource.labelAr : activeResource.labelEn} legalEntityId={legalEntityId} tenant={activeResource.tenant !== false} initialValues={filterValues}
+        <ResourceCreateForm key={`${activeResource.key}-${legalEntityId}-${branchId}`} definition={createDefinition} path={activeResource.path} title={isAr ? activeResource.labelAr : activeResource.labelEn} legalEntityId={legalEntityId} tenant={activeResource.tenant !== false} initialValues={{ ...filterValues, ...(branchId ? { branch_id: branchId } : {}) }}
           onCancel={() => setCreateOpen(false)}
           onSaved={async () => {
             setCreateOpen(false);
@@ -456,6 +403,7 @@ export function ModuleAPIView({
                 <label key={filter.key} className="space-y-1.5 text-xs font-semibold">
                   <span>{isAr ? filter.labelAr : filter.labelEn}</span>
                   <select
+                    aria-label={isAr ? filter.labelAr : filter.labelEn}
                     value={filterValues[filter.key] ?? ""}
                     onChange={(event) => {
                       setFilterValues((current) => ({ ...current, [filter.key]: event.target.value }));
@@ -483,97 +431,6 @@ export function ModuleAPIView({
         </section>
       )}
 
-      {operationOpen && activeResource && (
-        <section id="module-operation-panel" className="rounded-xl border bg-card p-5 shadow-sm" aria-label={isAr ? "تنفيذ عملية API" : "Run API operation"}>
-          <div className="mb-4">
-            <h2 className="font-bold">{isAr ? "تنفيذ عملية فعلية" : "Run a live operation"}</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {isAr
-                ? "تُرسل العملية مباشرة إلى الخادم وتخضع لصلاحيات حسابك وعزل الكيان. استخدم مسار العملية الموثق في عقد OpenAPI."
-                : "The operation is sent directly to the server and remains subject to your permissions and tenant boundary. Use an endpoint documented by the OpenAPI contract."}
-            </p>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-[9rem_1fr]">
-            <label className="space-y-1.5 text-xs font-semibold">
-              <span>{isAr ? "الطريقة" : "Method"}</span>
-              <select
-                id="operation-method"
-                value={operationMethod}
-                onChange={(event) => setOperationMethod(event.target.value as MutationMethod)}
-                className="h-10 w-full rounded-lg border bg-background px-3 font-mono"
-              >
-                <option>POST</option>
-                <option>PUT</option>
-                <option>PATCH</option>
-                <option>DELETE</option>
-              </select>
-            </label>
-            <label className="space-y-1.5 text-xs font-semibold">
-              <span>{isAr ? "مسار العملية" : "Operation endpoint"}</span>
-              <input
-                id="operation-path"
-                value={operationPath}
-                onChange={(event) => setOperationPath(event.target.value)}
-                dir="ltr"
-                className="h-10 w-full rounded-lg border bg-background px-3 font-mono text-xs"
-              />
-            </label>
-          </div>
-
-          {selectedRow?.id !== undefined && (
-            <button type="button" onClick={useSelectedRecord} className="mt-3 text-xs font-semibold text-primary hover:underline">
-              {isAr ? `استخدام السجل المحدد: ${String(selectedRow.id)}` : `Use selected record: ${String(selectedRow.id)}`}
-            </button>
-          )}
-
-          {operationMethod !== "DELETE" && (
-            <label className="mt-4 block space-y-1.5 text-xs font-semibold">
-              <span>{isAr ? "بيانات الطلب (JSON)" : "Request body (JSON)"}</span>
-              <textarea
-                id="operation-body"
-                value={operationBody}
-                onChange={(event) => setOperationBody(event.target.value)}
-                dir="ltr"
-                spellCheck={false}
-                rows={8}
-                className="w-full rounded-lg border bg-background p-3 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
-              />
-              <span className="block font-normal text-muted-foreground">
-                {isAr ? "يُضاف legal_entity_id المختار تلقائيًا إذا لم ترسله." : "The selected legal_entity_id is added automatically when omitted."}
-              </span>
-            </label>
-          )}
-
-          {operationError && (
-            <div role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{operationError}</span>
-            </div>
-          )}
-          {operationResult !== null && (
-            <div data-testid="operation-success" className="mt-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-700 dark:text-emerald-300">
-              <div className="mb-2 flex items-center gap-2 font-semibold">
-                <CheckCircle2 className="h-4 w-4" />
-                {isAr ? "نُفذت العملية وحُدثت النتائج" : "Operation completed and results refreshed"}
-              </div>
-              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all font-mono">{JSON.stringify(operationResult, null, 2)}</pre>
-            </div>
-          )}
-
-          <button
-            id="operation-submit"
-            type="button"
-            onClick={() => void runOperation()}
-            disabled={operationLoading || (activeResource.tenant !== false && !legalEntityId)}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"
-          >
-            <Play className="h-4 w-4" />
-            {operationLoading ? (isAr ? "جاري التنفيذ…" : "Running…") : (isAr ? "تنفيذ" : "Run")}
-          </button>
-        </section>
-      )}
-
       {(filterError || error) && (
         <div role="alert" className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -588,12 +445,13 @@ export function ModuleAPIView({
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder={isAr ? "بحث في النتائج الفعلية…" : "Search live results…"}
+              aria-label={serverPagination && !serverSearch ? t.business.searchPage : t.business.searchAll}
+              placeholder={serverPagination && !serverSearch ? t.business.searchPage : t.business.searchAll}
               className="h-9 w-full rounded-lg border bg-background ps-9 pe-3 text-sm outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
           <div className="text-xs text-muted-foreground">
-            {filteredRows.length} {isAr ? "سجل" : "records"}
+            {recordCount ?? filteredRows.length} {t.business.records}
             {lastUpdated ? ` · ${lastUpdated.toLocaleTimeString(isAr ? "ar-SA" : "en-US")}` : ""}
           </div>
         </div>
@@ -609,11 +467,11 @@ export function ModuleAPIView({
             <table className="w-full min-w-[720px] text-xs">
               <thead className="border-b bg-muted/50 text-muted-foreground">
                 <tr>
-                  {columns.map((column) => <th key={column} className="px-4 py-3 text-start font-semibold">{column}</th>)}
+                  {columns.map((column) => <th key={column} className="px-4 py-3 text-start font-semibold">{fieldLabel(column,locale)}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filteredRows.map((row, rowIndex) => (
+                {visibleRows.map((row, rowIndex) => (
                   <tr
                     key={String(row.id ?? `${activeKey}-${rowIndex}`)}
                     onClick={() => setSelectedRow(row)}
@@ -623,8 +481,8 @@ export function ModuleAPIView({
                     className={`cursor-pointer hover:bg-muted/30 ${selectedRow === row ? "bg-primary/10" : ""}`}
                   >
                     {columns.map((column) => (
-                      <td key={column} title={displayValue(row[column])} className="max-w-72 truncate px-4 py-3 align-top">
-                        {displayValue(row[column])}
+                      <td key={column} title={column === "status" || column.endsWith("_status") ? stateLabel(row[column],locale) : displayValue(row[column])} className="max-w-72 truncate px-4 py-3 align-top">
+                        {column === "status" || column.endsWith("_status") ? stateLabel(row[column],locale) : displayValue(row[column])}
                       </td>
                     ))}
                   </tr>
@@ -635,20 +493,22 @@ export function ModuleAPIView({
         </div>
       </div>
 
+      <nav aria-label={t.business.page} className="flex flex-wrap items-center justify-end gap-3 text-sm">
+        <label className="flex items-center gap-2">{t.business.pageSize}<select value={pageSize} onChange={event => { setPaging({ scope: pageScope, index: 0, size: Number(event.target.value) }); setSelectedRow(null); }} className="rounded-lg border bg-background px-2 py-2">{[25, 50, 100].map(size => <option key={size} value={size}>{size}</option>)}</select></label>
+        <span>{t.business.page} {pageIndex + 1}{recordCount !== null ? ` / ${Math.max(1, Math.ceil(recordCount / pageSize))}` : ""}</span>
+        <button type="button" disabled={loading || pageIndex === 0} onClick={() => { setPaging({ scope: pageScope, index: pageIndex - 1, size: pageSize }); setSelectedRow(null); }} className="rounded-lg border px-3 py-2 disabled:opacity-50">{t.business.previous}</button>
+        <button type="button" disabled={loading || !hasNext} onClick={() => { setPaging({ scope: pageScope, index: pageIndex + 1, size: pageSize }); setSelectedRow(null); }} className="rounded-lg border px-3 py-2 disabled:opacity-50">{t.business.next}</button>
+      </nav>
+
       {selectedRow && (
         <section aria-label={t.resourceForm.details} className="rounded-xl border bg-card p-5">
           <div className="mb-4 flex items-center justify-between gap-4"><h2 className="font-semibold">{t.resourceForm.details}</h2><button type="button" onClick={() => setSelectedRow(null)} aria-label={t.resourceForm.close} className="rounded-lg p-2 hover:bg-muted"><X className="h-4 w-4" /></button></div>
-          <dl className="grid gap-4 sm:grid-cols-2">
-            {Object.entries(selectedRow).map(([key, value]) => <div key={key} className="min-w-0"><dt className="text-xs text-muted-foreground">{key}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm">{value && typeof value === "object" ? JSON.stringify(value, null, 2) : displayValue(value)}</dd></div>)}
-          </dl>
+          <ResourceActions key={`actions-${activeResource.path}-${selectedRow.id}`} path={activeResource.path} row={selectedRow} legalEntityId={legalEntityId} onSaved={load} />
+          <RecordDetails key={`details-${activeResource.path}-${selectedRow.id}`} row={selectedRow} path={activeResource.path} legalEntityId={legalEntityId} />
         </section>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        {isAr
-          ? "كل النتائج والعمليات في هذه الشاشة متصلة بالخادم مباشرة؛ لا تُنشأ بيانات محلية وهمية."
-          : "All results and operations on this screen use the live server; no local records are fabricated."}
-      </p>
+
     </div>
   );
 }

@@ -1,12 +1,17 @@
 import { z } from "zod";
 import en from "@/messages/en.json";
 
-export type FieldLabel = keyof typeof en.resourceForm.fields;
-export type OptionLabel = keyof typeof en.resourceForm.options;
+export type FieldLabel = keyof typeof en.resourceForm.fields | (string & {});
+export type OptionLabel = keyof typeof en.resourceForm.options | (string & {});
 export interface FormField {
   key: string;
   label: FieldLabel;
-  type?: "text" | "email" | "decimal" | "integer" | "select" | "textarea";
+  type?: "text" | "email" | "decimal" | "integer" | "select" | "textarea" | "date";
+  dateTime?: boolean;
+  decimalPlaces?: number;
+  showWhen?: { key: string; value: string };
+  min?: number;
+  max?: number;
   required?: boolean;
   initial?: string;
   pattern?: string;
@@ -18,6 +23,10 @@ export interface FormField {
 export interface ResourceFormDefinition {
   fields: FormField[];
   defaults?: Record<string, unknown>;
+  createPath?: string;
+  notice?: string;
+  submitLabel?: string;
+  lines?: { fields: FormField[]; key: string; optional?: boolean };
 }
 
 const identity: FormField[] = [
@@ -123,14 +132,18 @@ export const resourceForms: Record<string, ResourceFormDefinition> = {
 export function createResourceSchema(definition: ResourceFormDefinition, messages: { required: string; invalid: string }) {
   return z.record(z.string(), z.string()).superRefine((values, context) => {
     for (const field of definition.fields) {
+      if (field.showWhen && values[field.showWhen.key] !== field.showWhen.value) continue;
       const value = (values[field.key] ?? "").trim();
       let message: string | undefined;
       if (!value && field.required) message = messages.required;
       else if (value) {
         if (field.pattern && !new RegExp(field.pattern).test(value)) message = messages.invalid;
         if (field.type === "email" && !z.email().safeParse(value).success) message = messages.invalid;
-        if (field.type === "decimal" && !/^\d{1,18}(\.\d{1,6})?$/.test(value)) message = messages.invalid;
+        if (field.type === "decimal" && !new RegExp(`^\\d{1,18}(\\.\\d{1,${field.decimalPlaces ?? 6}})?$`).test(value)) message = messages.invalid;
         if (field.type === "integer" && (!/^\d+$/.test(value) || Number(value) > 2147483647)) message = messages.invalid;
+        if (field.type === "date" && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value)) message = messages.invalid;
+        if (field.min !== undefined && Number(value) < field.min) message = messages.invalid;
+        if (field.max !== undefined && Number(value) > field.max) message = messages.invalid;
         if (field.options && !field.options.some((option) => option.value === value)) message = messages.invalid;
         if (field.source && !z.uuid().safeParse(value).success) message = messages.invalid;
       }
@@ -142,8 +155,9 @@ export function createResourceSchema(definition: ResourceFormDefinition, message
 export function resourceFormPayload(definition: ResourceFormDefinition, values: Record<string, string>): Record<string, unknown> {
   const payload: Record<string, unknown> = { ...definition.defaults };
   for (const field of definition.fields) {
+    if (field.showWhen && values[field.showWhen.key] !== field.showWhen.value) continue;
     const value = (values[field.key] ?? "").trim();
-    if (value) payload[field.key] = field.type === "integer" ? Number(value) : value;
+    if (value) payload[field.key] = field.type === "integer" ? Number(value) : field.dateTime ? `${value}T00:00:00Z` : value;
   }
   return payload;
 }

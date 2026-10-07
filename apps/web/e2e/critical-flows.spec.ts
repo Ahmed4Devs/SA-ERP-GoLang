@@ -36,6 +36,10 @@ async function mockAuthenticatedSession(page: Page) {
   await page.route("**/api/v1/authz/assignments/me", (route) => json(route, 200, { data: entities }));
 }
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/v1/org/branches?**", route => json(route, 200, { data: [] }));
+});
+
 test("a protected route redirects an anonymous user to login", async ({ page }) => {
   await page.route("**/api/v1/auth/me", (route) => json(route, 401, { error: { code: "UNAUTHORIZED", message: "Unauthorized" } }));
 
@@ -141,11 +145,13 @@ test("a module write is sent to the API with the selected tenant and refreshed",
 
   await page.goto("/products");
   await page.getByRole("button", { name: /الفئات|categories/i }).click();
-  await page.getByRole("button", { name: /عملية جديدة|new operation/i }).click();
-  await page.locator("#operation-body").fill(JSON.stringify({ code: "E2E-CAT", name_en: "E2E Category", name_ar: "فئة اختبار" }));
-  await page.locator("#operation-submit").click();
+  await page.getByRole("button", { name: /إضافة سجل|create record/i }).click();
+  await page.locator("#create-code").fill("E2E-CAT");
+  await page.locator("#create-name_en").fill("E2E Category");
+  await page.locator("#create-name_ar").fill("فئة اختبار");
+  await page.getByRole("button", { name: /^(حفظ|save)$/i }).click();
 
-  await expect(page.getByTestId("operation-success")).toBeVisible();
+  await expect(page.getByRole("status")).toBeVisible();
   await expect(page.getByText("E2E-CAT", { exact: true })).toBeVisible();
   expect(receivedBody).toMatchObject({ legal_entity_id: entities[0].legal_entity_id, code: "E2E-CAT" });
 });
@@ -292,6 +298,8 @@ test("switching entity discards the open form and ignores a delayed previous res
 test("user administration creates accounts, assigns scope, and uses versioned commands", async ({ page }) => {
   await mockAuthenticatedSession(page);
   await page.addInitScript(() => localStorage.setItem("erp_locale", "en"));
+  const assignedBranch = "80000000-0000-4000-8000-000000000001";
+  await page.route("**/api/v1/org/branches?**", route => json(route, 200, { data: [{ id: assignedBranch, name_en: "Riyadh" }] }));
   const created = { id: "60000000-0000-4000-8000-000000000001", username: "new.user", display_name: "New Employee", email: "employee@example.sa", status: "ACTIVE", version: 1 };
   const requests: { path: string; body: Record<string, unknown> }[] = [];
   let exists = false;
@@ -324,9 +332,10 @@ test("user administration creates accounts, assigns scope, and uses versioned co
   await expect(page.locator("#user-password")).toHaveCount(0);
   await page.getByRole("button", { name: "Manage: New Employee" }).click();
   await page.getByLabel("Role", { exact: true }).selectOption(role.id);
+  await page.getByLabel("Branch", { exact: true }).last().selectOption(assignedBranch);
   await page.getByRole("button", { name: "Assign role", exact: true }).click();
   await expect.poll(() => requests.length).toBe(2);
-  expect(requests[1].body).toEqual({ user_id: created.id, role_id: role.id, legal_entity_id: entities[0].legal_entity_id });
+  expect(requests[1].body).toEqual({ user_id: created.id, role_id: role.id, legal_entity_id: entities[0].legal_entity_id, branch_id: assignedBranch });
   await page.getByLabel("Status", { exact: true }).selectOption("SUSPENDED");
   await page.getByRole("button", { name: "Update status", exact: true }).click();
   await expect(page.getByRole("cell", { name: "Suspended", exact: true })).toBeVisible();

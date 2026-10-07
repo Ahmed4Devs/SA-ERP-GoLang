@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { Plus, RefreshCw, X } from "lucide-react";
 import { useLocale } from "@/components/layout/shell";
 import { apiFetch } from "@/lib/api-client";
@@ -37,6 +38,7 @@ export function InvoiceWorkspace() {
 }
 
 function ScopedInvoiceWorkspace({ entity, copy, locale }: { entity: string; copy: Copy; locale: string }) {
+  const { user } = useAuth();
   const [invoices, setInvoices] = useState<Row[]>([]);
   const [selected, setSelected] = useState<Row | null>(null);
   const [creating, setCreating] = useState(false);
@@ -75,19 +77,19 @@ function ScopedInvoiceWorkspace({ entity, copy, locale }: { entity: string; copy
     }
   };
 
-  const post = async () => {
+  const transition = async (action: "submit" | "post") => {
     if (!selected || !confirmed || posting) return;
     setPosting(true); setError(""); setNotice("");
     try {
-      const result = unwrap(await apiFetch<Row>(scoped(`${invoicePath}/${encodeURIComponent(invoiceID(selected))}/post`, entity), {
-        method: "POST", headers: { "Idempotency-Key": `sales-invoice-post-${invoiceID(selected)}` }, body: "{}",
+      const result = unwrap(await apiFetch<Row>(scoped(`${invoicePath}/${encodeURIComponent(invoiceID(selected))}/${action}`, entity), {
+        method: "POST", headers: { "Idempotency-Key": `sales-invoice-${action}-${invoiceID(selected)}` }, body: "{}",
       }));
-      setSelected(result); setConfirmed(false); setNotice(copy.posted); setRevision((value) => value + 1);
+      setSelected(result); setConfirmed(false); setNotice(action === "submit" ? copy.submitted : copy.posted); setRevision((value) => value + 1);
     } catch (cause) { setError(cause instanceof Error ? cause.message : copy.error); }
     finally { setPosting(false); }
   };
 
-  const statusLabel = (status: string) => status === "DRAFT" ? copy.draft : status === "POSTED" ? copy.postedStatus : status;
+  const statusLabel = (status: string) => status === "DRAFT" ? copy.draft : status === "POSTED" ? copy.postedStatus : status === "SUBMITTED" ? copy.submittedStatus : status === "APPROVED" ? copy.approvedStatus : status === "REJECTED" ? copy.rejectedStatus : status;
 
   return <section className="space-y-5" aria-labelledby="sales-invoice-title">
     <header className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border bg-card p-6">
@@ -118,7 +120,17 @@ function ScopedInvoiceWorkspace({ entity, copy, locale }: { entity: string; copy
       <dl className="grid gap-3 rounded-lg bg-muted/40 p-4 sm:grid-cols-2 lg:grid-cols-3">
         {([ [copy.subtotal, "Subtotal"], [copy.discountAmount, "DiscountAmount"], [copy.taxableAmount, "TaxableAmount"], [copy.taxAmount, "TaxAmount"], [copy.total, "TotalAmount"], [copy.exchangeRate, "ExchangeRate"] ] as const).map(([label, key]) => <Value key={key} label={label} value={field(selected, key)} />)}
       </dl>
-      {field(selected, "Status") === "DRAFT" && <div className="space-y-3 border-t pt-4"><label className="flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={posting} />{copy.postConfirm}</label><button className={primaryClass} onClick={() => void post()} disabled={!confirmed || posting}>{posting ? copy.posting : copy.post}</button></div>}
+      {field(selected, "Status") === "DRAFT" && <div className="space-y-3 border-t pt-4">
+        {field(selected, "CreatedByUserID") !== user?.id && <p className="text-sm text-muted-foreground">{copy.makerOnly}</p>}
+        <label className="flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} disabled={posting || field(selected, "CreatedByUserID") !== user?.id} />{copy.submitConfirm}</label>
+        <button className={primaryClass} onClick={() => void transition("submit")} disabled={!confirmed || posting || field(selected, "CreatedByUserID") !== user?.id}>{posting ? copy.submitting : copy.submit}</button>
+      </div>}
+      {field(selected, "Status") === "SUBMITTED" && <div className="space-y-2 border-t pt-4"><p className="text-sm text-muted-foreground">{copy.waitingApproval}</p><Link href="/workflow" className="text-sm text-primary underline">{copy.openInbox}</Link></div>}
+      {field(selected, "Status") === "APPROVED" && <div className="space-y-3 border-t pt-4">
+        {field(selected, "CreatedByUserID") === user?.id && <p className="text-sm text-muted-foreground">{copy.independentPost}</p>}
+        <label className="flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} disabled={posting || field(selected, "CreatedByUserID") === user?.id} />{copy.postConfirm}</label>
+        <button className={primaryClass} onClick={() => void transition("post")} disabled={!confirmed || posting || field(selected, "CreatedByUserID") === user?.id}>{posting ? copy.posting : copy.post}</button>
+      </div>}
     </section>}
     <div className="overflow-hidden rounded-xl border bg-card">
       {busy ? <p role="status" className="p-6 text-sm">{copy.loading}</p> : invoices.length === 0 ? <p className="p-6 text-sm text-muted-foreground">{copy.empty}</p> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-muted/50"><tr>{[copy.number, copy.customer, copy.issueDate, copy.status, copy.total, ""].map((label, index) => <th key={index} className="whitespace-nowrap p-3 text-start">{label}</th>)}</tr></thead><tbody>{invoices.map((invoice) => <tr key={invoiceID(invoice)} className="border-t">
