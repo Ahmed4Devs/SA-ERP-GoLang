@@ -81,13 +81,13 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
     setLocaleState(newLocale);
     localStorage.setItem("erp_locale", newLocale);
     document.documentElement.dir = newLocale === "ar" ? "rtl" : "ltr";
-    document.documentElement.lang = newLocale === "ar" ? "ar-SA" : "en";
+    document.documentElement.lang = newLocale === "ar" ? "ar" : "en";
   };
 
   useEffect(() => {
     if (mounted) {
       document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
-      document.documentElement.lang = locale === "ar" ? "ar-SA" : "en";
+      document.documentElement.lang = locale === "ar" ? "ar" : "en";
     }
   }, [locale, mounted]);
 
@@ -139,7 +139,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
-  const entityOptions = assignments.filter((assignment) => assignment.legal_entity_id);
+  const entityOptions = assignments.filter((assignment, index, all) => assignment.legal_entity_id && all.findIndex((other) => other.legal_entity_id === assignment.legal_entity_id) === index);
   const activeEntity = entityOptions.find((assignment) => assignment.legal_entity_id === legalEntityId);
 
   const navItems = [
@@ -181,7 +181,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex flex-col bg-background text-foreground" dir={dir}>
       {/* Topbar */}
       <header className="sticky top-0 z-40 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/75 shadow-xs">
-        <div className="flex h-16 items-center justify-between px-4 sm:px-6">
+        <div className="flex min-h-16 flex-wrap items-center justify-between gap-y-2 px-4 py-2 sm:px-6 lg:flex-nowrap">
           {/* Brand & Mobile Toggle */}
           <div className="flex items-center gap-3">
             <button
@@ -205,7 +205,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Active Entity & Branch Badge */}
-          <div className="hidden lg:flex items-center gap-2">
+          <div className="order-last flex basis-full items-center gap-2 lg:order-none lg:basis-auto">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground border">
               <Building2 className="h-3.5 w-3.5 text-primary" />
               {entityOptions.length > 0 ? (
@@ -254,19 +254,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
             {/* Theme Toggle */}
             {mounted && (
-              <button
+              <label
                 id="theme-toggle-btn"
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="p-2 rounded-lg border hover:bg-muted transition-colors text-foreground"
-                title={theme === "dark" ? t.topbar.light : t.topbar.dark}
-                aria-label="Toggle theme"
+                className="inline-flex items-center gap-1 rounded-lg border p-1.5 text-xs text-foreground"
               >
                 {theme === "dark" ? (
                   <Sun className="h-4 w-4 text-amber-400" />
                 ) : (
                   <Moon className="h-4 w-4 text-blue-600" />
                 )}
-              </button>
+                <select aria-label={t.topbar.theme} value={theme ?? "system"} onChange={(event) => setTheme(event.target.value)} className="max-w-20 bg-background outline-none">
+                  <option value="light">{t.topbar.light}</option>
+                  <option value="dark">{t.topbar.dark}</option>
+                  <option value="system">{t.topbar.system}</option>
+                </select>
+              </label>
             )}
 
             {/* Notifications */}

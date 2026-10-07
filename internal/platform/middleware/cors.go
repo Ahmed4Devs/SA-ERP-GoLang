@@ -36,6 +36,7 @@ func DefaultCORSConfig() CORSConfig {
 			"X-CSRF-Token",
 			"X-Request-ID",
 			"X-Correlation-ID",
+			"Idempotency-Key",
 		},
 		AllowCredentials: true,
 		MaxAge:           86400,

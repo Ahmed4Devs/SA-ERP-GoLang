@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -16,6 +17,7 @@ func TestCORS_Preflight(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/test", nil)
 	req.Header.Set("Origin", "http://localhost:3000")
+	req.Header.Set("Access-Control-Request-Headers", "content-type, idempotency-key")
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -30,6 +32,9 @@ func TestCORS_Preflight(t *testing.T) {
 
 	if got := rec.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
 		t.Errorf("expected Access-Control-Allow-Credentials true, got %s", got)
+	}
+	if !strings.Contains(strings.ToLower(rec.Header().Get("Access-Control-Allow-Headers")), "idempotency-key") {
+		t.Error("financial command preflights must allow Idempotency-Key")
 	}
 }
 

@@ -1,6 +1,7 @@
 import { ModuleAPIView } from "@/components/modules/module-api-view";
 import { moduleResources } from "@/lib/module-resources";
 import type { Metadata } from "next";
+import { InvoiceWorkspace } from "@/features/sales/invoice-workspace";
 
 export const metadata: Metadata = {
   title: "المبيعات ودورة التحصيل وإدارة الطلبات والفواتير | منصة تخطيط الموارد للمنشآت السعودية",
@@ -8,5 +9,5 @@ export const metadata: Metadata = {
 };
 
 export default function SalesPage() {
-  return <ModuleAPIView titleAr="المبيعات والفوترة" titleEn="Sales" descriptionAr="الفواتير والأوامر والعروض والتسليمات الفعلية." descriptionEn="Live invoices, orders, quotations, deliveries, and credit notes." resources={moduleResources.sales} />;
+  return <div className="space-y-8"><InvoiceWorkspace /><ModuleAPIView titleAr="مستندات المبيعات" titleEn="Sales documents" descriptionAr="الأوامر والعروض والتسليمات والإشعارات الدائنة." descriptionEn="Orders, quotations, deliveries, and credit notes." resources={moduleResources.sales.filter((resource) => resource.key !== "invoices")} /></div>;
 }

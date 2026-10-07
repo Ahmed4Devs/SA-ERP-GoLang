@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Database, Play, RefreshCw, Search, Settings2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, CheckCircle2, Database, Play, Plus, RefreshCw, Search, Settings2, X } from "lucide-react";
 import { useLocale } from "@/components/layout/shell";
 import { apiFetch } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { ResourceCreateForm } from "@/components/forms/resource-create-form";
+import { resourceForms } from "@/lib/resource-forms";
 
 export interface ResourceDefinition {
   key: string;
@@ -61,8 +63,7 @@ const preferredColumns = [
 
 export function appendTenant(path: string, legalEntityId: string | null, tenant = true): string {
   if (!tenant || !legalEntityId) return path;
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}legal_entity_id=${encodeURIComponent(legalEntityId)}`;
+  return appendQueryParams(path, { legal_entity_id: legalEntityId });
 }
 
 export function appendQueryParams(path: string, params: Record<string, string>): string {
@@ -88,12 +89,15 @@ export function buildResourcePath(
 
 export function normalizeRows(payload: unknown): RecordRow[] {
   if (Array.isArray(payload)) return payload.map(toRecord);
-  if (!payload || typeof payload !== "object") return [{ value: payload }];
+  if (payload === null || payload === undefined) return [];
+  if (typeof payload !== "object") return [{ value: payload }];
 
   const envelope = payload as RecordRow;
   for (const key of ["data", "items", "results", "records"]) {
     if (Array.isArray(envelope[key])) return (envelope[key] as unknown[]).map(toRecord);
+    if (key in envelope && envelope[key] === null) return [];
   }
+  if (envelope.data && typeof envelope.data === "object") return [toRecord(envelope.data)];
   return [envelope];
 }
 
@@ -120,7 +124,10 @@ export function buildMutationRequest(
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       throw new Error("The request body must be a JSON object.");
     }
-    if (tenant && legalEntityId && !("legal_entity_id" in payload)) {
+    if (tenant && legalEntityId) {
+      if ("legal_entity_id" in payload && payload.legal_entity_id !== legalEntityId) {
+        throw new Error("The request legal entity must match the selected legal entity.");
+      }
       payload = { ...payload, legal_entity_id: legalEntityId };
     }
     init.body = JSON.stringify(payload);
@@ -169,14 +176,15 @@ export function ModuleAPIView({
   descriptionEn,
   resources,
 }: ModuleAPIViewProps) {
-  const { locale, dir } = useLocale();
-  const { legalEntityId } = useAuth();
+  const { locale, dir, t } = useLocale();
+  const { legalEntityId, refresh } = useAuth();
   const isAr = locale === "ar";
   const [activeKey, setActiveKey] = useState(resources[0]?.key ?? "");
   const [rows, setRows] = useState<RecordRow[]>([]);
   const [filterOptions, setFilterOptions] = useState<Record<string, RecordRow[]>>({});
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [filtersLoading, setFiltersLoading] = useState(false);
+  const [loadedFilterScope, setLoadedFilterScope] = useState<string | null>(null);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -190,15 +198,21 @@ export function ModuleAPIView({
   const [operationError, setOperationError] = useState<string | null>(null);
   const [operationResult, setOperationResult] = useState<unknown>(null);
   const [selectedRow, setSelectedRow] = useState<RecordRow | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createSuccess, setCreateSuccess] = useState(false);
+  const loadController = useRef<AbortController | null>(null);
 
   const activeResource = resources.find((resource) => resource.key === activeKey) ?? resources[0];
   const activeFilters = activeResource?.filters ?? noResourceFilters;
-  const filtersReady = activeFilters.every((filter) => Boolean(filterValues[filter.key]));
+  const createDefinition = activeResource ? resourceForms[activeResource.path] : undefined;
+  const filterScope = `${activeResource?.path}:${legalEntityId}`;
+  const filtersReady = activeFilters.length === 0 || (loadedFilterScope === filterScope && activeFilters.every((filter) => Boolean(filterValues[filter.key])));
 
   useEffect(() => {
     let cancelled = false;
 
     const loadFilterOptions = async () => {
+      setLoadedFilterScope(null);
       if (!activeResource || activeFilters.length === 0) {
         setFilterOptions({});
         setFilterValues({});
@@ -228,6 +242,7 @@ export function ModuleAPIView({
         if (cancelled) return;
 
         const nextOptions = Object.fromEntries(loaded);
+        setLoadedFilterScope(filterScope);
         setFilterOptions(nextOptions);
         setFilterValues((current) =>
           Object.fromEntries(
@@ -259,9 +274,16 @@ export function ModuleAPIView({
     return () => {
       cancelled = true;
     };
-  }, [activeResource, activeFilters, isAr, legalEntityId]);
+  }, [activeResource, activeFilters, filterScope, isAr, legalEntityId]);
 
   const load = useCallback(async () => {
+    loadController.current?.abort();
+    const controller = new AbortController();
+    loadController.current = controller;
+    setRows([]);
+    setSelectedRow(null);
+    setLastUpdated(null);
+    setLoading(false);
     if (!activeResource) return;
     if (activeResource.tenant !== false && !legalEntityId) {
       setRows([]);
@@ -278,19 +300,22 @@ export function ModuleAPIView({
     setLoading(true);
     setError(null);
     try {
-      const payload = await apiFetch<unknown>(buildResourcePath(activeResource, legalEntityId, filterValues));
+      const payload = await apiFetch<unknown>(buildResourcePath(activeResource, legalEntityId, filterValues), { signal: controller.signal });
+      if (controller.signal.aborted) return;
       setRows(normalizeRows(payload));
       setLastUpdated(new Date());
     } catch (requestError) {
+      if (controller.signal.aborted) return;
       setRows([]);
       setError(requestError instanceof Error ? requestError.message : isAr ? "تعذر تحميل البيانات." : "Unable to load data.");
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [activeResource, filterValues, filtersReady, isAr, legalEntityId]);
 
   useEffect(() => {
     void load();
+    return () => loadController.current?.abort();
   }, [load]);
 
   useEffect(() => {
@@ -299,7 +324,11 @@ export function ModuleAPIView({
     setOperationError(null);
     setOperationResult(null);
     setSelectedRow(null);
-  }, [activeResource]);
+    setCreateOpen(false);
+    setCreateSuccess(false);
+    setOperationOpen(false);
+    setOperationBody("{\n  \n}");
+  }, [activeResource, legalEntityId]);
 
   const runOperation = async () => {
     if (!activeResource) return;
@@ -363,6 +392,7 @@ export function ModuleAPIView({
             <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{isAr ? descriptionAr : descriptionEn}</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {createDefinition && <button type="button" onClick={() => { setCreateOpen(true); setCreateSuccess(false); setOperationOpen(false); }} disabled={activeResource.tenant !== false && !legalEntityId} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60"><Plus className="h-4 w-4" />{t.resourceForm.create}</button>}
             <button
               type="button"
               onClick={() => void load()}
@@ -403,6 +433,19 @@ export function ModuleAPIView({
           </button>
         ))}
       </div>
+
+      {createSuccess && <p role="status" className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">{t.resourceForm.success}</p>}
+      {createOpen && createDefinition && activeResource && (
+        <ResourceCreateForm key={`${activeResource.key}-${legalEntityId}`} definition={createDefinition} path={activeResource.path} title={isAr ? activeResource.labelAr : activeResource.labelEn} legalEntityId={legalEntityId} tenant={activeResource.tenant !== false} initialValues={filterValues}
+          onCancel={() => setCreateOpen(false)}
+          onSaved={async () => {
+            setCreateOpen(false);
+            setCreateSuccess(true);
+            await load();
+            if (activeResource.path === "/api/v1/org/legal-entities") await refresh();
+          }}
+        />
+      )}
 
       {activeFilters.length > 0 && (
         <section className="rounded-xl border bg-card p-4 shadow-sm" aria-label={isAr ? "مرشحات البيانات" : "Data filters"}>
@@ -574,6 +617,9 @@ export function ModuleAPIView({
                   <tr
                     key={String(row.id ?? `${activeKey}-${rowIndex}`)}
                     onClick={() => setSelectedRow(row)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedRow(row); } }}
+                    tabIndex={0}
+                    aria-selected={selectedRow === row}
                     className={`cursor-pointer hover:bg-muted/30 ${selectedRow === row ? "bg-primary/10" : ""}`}
                   >
                     {columns.map((column) => (
@@ -588,6 +634,15 @@ export function ModuleAPIView({
           )}
         </div>
       </div>
+
+      {selectedRow && (
+        <section aria-label={t.resourceForm.details} className="rounded-xl border bg-card p-5">
+          <div className="mb-4 flex items-center justify-between gap-4"><h2 className="font-semibold">{t.resourceForm.details}</h2><button type="button" onClick={() => setSelectedRow(null)} aria-label={t.resourceForm.close} className="rounded-lg p-2 hover:bg-muted"><X className="h-4 w-4" /></button></div>
+          <dl className="grid gap-4 sm:grid-cols-2">
+            {Object.entries(selectedRow).map(([key, value]) => <div key={key} className="min-w-0"><dt className="text-xs text-muted-foreground">{key}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm">{value && typeof value === "object" ? JSON.stringify(value, null, 2) : displayValue(value)}</dd></div>)}
+          </dl>
+        </section>
+      )}
 
       <p className="text-xs text-muted-foreground">
         {isAr

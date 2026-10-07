@@ -107,6 +107,14 @@ export const moduleResources: Record<string, ResourceDefinition[]> = {
   ],
   organization: [
     { key: "organizations", labelAr: "المنظمات", labelEn: "Organizations", path: "/api/v1/org/organizations", tenant: false },
+    {
+      key: "entities", labelAr: "الكيانات القانونية", labelEn: "Legal entities", path: "/api/v1/org/legal-entities", tenant: false,
+      filters: [{ key: "organization_id", labelAr: "المنظمة", labelEn: "Organization", optionsPath: "/api/v1/org/organizations", tenant: false, optionLabelKeysAr: ["name_ar", "code"], optionLabelKeysEn: ["name_en", "code"] }],
+    },
+    { key: "branches", labelAr: "الفروع", labelEn: "Branches", path: "/api/v1/org/branches" },
+    { key: "departments", labelAr: "الأقسام", labelEn: "Departments", path: "/api/v1/org/departments" },
+    { key: "cost-centers", labelAr: "مراكز التكلفة", labelEn: "Cost centers", path: "/api/v1/org/cost-centers" },
+    { key: "sequences", labelAr: "تسلسلات الترقيم", labelEn: "Number sequences", path: "/api/v1/org/number-sequences" },
     { key: "assignments", labelAr: "نطاقات المستخدم", labelEn: "User scopes", path: "/api/v1/authz/assignments/me", tenant: false },
   ],
   payables: [

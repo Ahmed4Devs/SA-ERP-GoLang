@@ -52,6 +52,23 @@ jobs:
           awk -v coverage="${coverage}" 'BEGIN { if (coverage + 0 < 45) exit 1 }'
       - name: Reachable Go vulnerability scan
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      - name: Verify production database role boundaries
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: "5432"
+          PGUSER: erp_test
+          PGPASSWORD: erp_test_password
+          PGDATABASE: erp_runtime_roles_test
+          ERP_MIGRATOR_PASSWORD: ci-only-migration-password
+          ERP_APP_PASSWORD: ci-only-application-password
+          ERP_BACKUP_PASSWORD: ci-only-backup-password
+          MIGRATION_DATABASE_URL: postgres://erp_migrator:ci-only-migration-password@127.0.0.1:5432/erp_runtime_roles_test?sslmode=disable
+        run: |
+          createdb "$PGDATABASE"
+          psql --no-psqlrc --file=deployments/postgres/provision-roles.sql
+          go run ./cmd/erp-migrate up
+          PGUSER=erp_migrator PGPASSWORD="$ERP_MIGRATOR_PASSWORD" psql --no-psqlrc --file=deployments/postgres/grant-runtime.sql
+          PGUSER=erp_app PGPASSWORD="$ERP_APP_PASSWORD" psql --no-psqlrc --file=tests/operations/database_roles.sql
 
   web:
     runs-on: ubuntu-latest
@@ -119,7 +136,7 @@ jobs:
           E2E_REAL_BACKEND: "1"
           E2E_USERNAME: admin
           E2E_PASSWORD: Admin@ERP123!
-        run: npx playwright test e2e/real-backend.spec.ts
+        run: npx playwright test e2e/real-backend.spec.ts e2e/sales-invoices-real.spec.ts
       - run: npm audit --audit-level=high
 
   containers:
@@ -133,7 +150,11 @@ jobs:
           POSTGRES_USER: erp_user
           POSTGRES_PASSWORD: ci-only-strong-database-password
           POSTGRES_DB: erp_db
-          DATABASE_URL: postgres://erp_user:ci-only-strong-database-password@postgres:5432/erp_db?sslmode=disable
+          ERP_MIGRATOR_PASSWORD: ci-only-migration-password
+          ERP_APP_PASSWORD: ci-only-application-password
+          ERP_BACKUP_PASSWORD: ci-only-backup-password
+          MIGRATION_DATABASE_URL: postgres://erp_migrator:ci-only-migration-password@postgres:5432/erp_db?sslmode=disable
+          DATABASE_URL: postgres://erp_app:ci-only-application-password@postgres:5432/erp_db?sslmode=disable
           APP_URL: https://erp.example.test
           TLS_CERT_PATH: /tmp/ci-cert.pem
           TLS_KEY_PATH: /tmp/ci-key.pem

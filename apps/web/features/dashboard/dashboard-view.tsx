@@ -14,7 +14,6 @@ import {
   FileText,
   Activity,
   RefreshCw,
-  ArrowUpRight,
   ArrowDownRight,
   ArrowRight,
   Sparkles,
@@ -31,7 +30,6 @@ import {
   ChevronRight,
   Receipt,
   FileCode,
-  Lock,
 } from "lucide-react";
 import { useLocale } from "@/components/layout/shell";
 import { apiFetch } from "@/lib/api-client";
@@ -355,14 +353,6 @@ export function DashboardView() {
             <div className="text-2xl font-bold tracking-tight text-foreground">
               {formatCurrency(data.financials.total_revenue, data.financials.currency)}
             </div>
-            <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium">
-              <ArrowUpRight className="h-3.5 w-3.5" />
-              <span>+14.2%</span>
-              <span className="text-muted-foreground font-normal ps-1">vs prior period</span>
-            </div>
-          </div>
-          <div className="h-1.5 w-full bg-emerald-500/15 rounded-full overflow-hidden">
-            <div className="h-full bg-emerald-500 rounded-full w-[78%]" />
           </div>
         </div>
 
@@ -378,13 +368,6 @@ export function DashboardView() {
             <div className="text-2xl font-bold tracking-tight text-foreground">
               {formatCurrency(data.financials.total_expense, data.financials.currency)}
             </div>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground font-medium">
-              <span className="text-rose-600 font-medium">+6.4%</span>
-              <span className="text-muted-foreground font-normal ps-1">controlled burn</span>
-            </div>
-          </div>
-          <div className="h-1.5 w-full bg-rose-500/15 rounded-full overflow-hidden">
-            <div className="h-full bg-rose-500 rounded-full w-[56%]" />
           </div>
         </div>
 
@@ -400,14 +383,6 @@ export function DashboardView() {
             <div className="text-2xl font-bold tracking-tight text-foreground">
               {formatCurrency(data.financials.net_profit, data.financials.currency)}
             </div>
-            <div className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
-              <ArrowUpRight className="h-3.5 w-3.5" />
-              <span>+24.8%</span>
-              <span className="text-muted-foreground font-normal ps-1">net earnings</span>
-            </div>
-          </div>
-          <div className="h-1.5 w-full bg-indigo-500/15 rounded-full overflow-hidden">
-            <div className="h-full bg-indigo-500 rounded-full w-[65%]" />
           </div>
         </div>
 
@@ -423,13 +398,6 @@ export function DashboardView() {
             <div className="text-2xl font-bold tracking-tight text-foreground">
               {data.financials.profit_margin.toFixed(1)}%
             </div>
-            <div className="flex items-center gap-1 text-xs text-amber-600 font-medium">
-              <span>Healthy Margin</span>
-              <span className="text-muted-foreground font-normal ps-1">target &gt;25%</span>
-            </div>
-          </div>
-          <div className="h-1.5 w-full bg-amber-500/15 rounded-full overflow-hidden">
-            <div className="h-full bg-amber-500 rounded-full w-[72%]" />
           </div>
         </div>
       </div>
@@ -673,10 +641,6 @@ export function DashboardView() {
                   {t.dashboard.zatca_status}
                 </h3>
                 <p className="text-xs text-muted-foreground">{t.dashboard.zatca_desc}</p>
-              </div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                <Lock className="h-3 w-3" />
-                <span>ECDSA Phase 2</span>
               </div>
             </div>
 

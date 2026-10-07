@@ -20,6 +20,7 @@ describe("module API resources", () => {
     expect(appendTenant("/api/v1/items", "entity-1")).toBe("/api/v1/items?legal_entity_id=entity-1");
     expect(appendTenant("/api/v1/items?limit=20", "entity-1")).toBe("/api/v1/items?limit=20&legal_entity_id=entity-1");
     expect(appendTenant("/api/v1/auth/me", "entity-1", false)).toBe("/api/v1/auth/me");
+    expect(appendTenant("/api/v1/items?legal_entity_id=old", "entity-1")).toBe("/api/v1/items?legal_entity_id=entity-1");
   });
 
   it("builds required dependent-filter paths without sending incomplete requests", () => {
@@ -42,6 +43,9 @@ describe("module API resources", () => {
     expect(normalizeRows({ data: [{ id: "1" }] })).toEqual([{ id: "1" }]);
     expect(normalizeRows([{ id: "2" }])).toEqual([{ id: "2" }]);
     expect(normalizeRows({ total: 4 })).toEqual([{ total: 4 }]);
+    expect(normalizeRows({ data: null })).toEqual([]);
+    expect(normalizeRows(null)).toEqual([]);
+    expect(normalizeRows({ data: { id: "3" } })).toEqual([{ id: "3" }]);
   });
 
   it("builds tenant-scoped mutation requests and rejects external endpoints", () => {
@@ -57,5 +61,6 @@ describe("module API resources", () => {
       /local \/api\/v1\//,
     );
     expect(() => buildMutationRequest("/api/v1/items", "PATCH", "not-json", "entity-1")).toThrow(/valid JSON/);
+    expect(() => buildMutationRequest("/api/v1/items", "POST", '{"legal_entity_id":"entity-2"}', "entity-1")).toThrow(/match the selected legal entity/);
   });
 });

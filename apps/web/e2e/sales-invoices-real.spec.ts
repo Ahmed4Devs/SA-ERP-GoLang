@@ -1,0 +1,32 @@
+import { expect, test } from "@playwright/test";
+
+test("real backend: create, review, and post a sales invoice", async ({ page }) => {
+  test.skip(process.env.E2E_REAL_BACKEND !== "1", "Requires a disposable seeded PostgreSQL database and Go API.");
+  await page.addInitScript(() => localStorage.setItem("erp_locale", "en"));
+  await page.goto("/login");
+  await page.locator("#login-identifier").fill(process.env.E2E_USERNAME || "admin");
+  await page.locator("#login-password").fill(process.env.E2E_PASSWORD || "Admin@ERP123!");
+  await page.locator("#login-submit-btn").click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto("/sales");
+  await page.getByRole("button", { name: "New invoice", exact: true }).click();
+  const form = page.getByRole("form", { name: "New invoice", exact: true });
+  const customers = form.getByRole("combobox", { name: "Customer", exact: true });
+  await expect(customers.locator("option")).not.toHaveCount(1);
+  await customers.selectOption({ index: 1 });
+  await form.getByRole("combobox", { name: "Invoice type", exact: true }).selectOption("SIMPLIFIED");
+  await form.getByRole("combobox", { name: "Product or service", exact: true }).selectOption({ index: 1 });
+  await form.getByRole("combobox", { name: "Tax code", exact: true }).selectOption({ index: 1 });
+  await form.getByRole("textbox", { name: "Quantity", exact: true }).fill("2");
+  await form.getByRole("textbox", { name: "Unit price", exact: true }).fill("123.4567");
+  await form.getByRole("textbox", { name: "Notes", exact: true }).fill(`Browser integration ${Date.now()}`);
+  await form.getByRole("button", { name: "Save draft and review" }).click();
+  const review = page.getByRole("region", { name: "Invoice review", exact: true });
+  await expect(review).toBeVisible();
+  await expect(review).toContainText("123.4567");
+  await review.getByRole("checkbox").check();
+  await review.getByRole("button", { name: "Post invoice", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Invoice posted successfully." })).toBeVisible();
+  await expect(review).toContainText("Posted");
+  await expect(review.getByRole("button", { name: "Post invoice", exact: true })).toHaveCount(0);
+});
