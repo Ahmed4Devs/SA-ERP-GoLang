@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"erp/internal/platform/database"
+	"erp/internal/accounting/application/posting"
+	accountingdomain "erp/internal/accounting/domain"
+	accountingports "erp/internal/accounting/ports"
 	"erp/internal/platform/identifiers"
-	"erp/internal/platform/transaction"
 	"erp/internal/treasury/domain"
 	"erp/internal/treasury/ports"
 
@@ -17,14 +18,16 @@ import (
 )
 
 type treasuryService struct {
-	repo ports.TreasuryRepository
-	tx   transaction.Manager
+	repo   ports.TreasuryRepository
+	ledger *posting.SourceService
+	audit  accountingports.PostingAuditRecorder
 }
 
-func NewTreasuryService(repo ports.TreasuryRepository, db *database.DB) ports.TreasuryService {
+func NewTreasuryService(repo ports.TreasuryRepository, ledger *posting.SourceService, audit accountingports.PostingAuditRecorder) ports.TreasuryService {
 	return &treasuryService{
-		repo: repo,
-		tx:   transaction.NewManager(db.Pool),
+		repo:   repo,
+		ledger: ledger,
+		audit:  audit,
 	}
 }
 
@@ -74,6 +77,10 @@ func (s *treasuryService) ListCashAccounts(ctx context.Context, legalEntityID uu
 // ============================================================================
 
 func (s *treasuryService) CreateReceipt(ctx context.Context, r *domain.Receipt) (*domain.Receipt, error) {
+	if r.CreatedByUserID == nil || *r.CreatedByUserID == uuid.Nil {
+		return nil, fmt.Errorf("created_by_user_id is required")
+	}
+	r.JournalEntryID = nil
 	if r.LegalEntityID == uuid.Nil {
 		return nil, fmt.Errorf("legal_entity_id is required")
 	}
@@ -104,9 +111,12 @@ func (s *treasuryService) CreateReceipt(ctx context.Context, r *domain.Receipt) 
 	return s.repo.CreateReceipt(ctx, r)
 }
 
-func (s *treasuryService) PostReceipt(ctx context.Context, legalEntityID, id uuid.UUID, journalEntryID *uuid.UUID) (*domain.Receipt, error) {
+func (s *treasuryService) PostReceipt(ctx context.Context, legalEntityID, id uuid.UUID, actorID uuid.UUID) (*domain.Receipt, error) {
+	if actorID == uuid.Nil {
+		return nil, fmt.Errorf("posting actor is required")
+	}
 	var posted *domain.Receipt
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+	err := s.ledger.WithinTx(ctx, func(txCtx context.Context) error {
 		rc, err := s.repo.LockReceiptByID(txCtx, legalEntityID, id)
 		if err != nil {
 			return err
@@ -114,6 +124,9 @@ func (s *treasuryService) PostReceipt(ctx context.Context, legalEntityID, id uui
 		if rc.Status == domain.ReceiptPosted {
 			posted = rc
 			return nil
+		}
+		if err := validateChecker(rc.CreatedByUserID, actorID); err != nil {
+			return err
 		}
 		if rc.Status != domain.ReceiptDraft {
 			return domain.ErrInvalidStatusTransition
@@ -133,8 +146,28 @@ func (s *treasuryService) PostReceipt(ctx context.Context, legalEntityID, id uui
 		if _, err := s.repo.UpdateCashAccountBalance(txCtx, legalEntityID, rc.CashAccountID, rc.Amount); err != nil {
 			return err
 		}
-		posted, err = s.repo.UpdateReceiptStatus(txCtx, legalEntityID, id, domain.ReceiptPosted, journalEntryID)
-		return err
+		cashGL, err := s.requiredAccount(txCtx, legalEntityID, account.GLAccountID)
+		if err != nil {
+			return err
+		}
+		offsetGL, err := s.requiredAccount(txCtx, legalEntityID, rc.GLOffsetAccountID)
+		if err != nil {
+			return err
+		}
+		journalID, err := s.ledger.Post(txCtx, "CASH", accountingdomain.PostingRequest{
+			LegalEntityID: legalEntityID, SourceModule: "TREASURY", SourceType: "RECEIPT", SourceID: rc.ID,
+			AccountingDate: rc.ReceiptDate, CurrencyCode: rc.CurrencyCode, ActorID: actorID,
+			Reference: rc.ReceiptNumber, Description: "Treasury receipt " + rc.ReceiptNumber,
+			Lines: []accountingdomain.PostingLine{{AccountID: cashGL, TransactionDebit: rc.Amount, BranchID: account.BranchID}, {AccountID: offsetGL, TransactionCredit: rc.Amount}},
+		})
+		if err != nil {
+			return err
+		}
+		posted, err = s.repo.UpdateReceiptStatus(txCtx, legalEntityID, id, domain.ReceiptPosted, &journalID)
+		if err != nil {
+			return err
+		}
+		return s.recordTransition(txCtx, legalEntityID, actorID, "receipt.post", "receipts", rc.ID, rc, posted)
 	})
 	if err != nil {
 		return nil, err
@@ -155,6 +188,10 @@ func (s *treasuryService) ListReceipts(ctx context.Context, legalEntityID uuid.U
 // ============================================================================
 
 func (s *treasuryService) CreatePayment(ctx context.Context, p *domain.Payment) (*domain.Payment, error) {
+	if p.CreatedByUserID == nil || *p.CreatedByUserID == uuid.Nil {
+		return nil, fmt.Errorf("created_by_user_id is required")
+	}
+	p.JournalEntryID, p.ApprovedByUserID = nil, nil
 	if p.LegalEntityID == uuid.Nil {
 		return nil, fmt.Errorf("legal_entity_id is required")
 	}
@@ -187,16 +224,22 @@ func (s *treasuryService) ApprovePayment(ctx context.Context, legalEntityID, id 
 		return nil, fmt.Errorf("approver_id is required")
 	}
 	var approved *domain.Payment
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+	err := s.ledger.WithinTx(ctx, func(txCtx context.Context) error {
 		payment, err := s.repo.LockPaymentByID(txCtx, legalEntityID, id)
 		if err != nil {
+			return err
+		}
+		if err := validateChecker(payment.CreatedByUserID, approverID); err != nil {
 			return err
 		}
 		if payment.Status != domain.PaymentDraft {
 			return domain.ErrInvalidStatusTransition
 		}
 		approved, err = s.repo.UpdatePaymentStatus(txCtx, legalEntityID, id, domain.PaymentApproved, nil, &approverID)
-		return err
+		if err != nil {
+			return err
+		}
+		return s.recordTransition(txCtx, legalEntityID, approverID, "payment.approve", "payments", payment.ID, payment, approved)
 	})
 	if err != nil {
 		return nil, err
@@ -204,9 +247,12 @@ func (s *treasuryService) ApprovePayment(ctx context.Context, legalEntityID, id 
 	return approved, nil
 }
 
-func (s *treasuryService) PayPayment(ctx context.Context, legalEntityID, id uuid.UUID, journalEntryID *uuid.UUID) (*domain.Payment, error) {
+func (s *treasuryService) PayPayment(ctx context.Context, legalEntityID, id uuid.UUID, actorID uuid.UUID) (*domain.Payment, error) {
+	if actorID == uuid.Nil {
+		return nil, fmt.Errorf("posting actor is required")
+	}
 	var paid *domain.Payment
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+	err := s.ledger.WithinTx(ctx, func(txCtx context.Context) error {
 		payment, err := s.repo.LockPaymentByID(txCtx, legalEntityID, id)
 		if err != nil {
 			return err
@@ -215,7 +261,10 @@ func (s *treasuryService) PayPayment(ctx context.Context, legalEntityID, id uuid
 			paid = payment
 			return nil
 		}
-		if payment.Status != domain.PaymentDraft && payment.Status != domain.PaymentApproved {
+		if err := validateChecker(payment.CreatedByUserID, actorID); err != nil {
+			return err
+		}
+		if payment.Status != domain.PaymentApproved || payment.ApprovedByUserID == nil || *payment.ApprovedByUserID == uuid.Nil {
 			return domain.ErrInvalidStatusTransition
 		}
 
@@ -232,8 +281,28 @@ func (s *treasuryService) PayPayment(ctx context.Context, legalEntityID, id uuid
 		if _, err := s.repo.UpdateCashAccountBalance(txCtx, legalEntityID, payment.CashAccountID, payment.Amount.Neg()); err != nil {
 			return err
 		}
-		paid, err = s.repo.UpdatePaymentStatus(txCtx, legalEntityID, id, domain.PaymentPaid, journalEntryID, nil)
-		return err
+		cashGL, err := s.requiredAccount(txCtx, legalEntityID, account.GLAccountID)
+		if err != nil {
+			return err
+		}
+		offsetGL, err := s.requiredAccount(txCtx, legalEntityID, payment.GLOffsetAccountID)
+		if err != nil {
+			return err
+		}
+		journalID, err := s.ledger.Post(txCtx, "CASH", accountingdomain.PostingRequest{
+			LegalEntityID: legalEntityID, SourceModule: "TREASURY", SourceType: "PAYMENT", SourceID: payment.ID,
+			AccountingDate: payment.PaymentDate, CurrencyCode: payment.CurrencyCode, ActorID: actorID,
+			Reference: payment.PaymentNumber, Description: "Treasury payment " + payment.PaymentNumber,
+			Lines: []accountingdomain.PostingLine{{AccountID: offsetGL, TransactionDebit: payment.Amount}, {AccountID: cashGL, TransactionCredit: payment.Amount, BranchID: account.BranchID}},
+		})
+		if err != nil {
+			return err
+		}
+		paid, err = s.repo.UpdatePaymentStatus(txCtx, legalEntityID, id, domain.PaymentPaid, &journalID, nil)
+		if err != nil {
+			return err
+		}
+		return s.recordTransition(txCtx, legalEntityID, actorID, "payment.pay", "payments", payment.ID, payment, paid)
 	})
 	if err != nil {
 		return nil, err
@@ -254,6 +323,10 @@ func (s *treasuryService) ListPayments(ctx context.Context, legalEntityID uuid.U
 // ============================================================================
 
 func (s *treasuryService) CreateTransfer(ctx context.Context, t *domain.Transfer) (*domain.Transfer, error) {
+	if t.InitiatedByUserID == nil || *t.InitiatedByUserID == uuid.Nil {
+		return nil, fmt.Errorf("initiated_by_user_id is required")
+	}
+	t.JournalEntryID, t.CompletedByUserID = nil, nil
 	if t.LegalEntityID == uuid.Nil {
 		return nil, fmt.Errorf("legal_entity_id is required")
 	}
@@ -284,12 +357,12 @@ func (s *treasuryService) CreateTransfer(ctx context.Context, t *domain.Transfer
 	return s.repo.CreateTransfer(ctx, t)
 }
 
-func (s *treasuryService) CompleteTransfer(ctx context.Context, legalEntityID, id uuid.UUID, completedBy uuid.UUID, journalEntryID *uuid.UUID) (*domain.Transfer, error) {
+func (s *treasuryService) CompleteTransfer(ctx context.Context, legalEntityID, id uuid.UUID, completedBy uuid.UUID) (*domain.Transfer, error) {
 	if completedBy == uuid.Nil {
 		return nil, fmt.Errorf("completed_by is required")
 	}
 	var completed *domain.Transfer
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+	err := s.ledger.WithinTx(ctx, func(txCtx context.Context) error {
 		transfer, err := s.repo.LockTransferByID(txCtx, legalEntityID, id)
 		if err != nil {
 			return err
@@ -298,7 +371,10 @@ func (s *treasuryService) CompleteTransfer(ctx context.Context, legalEntityID, i
 			completed = transfer
 			return nil
 		}
-		if transfer.Status == domain.TransferCancelled {
+		if err := validateChecker(transfer.InitiatedByUserID, completedBy); err != nil {
+			return err
+		}
+		if transfer.Status != domain.TransferDraft && transfer.Status != domain.TransferInTransit {
 			return domain.ErrInvalidStatusTransition
 		}
 		if err := validateTransferAccounts(transfer); err != nil {
@@ -357,8 +433,50 @@ func (s *treasuryService) CompleteTransfer(ctx context.Context, legalEntityID, i
 			return err
 		}
 
-		completed, err = s.repo.UpdateTransferStatus(txCtx, legalEntityID, id, domain.TransferCompleted, journalEntryID, &completedBy)
-		return err
+		var sourceID, destinationID *uuid.UUID
+		if transfer.SourceType == domain.TransferSourceCash {
+			sourceID = cashAccounts[*transfer.SourceCashAccountID].GLAccountID
+		} else {
+			sourceID = bankAccounts[*transfer.SourceBankAccountID].GLAccountID
+		}
+		if transfer.DestinationType == domain.TransferDestinationCash {
+			destinationID = cashAccounts[*transfer.DestinationCashAccountID].GLAccountID
+		} else {
+			destinationID = bankAccounts[*transfer.DestinationBankAccountID].GLAccountID
+		}
+		sourceGL, err := s.requiredAccount(txCtx, legalEntityID, sourceID)
+		if err != nil {
+			return err
+		}
+		destinationGL, err := s.requiredAccount(txCtx, legalEntityID, destinationID)
+		if err != nil {
+			return err
+		}
+		lines := []accountingdomain.PostingLine{{AccountID: destinationGL, TransactionDebit: transfer.Amount}, {AccountID: sourceGL, TransactionCredit: totalDeduction}}
+		if transfer.FeeAmount.IsPositive() {
+			feeGL, err := s.requiredAccount(txCtx, legalEntityID, transfer.FeeGLAccountID)
+			if err != nil {
+				return err
+			}
+			lines = append(lines, accountingdomain.PostingLine{AccountID: feeGL, TransactionDebit: transfer.FeeAmount})
+		}
+		journalType := "CASH"
+		if transfer.SourceType == domain.TransferSourceBank || transfer.DestinationType == domain.TransferDestinationBank {
+			journalType = "BANK"
+		}
+		journalID, err := s.ledger.Post(txCtx, journalType, accountingdomain.PostingRequest{
+			LegalEntityID: legalEntityID, SourceModule: "TREASURY", SourceType: "TRANSFER", SourceID: transfer.ID,
+			AccountingDate: transfer.TransferDate, CurrencyCode: transfer.CurrencyCode, ActorID: completedBy,
+			Reference: transfer.TransferNumber, Description: "Treasury transfer " + transfer.TransferNumber, Lines: lines,
+		})
+		if err != nil {
+			return err
+		}
+		completed, err = s.repo.UpdateTransferStatus(txCtx, legalEntityID, id, domain.TransferCompleted, &journalID, &completedBy)
+		if err != nil {
+			return err
+		}
+		return s.recordTransition(txCtx, legalEntityID, completedBy, "transfer.complete", "transfers", transfer.ID, transfer, completed)
 	})
 	if err != nil {
 		return nil, err

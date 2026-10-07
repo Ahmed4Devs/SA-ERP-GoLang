@@ -20,6 +20,8 @@ var (
 	ErrInvalidAmount            = errors.New("amount must be greater than zero")
 	ErrInvalidTransferAccounts  = errors.New("transfer source and destination accounts are invalid")
 	ErrInactiveTreasuryAccount  = errors.New("treasury account is not active")
+	ErrMakerCannotCheck         = errors.New("document creator cannot approve or post their own treasury document")
+	ErrMissingMaker             = errors.New("treasury document creator is required")
 	ErrCurrencyMismatch         = errors.New("transaction currency does not match treasury account currency")
 )
 
@@ -127,6 +129,7 @@ type CashAccount struct {
 // treasury transfer without coupling the treasury service to the banking module.
 type BankAccountBalance struct {
 	ID               uuid.UUID
+	GLAccountID      *uuid.UUID
 	LegalEntityID    uuid.UUID
 	CurrencyCode     string
 	CurrentBalance   decimal.Decimal

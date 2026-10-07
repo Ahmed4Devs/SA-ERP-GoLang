@@ -496,6 +496,7 @@ func mapCashAccount(r sqlc.TreasuryCashAccounts) *domain.CashAccount {
 
 func mapBankAccountBalance(r sqlc.BankingBankAccounts) *domain.BankAccountBalance {
 	return &domain.BankAccountBalance{
+		GLAccountID:      toUUIDPtr(r.GlAccountID),
 		ID:               toUUID(r.ID),
 		LegalEntityID:    toUUID(r.LegalEntityID),
 		CurrencyCode:     r.CurrencyCode,

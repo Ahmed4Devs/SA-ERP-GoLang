@@ -54,21 +54,26 @@ func setupTreasuryTest(t *testing.T) (*treasury.Module, *banking.Module, *databa
 	}
 
 	// 2. Foundation COA & Treasury Defaults
-	_ = accMod.SeedDefaultCOA(ctx, le.ID)
-	_ = treasuryMod.SeedDefaultTreasuryData(ctx, le.ID)
+	if err := accMod.SeedDefaultCOA(ctx, le.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := treasuryMod.SeedDefaultTreasuryData(ctx, le.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	// 3. Admin user
 	admin, err := iamMod.AuthService.GetUserByIdentifier(ctx, "admin")
 	var adminID uuid.UUID
-	if err == nil && admin != nil {
-		adminID = admin.ID
+	if err != nil || admin == nil {
+		t.Fatalf("missing test creator: %v", err)
 	}
+	adminID = admin.ID
 
 	return treasuryMod, bankingMod, db, le.ID, adminID, ctx
 }
 
 func TestCashAccount_CreationAndLimits(t *testing.T) {
-	treasuryMod, _, _, leID, adminID, ctx := setupTreasuryTest(t)
+	treasuryMod, _, db, leID, adminID, ctx := setupTreasuryTest(t)
 	svc := treasuryMod.TreasuryService
 
 	// Create custom branch cash register
@@ -77,6 +82,7 @@ func TestCashAccount_CreationAndLimits(t *testing.T) {
 		AccountCode:     "CASH-TEST-" + uuid.New().String()[:8],
 		NameEn:          "Test Branch Register",
 		NameAr:          "صندوق الفرع التجريبي",
+		GLAccountID:     treasuryGL(t, db, leID, "111001"),
 		AccountType:     domain.CashAccountCashRegister,
 		CurrencyCode:    "SAR",
 		CustodianUserID: &adminID,
@@ -104,7 +110,7 @@ func TestCashAccount_CreationAndLimits(t *testing.T) {
 }
 
 func TestTreasuryReceipt_Lifecycle(t *testing.T) {
-	treasuryMod, _, _, leID, adminID, ctx := setupTreasuryTest(t)
+	treasuryMod, _, db, leID, adminID, ctx := setupTreasuryTest(t)
 	svc := treasuryMod.TreasuryService
 
 	// 1. Create a cash account with 1000 SAR balance and 2000 SAR limit
@@ -113,6 +119,7 @@ func TestTreasuryReceipt_Lifecycle(t *testing.T) {
 		AccountCode:     "CASH-REC-" + uuid.New().String()[:8],
 		NameEn:          "Receipt Test Box",
 		NameAr:          "صندوق اختبار القبض",
+		GLAccountID:     treasuryGL(t, db, leID, "111001"),
 		AccountType:     domain.CashAccountPettyCash,
 		CurrencyCode:    "SAR",
 		CustodianUserID: &adminID,
@@ -126,15 +133,16 @@ func TestTreasuryReceipt_Lifecycle(t *testing.T) {
 
 	// 2. Create Receipt for 400 SAR (Within limit: 1000 + 400 = 1400 <= 2000)
 	rc, err := svc.CreateReceipt(ctx, &domain.Receipt{
-		LegalEntityID:   leID,
-		CashAccountID:   acc.ID,
-		ReceiptDate:     time.Now(),
-		ReceiptType:     domain.ReceiptMiscellaneous,
-		ReceivedFrom:    "عميل مبيعات نقدية",
-		Amount:          decimal.NewFromInt(400),
-		CurrencyCode:    "SAR",
-		PaymentMethod:   domain.PaymentMethodCash,
-		CreatedByUserID: &adminID,
+		LegalEntityID:     leID,
+		CashAccountID:     acc.ID,
+		ReceiptDate:       time.Now(),
+		GLOffsetAccountID: treasuryGL(t, db, leID, "410000"),
+		ReceiptType:       domain.ReceiptMiscellaneous,
+		ReceivedFrom:      "عميل مبيعات نقدية",
+		Amount:            decimal.NewFromInt(400),
+		CurrencyCode:      "SAR",
+		PaymentMethod:     domain.PaymentMethodCash,
+		CreatedByUserID:   &adminID,
 	})
 	if err != nil {
 		t.Fatalf("failed to create receipt: %v", err)
@@ -144,7 +152,7 @@ func TestTreasuryReceipt_Lifecycle(t *testing.T) {
 	}
 
 	// 3. Post Receipt
-	postedRc, err := svc.PostReceipt(ctx, leID, rc.ID, nil)
+	postedRc, err := svc.PostReceipt(ctx, leID, rc.ID, treasuryChecker(t, db))
 	if err != nil {
 		t.Fatalf("failed to post receipt: %v", err)
 	}
@@ -160,7 +168,7 @@ func TestTreasuryReceipt_Lifecycle(t *testing.T) {
 	if !updatedAcc.CurrentBalance.Equal(decimal.NewFromInt(1400)) {
 		t.Errorf("expected balance 1400, got %s", updatedAcc.CurrentBalance.String())
 	}
-	if _, err := svc.PostReceipt(ctx, leID, rc.ID, nil); err != nil {
+	if _, err := svc.PostReceipt(ctx, leID, rc.ID, treasuryChecker(t, db)); err != nil {
 		t.Fatalf("idempotent receipt post failed: %v", err)
 	}
 	updatedAcc, err = svc.GetCashAccount(ctx, leID, acc.ID)
@@ -173,27 +181,28 @@ func TestTreasuryReceipt_Lifecycle(t *testing.T) {
 
 	// 5. Attempt Receipt that exceeds limit (1400 + 800 = 2200 > 2000)
 	excessRc, err := svc.CreateReceipt(ctx, &domain.Receipt{
-		LegalEntityID:   leID,
-		CashAccountID:   acc.ID,
-		ReceiptDate:     time.Now(),
-		ReceiptType:     domain.ReceiptDeposit,
-		ReceivedFrom:    "تغذية صندوق زائدة",
-		Amount:          decimal.NewFromInt(800),
-		CurrencyCode:    "SAR",
-		PaymentMethod:   domain.PaymentMethodCash,
-		CreatedByUserID: &adminID,
+		LegalEntityID:     leID,
+		CashAccountID:     acc.ID,
+		ReceiptDate:       time.Now(),
+		GLOffsetAccountID: treasuryGL(t, db, leID, "410000"),
+		ReceiptType:       domain.ReceiptDeposit,
+		ReceivedFrom:      "تغذية صندوق زائدة",
+		Amount:            decimal.NewFromInt(800),
+		CurrencyCode:      "SAR",
+		PaymentMethod:     domain.PaymentMethodCash,
+		CreatedByUserID:   &adminID,
 	})
 	if err != nil {
 		t.Fatalf("failed to create excess receipt: %v", err)
 	}
-	_, err = svc.PostReceipt(ctx, leID, excessRc.ID, nil)
+	_, err = svc.PostReceipt(ctx, leID, excessRc.ID, treasuryChecker(t, db))
 	if err == nil {
 		t.Fatalf("expected error exceeding account limit, got nil")
 	}
 }
 
 func TestTreasuryPayment_Lifecycle(t *testing.T) {
-	treasuryMod, _, _, leID, adminID, ctx := setupTreasuryTest(t)
+	treasuryMod, _, db, leID, adminID, ctx := setupTreasuryTest(t)
 	svc := treasuryMod.TreasuryService
 
 	// 1. Create a cash account with 500 SAR balance
@@ -202,6 +211,7 @@ func TestTreasuryPayment_Lifecycle(t *testing.T) {
 		AccountCode:     "CASH-PMT-" + uuid.New().String()[:8],
 		NameEn:          "Payment Test Box",
 		NameAr:          "صندوق اختبار الصرف",
+		GLAccountID:     treasuryGL(t, db, leID, "111001"),
 		AccountType:     domain.CashAccountPettyCash,
 		CurrencyCode:    "SAR",
 		CustodianUserID: &adminID,
@@ -215,21 +225,22 @@ func TestTreasuryPayment_Lifecycle(t *testing.T) {
 
 	// 2. Create Payment for 200 SAR
 	pmt, err := svc.CreatePayment(ctx, &domain.Payment{
-		LegalEntityID:   leID,
-		CashAccountID:   acc.ID,
-		PaymentDate:     time.Now(),
-		PaymentType:     domain.PaymentPettyCashExpense,
-		PaidTo:          "مكتبة الهدى",
-		Amount:          decimal.NewFromInt(200),
-		CurrencyCode:    "SAR",
-		CreatedByUserID: &adminID,
+		LegalEntityID:     leID,
+		CashAccountID:     acc.ID,
+		PaymentDate:       time.Now(),
+		GLOffsetAccountID: treasuryGL(t, db, leID, "523000"),
+		PaymentType:       domain.PaymentPettyCashExpense,
+		PaidTo:            "مكتبة الهدى",
+		Amount:            decimal.NewFromInt(200),
+		CurrencyCode:      "SAR",
+		CreatedByUserID:   &adminID,
 	})
 	if err != nil {
 		t.Fatalf("failed to create payment: %v", err)
 	}
 
 	// 3. Approve Payment
-	approved, err := svc.ApprovePayment(ctx, leID, pmt.ID, adminID)
+	approved, err := svc.ApprovePayment(ctx, leID, pmt.ID, treasuryChecker(t, db))
 	if err != nil {
 		t.Fatalf("failed to approve payment: %v", err)
 	}
@@ -238,7 +249,7 @@ func TestTreasuryPayment_Lifecycle(t *testing.T) {
 	}
 
 	// 4. Pay Payment
-	paid, err := svc.PayPayment(ctx, leID, pmt.ID, nil)
+	paid, err := svc.PayPayment(ctx, leID, pmt.ID, treasuryChecker(t, db))
 	if err != nil {
 		t.Fatalf("failed to pay payment: %v", err)
 	}
@@ -257,26 +268,30 @@ func TestTreasuryPayment_Lifecycle(t *testing.T) {
 
 	// 6. Attempt payment greater than balance (300 < 500)
 	overPmt, err := svc.CreatePayment(ctx, &domain.Payment{
-		LegalEntityID:   leID,
-		CashAccountID:   acc.ID,
-		PaymentDate:     time.Now(),
-		PaymentType:     domain.PaymentPettyCashExpense,
-		PaidTo:          "مورد صيانة",
-		Amount:          decimal.NewFromInt(500),
-		CurrencyCode:    "SAR",
-		CreatedByUserID: &adminID,
+		LegalEntityID:     leID,
+		CashAccountID:     acc.ID,
+		PaymentDate:       time.Now(),
+		GLOffsetAccountID: treasuryGL(t, db, leID, "523000"),
+		PaymentType:       domain.PaymentPettyCashExpense,
+		PaidTo:            "مورد صيانة",
+		Amount:            decimal.NewFromInt(500),
+		CurrencyCode:      "SAR",
+		CreatedByUserID:   &adminID,
 	})
 	if err != nil {
 		t.Fatalf("failed to create over payment: %v", err)
 	}
-	_, err = svc.PayPayment(ctx, leID, overPmt.ID, nil)
+	if _, err := svc.ApprovePayment(ctx, leID, overPmt.ID, treasuryChecker(t, db)); err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.PayPayment(ctx, leID, overPmt.ID, treasuryChecker(t, db))
 	if err == nil {
 		t.Fatalf("expected error on insufficient cash balance, got nil")
 	}
 }
 
 func TestTreasuryPayment_ConcurrentPaymentsCannotOverdraw(t *testing.T) {
-	treasuryMod, _, _, leID, adminID, ctx := setupTreasuryTest(t)
+	treasuryMod, _, db, leID, adminID, ctx := setupTreasuryTest(t)
 	svc := treasuryMod.TreasuryService
 
 	account, err := svc.CreateCashAccount(ctx, &domain.CashAccount{
@@ -284,6 +299,7 @@ func TestTreasuryPayment_ConcurrentPaymentsCannotOverdraw(t *testing.T) {
 		AccountCode:     "CASH-RACE-" + uuid.New().String()[:8],
 		NameEn:          "Concurrent Payment Box",
 		NameAr:          "صندوق اختبار التزامن",
+		GLAccountID:     treasuryGL(t, db, leID, "111001"),
 		AccountType:     domain.CashAccountPettyCash,
 		CurrencyCode:    "SAR",
 		CustodianUserID: &adminID,
@@ -298,27 +314,34 @@ func TestTreasuryPayment_ConcurrentPaymentsCannotOverdraw(t *testing.T) {
 	payments := make([]*domain.Payment, 2)
 	for i := range payments {
 		payments[i], err = svc.CreatePayment(ctx, &domain.Payment{
-			LegalEntityID:   leID,
-			CashAccountID:   account.ID,
-			PaymentDate:     time.Now(),
-			PaymentType:     domain.PaymentMiscellaneous,
-			PaidTo:          "Concurrent payee",
-			Amount:          decimal.NewFromInt(80),
-			CurrencyCode:    "SAR",
-			CreatedByUserID: &adminID,
+			LegalEntityID:     leID,
+			CashAccountID:     account.ID,
+			PaymentDate:       time.Now(),
+			GLOffsetAccountID: treasuryGL(t, db, leID, "523000"),
+			PaymentType:       domain.PaymentMiscellaneous,
+			PaidTo:            "Concurrent payee",
+			Amount:            decimal.NewFromInt(80),
+			CurrencyCode:      "SAR",
+			CreatedByUserID:   &adminID,
 		})
 		if err != nil {
 			t.Fatalf("failed to create payment: %v", err)
 		}
 	}
 
+	checkerID := treasuryChecker(t, db)
+	for _, payment := range payments {
+		if _, err := svc.ApprovePayment(ctx, leID, payment.ID, checkerID); err != nil {
+			t.Fatal(err)
+		}
+	}
 	start := make(chan struct{})
 	results := make(chan error, len(payments))
 	for _, payment := range payments {
 		payment := payment
 		go func() {
 			<-start
-			_, err := svc.PayPayment(ctx, leID, payment.ID, nil)
+			_, err := svc.PayPayment(ctx, leID, payment.ID, checkerID)
 			results <- err
 		}()
 	}
@@ -351,7 +374,7 @@ func TestTreasuryPayment_ConcurrentPaymentsCannotOverdraw(t *testing.T) {
 }
 
 func TestTreasuryReceipt_PostRollbackRestoresBalance(t *testing.T) {
-	treasuryMod, _, _, leID, adminID, ctx := setupTreasuryTest(t)
+	treasuryMod, _, db, leID, adminID, ctx := setupTreasuryTest(t)
 	svc := treasuryMod.TreasuryService
 
 	account, err := svc.CreateCashAccount(ctx, &domain.CashAccount{
@@ -359,6 +382,7 @@ func TestTreasuryReceipt_PostRollbackRestoresBalance(t *testing.T) {
 		AccountCode:     "CASH-ROLLBACK-" + uuid.New().String()[:8],
 		NameEn:          "Receipt Rollback Box",
 		NameAr:          "صندوق تراجع القبض",
+		GLAccountID:     treasuryGL(t, db, leID, "111001"),
 		AccountType:     domain.CashAccountPettyCash,
 		CurrencyCode:    "SAR",
 		CustodianUserID: &adminID,
@@ -370,23 +394,26 @@ func TestTreasuryReceipt_PostRollbackRestoresBalance(t *testing.T) {
 		t.Fatalf("failed to create cash account: %v", err)
 	}
 	receipt, err := svc.CreateReceipt(ctx, &domain.Receipt{
-		LegalEntityID:   leID,
-		CashAccountID:   account.ID,
-		ReceiptDate:     time.Now(),
-		ReceiptType:     domain.ReceiptMiscellaneous,
-		ReceivedFrom:    "Rollback payer",
-		Amount:          decimal.NewFromInt(25),
-		CurrencyCode:    "SAR",
-		PaymentMethod:   domain.PaymentMethodCash,
-		CreatedByUserID: &adminID,
+		LegalEntityID:     leID,
+		CashAccountID:     account.ID,
+		ReceiptDate:       time.Now(),
+		GLOffsetAccountID: treasuryGL(t, db, leID, "410000"),
+		ReceiptType:       domain.ReceiptMiscellaneous,
+		ReceivedFrom:      "Rollback payer",
+		Amount:            decimal.NewFromInt(25),
+		CurrencyCode:      "SAR",
+		PaymentMethod:     domain.PaymentMethodCash,
+		CreatedByUserID:   &adminID,
 	})
 	if err != nil {
 		t.Fatalf("failed to create receipt: %v", err)
 	}
 
-	invalidJournalID := uuid.New()
-	if _, err := svc.PostReceipt(ctx, leID, receipt.ID, &invalidJournalID); err == nil {
-		t.Fatal("expected invalid journal entry to abort receipt posting")
+	if _, err := db.Pool.Exec(ctx, `UPDATE treasury.receipts SET gl_offset_account_id=NULL WHERE id=$1`, receipt.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PostReceipt(ctx, leID, receipt.ID, treasuryChecker(t, db)); err == nil {
+		t.Fatal("expected missing GL mapping to abort receipt posting")
 	}
 	updatedAccount, err := svc.GetCashAccount(ctx, leID, account.ID)
 	if err != nil {
@@ -405,7 +432,7 @@ func TestTreasuryReceipt_PostRollbackRestoresBalance(t *testing.T) {
 }
 
 func TestTreasuryTransfer_CashToBank(t *testing.T) {
-	treasuryMod, bankingMod, _, leID, adminID, ctx := setupTreasuryTest(t)
+	treasuryMod, bankingMod, db, leID, adminID, ctx := setupTreasuryTest(t)
 	tSvc := treasuryMod.TreasuryService
 	bSvc := bankingMod.BankingService
 
@@ -415,6 +442,7 @@ func TestTreasuryTransfer_CashToBank(t *testing.T) {
 		AccountCode:     "CASH-TRF-" + uuid.New().String()[:8],
 		NameEn:          "Source Cash Register",
 		NameAr:          "صندوق تحويل تجريبي",
+		GLAccountID:     treasuryGL(t, db, leID, "111001"),
 		AccountType:     domain.CashAccountCashRegister,
 		CurrencyCode:    "SAR",
 		CustodianUserID: &adminID,
@@ -437,6 +465,7 @@ func TestTreasuryTransfer_CashToBank(t *testing.T) {
 		IBAN:           "SA55200009900" + randSuffix,
 		SwiftBIC:       "RIBLSARI",
 		CurrencyCode:   "SAR",
+		GLAccountID:    treasuryGL(t, db, leID, "111002"),
 		OpeningBalance: decimal.NewFromInt(10000),
 		CurrentBalance: decimal.NewFromInt(10000),
 		Status:         bankDomain.BankAccountActive,
@@ -454,6 +483,7 @@ func TestTreasuryTransfer_CashToBank(t *testing.T) {
 		DestinationType:          domain.TransferDestinationBank,
 		DestinationBankAccountID: &bankAcc.ID,
 		Amount:                   decimal.NewFromInt(1000),
+		FeeGLAccountID:           treasuryGL(t, db, leID, "523000"),
 		FeeAmount:                decimal.NewFromInt(15),
 		CurrencyCode:             "SAR",
 		InitiatedByUserID:        &adminID,
@@ -463,12 +493,26 @@ func TestTreasuryTransfer_CashToBank(t *testing.T) {
 	}
 
 	// 4. Complete Transfer
-	completed, err := tSvc.CompleteTransfer(ctx, leID, trf.ID, adminID, nil)
+	completed, err := tSvc.CompleteTransfer(ctx, leID, trf.ID, treasuryChecker(t, db))
 	if err != nil {
 		t.Fatalf("failed to complete transfer: %v", err)
 	}
 	if completed.Status != domain.TransferCompleted {
 		t.Errorf("expected status COMPLETED, got %s", completed.Status)
+	}
+	if completed.JournalEntryID == nil || completed.CompletedByUserID == nil || *completed.CompletedByUserID != treasuryChecker(t, db) {
+		t.Fatal("transfer missing journal or checker actor")
+	}
+	var debit, credit decimal.Decimal
+	var lines int
+	if err := db.Pool.QueryRow(ctx, `SELECT SUM(base_debit), SUM(base_credit), count(*) FROM accounting.journal_lines WHERE journal_entry_id=$1`, *completed.JournalEntryID).Scan(&debit, &credit, &lines); err != nil {
+		t.Fatal(err)
+	}
+	if !debit.Equal(decimal.NewFromInt(1015)) || !credit.Equal(debit) || lines != 3 {
+		t.Fatalf("incorrect transfer ledger: %s/%s in %d lines", debit, credit, lines)
+	}
+	if _, err := tSvc.CompleteTransfer(ctx, leID, trf.ID, treasuryChecker(t, db)); err != nil {
+		t.Fatalf("transfer retry: %v", err)
 	}
 
 	// 5. Verify Cash Account Balance (3000 - 1000 - 15 = 1985)
@@ -489,7 +533,7 @@ func TestTreasuryTransfer_CashToBank(t *testing.T) {
 }
 
 func TestTreasuryTransfer_RollbackRestoresBothCashAccounts(t *testing.T) {
-	treasuryMod, _, _, leID, adminID, ctx := setupTreasuryTest(t)
+	treasuryMod, _, db, leID, adminID, ctx := setupTreasuryTest(t)
 	svc := treasuryMod.TreasuryService
 
 	createAccount := func(code string, balance decimal.Decimal) *domain.CashAccount {
@@ -499,6 +543,7 @@ func TestTreasuryTransfer_RollbackRestoresBothCashAccounts(t *testing.T) {
 			AccountCode:     code + uuid.New().String()[:8],
 			NameEn:          "Transfer Rollback Box",
 			NameAr:          "صندوق تراجع التحويل",
+			GLAccountID:     treasuryGL(t, db, leID, "111001"),
 			AccountType:     domain.CashAccountMainVault,
 			CurrencyCode:    "SAR",
 			CustodianUserID: &adminID,
@@ -521,6 +566,7 @@ func TestTreasuryTransfer_RollbackRestoresBothCashAccounts(t *testing.T) {
 		DestinationType:          domain.TransferDestinationCash,
 		DestinationCashAccountID: &destination.ID,
 		Amount:                   decimal.NewFromInt(200),
+		FeeGLAccountID:           treasuryGL(t, db, leID, "523000"),
 		FeeAmount:                decimal.NewFromInt(10),
 		CurrencyCode:             "SAR",
 		InitiatedByUserID:        &adminID,
@@ -529,9 +575,11 @@ func TestTreasuryTransfer_RollbackRestoresBothCashAccounts(t *testing.T) {
 		t.Fatalf("failed to create transfer: %v", err)
 	}
 
-	invalidJournalID := uuid.New()
-	if _, err := svc.CompleteTransfer(ctx, leID, transfer.ID, adminID, &invalidJournalID); err == nil {
-		t.Fatal("expected invalid journal entry to abort transfer")
+	if _, err := db.Pool.Exec(ctx, `UPDATE treasury.transfers SET fee_gl_account_id=NULL WHERE id=$1`, transfer.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CompleteTransfer(ctx, leID, transfer.ID, treasuryChecker(t, db)); err == nil {
+		t.Fatal("expected missing fee GL mapping to abort transfer")
 	}
 	rolledBackSource, err := svc.GetCashAccount(ctx, leID, source.ID)
 	if err != nil {
@@ -551,4 +599,22 @@ func TestTreasuryTransfer_RollbackRestoresBothCashAccounts(t *testing.T) {
 	if unchangedTransfer.Status != domain.TransferDraft {
 		t.Fatalf("expected transfer to remain DRAFT, got %s", unchangedTransfer.Status)
 	}
+}
+
+func treasuryGL(t *testing.T, db *database.DB, entity uuid.UUID, code string) *uuid.UUID {
+	t.Helper()
+	var id uuid.UUID
+	if err := db.Pool.QueryRow(context.Background(), `SELECT id FROM accounting.accounts WHERE legal_entity_id=$1 AND code=$2`, entity, code).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return &id
+}
+
+func treasuryChecker(t *testing.T, db *database.DB) uuid.UUID {
+	t.Helper()
+	var id uuid.UUID
+	if err := db.Pool.QueryRow(context.Background(), `INSERT INTO iam.users(username,display_name) VALUES ('treasury-checker','Treasury Checker') ON CONFLICT (lower(username)) WHERE username IS NOT NULL DO UPDATE SET display_name=EXCLUDED.display_name RETURNING id`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

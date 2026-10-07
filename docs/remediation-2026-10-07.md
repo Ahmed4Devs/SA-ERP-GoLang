@@ -43,6 +43,19 @@ accounting/tax periods, audit-write failure, and receipt allocation rollback.
 Targeted vet passes. Receipt/payment FX snapshots and complete approval policies
 remain follow-up work; foreign-currency settlements currently fail safely.
 
+## Treasury actors, approvals and posting
+
+Treasury receipts, approved payments and transfers create central GL entries
+with scoped account mappings, source references and atomic audit events.
+HTTP commands derive actors from the authenticated session. Creators cannot
+approve/post their own documents; payment posting requires approval. Transfers
+include fees in the balanced journal. Existing retry behavior is preserved.
+
+Treasury PostgreSQL integration tests passed with the race detector, including
+HTTP actor forgery, maker/checker rejection, duplicate requests, closed-period
+rollback, and an injected audit failure. Targeted vet passed. Configurable
+approval limits and FX snapshots remain follow-up work.
+
 ## Pending
 
 Transactional posting across treasury, payroll,

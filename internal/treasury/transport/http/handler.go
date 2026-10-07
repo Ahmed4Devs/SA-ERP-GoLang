@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	iamhttp "erp/internal/iam/transport/http"
 	"erp/internal/treasury/domain"
 	"erp/internal/treasury/ports"
 
@@ -114,11 +115,17 @@ func (h *TreasuryHandler) listReceipts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TreasuryHandler) createReceipt(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
 	var req domain.Receipt
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request payload"}`, http.StatusBadRequest)
 		return
 	}
+	req.CreatedByUserID = &actor.ID
 	rc, err := h.service.CreateReceipt(r.Context(), &req)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
@@ -128,6 +135,11 @@ func (h *TreasuryHandler) createReceipt(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *TreasuryHandler) postReceipt(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
@@ -139,7 +151,7 @@ func (h *TreasuryHandler) postReceipt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid or missing legal_entity_id"}`, http.StatusBadRequest)
 		return
 	}
-	rc, err := h.service.PostReceipt(r.Context(), leID, id, nil)
+	rc, err := h.service.PostReceipt(r.Context(), leID, id, actor.ID)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
 		return
@@ -163,11 +175,17 @@ func (h *TreasuryHandler) listPayments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TreasuryHandler) createPayment(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
 	var req domain.Payment
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request payload"}`, http.StatusBadRequest)
 		return
 	}
+	req.CreatedByUserID = &actor.ID
 	pmt, err := h.service.CreatePayment(r.Context(), &req)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
@@ -177,6 +195,11 @@ func (h *TreasuryHandler) createPayment(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *TreasuryHandler) approvePayment(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
@@ -188,7 +211,7 @@ func (h *TreasuryHandler) approvePayment(w http.ResponseWriter, r *http.Request)
 		http.Error(w, `{"error":"invalid or missing legal_entity_id"}`, http.StatusBadRequest)
 		return
 	}
-	pmt, err := h.service.ApprovePayment(r.Context(), leID, id, uuid.Nil)
+	pmt, err := h.service.ApprovePayment(r.Context(), leID, id, actor.ID)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
 		return
@@ -197,6 +220,11 @@ func (h *TreasuryHandler) approvePayment(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *TreasuryHandler) payPayment(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
@@ -208,7 +236,7 @@ func (h *TreasuryHandler) payPayment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid or missing legal_entity_id"}`, http.StatusBadRequest)
 		return
 	}
-	pmt, err := h.service.PayPayment(r.Context(), leID, id, nil)
+	pmt, err := h.service.PayPayment(r.Context(), leID, id, actor.ID)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
 		return
@@ -232,11 +260,17 @@ func (h *TreasuryHandler) listTransfers(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *TreasuryHandler) createTransfer(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
 	var req domain.Transfer
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request payload"}`, http.StatusBadRequest)
 		return
 	}
+	req.InitiatedByUserID = &actor.ID
 	trf, err := h.service.CreateTransfer(r.Context(), &req)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
@@ -246,6 +280,11 @@ func (h *TreasuryHandler) createTransfer(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *TreasuryHandler) completeTransfer(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
@@ -257,7 +296,7 @@ func (h *TreasuryHandler) completeTransfer(w http.ResponseWriter, r *http.Reques
 		http.Error(w, `{"error":"invalid or missing legal_entity_id"}`, http.StatusBadRequest)
 		return
 	}
-	trf, err := h.service.CompleteTransfer(r.Context(), leID, id, uuid.Nil, nil)
+	trf, err := h.service.CompleteTransfer(r.Context(), leID, id, actor.ID)
 	if err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
 		return

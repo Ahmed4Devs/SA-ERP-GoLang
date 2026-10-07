@@ -4,6 +4,10 @@ import (
 	"context"
 	"net/http"
 
+	"erp/internal/accounting"
+	"erp/internal/accounting/application/posting"
+	"erp/internal/audit"
+
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
 	"erp/internal/treasury/application/services"
@@ -24,7 +28,9 @@ type Module struct {
 
 func NewModule(cfg *config.Config, db *database.DB) *Module {
 	repo := postgres.NewTreasuryRepository(db)
-	svc := services.NewTreasuryService(repo, db)
+	auditService := audit.NewModule(cfg, db).Service
+	ledger := posting.NewSourceService(db, accounting.NewModule(cfg, db).PostingEngine, auditService)
+	svc := services.NewTreasuryService(repo, ledger, auditService)
 	handler := treasuryhttp.NewTreasuryHandler(svc)
 
 	return &Module{

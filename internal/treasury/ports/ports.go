@@ -51,18 +51,18 @@ type TreasuryService interface {
 	ListCashAccounts(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.CashAccount, error)
 
 	CreateReceipt(ctx context.Context, receipt *domain.Receipt) (*domain.Receipt, error)
-	PostReceipt(ctx context.Context, legalEntityID, id uuid.UUID, journalEntryID *uuid.UUID) (*domain.Receipt, error)
+	PostReceipt(ctx context.Context, legalEntityID, id uuid.UUID, actorID uuid.UUID) (*domain.Receipt, error)
 	GetReceipt(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Receipt, error)
 	ListReceipts(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.Receipt, error)
 
 	CreatePayment(ctx context.Context, payment *domain.Payment) (*domain.Payment, error)
 	ApprovePayment(ctx context.Context, legalEntityID, id uuid.UUID, approverID uuid.UUID) (*domain.Payment, error)
-	PayPayment(ctx context.Context, legalEntityID, id uuid.UUID, journalEntryID *uuid.UUID) (*domain.Payment, error)
+	PayPayment(ctx context.Context, legalEntityID, id uuid.UUID, actorID uuid.UUID) (*domain.Payment, error)
 	GetPayment(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Payment, error)
 	ListPayments(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.Payment, error)
 
 	CreateTransfer(ctx context.Context, transfer *domain.Transfer) (*domain.Transfer, error)
-	CompleteTransfer(ctx context.Context, legalEntityID, id uuid.UUID, completedBy uuid.UUID, journalEntryID *uuid.UUID) (*domain.Transfer, error)
+	CompleteTransfer(ctx context.Context, legalEntityID, id uuid.UUID, completedBy uuid.UUID) (*domain.Transfer, error)
 	GetTransfer(ctx context.Context, legalEntityID, id uuid.UUID) (*domain.Transfer, error)
 	ListTransfers(ctx context.Context, legalEntityID uuid.UUID) ([]*domain.Transfer, error)
 }

@@ -14954,6 +14954,9 @@ components:
         - quantity
         - unit_price
       properties:
+        tax_code_id:
+          type: string
+          format: uuid
         item_id:
           type: string
           format: uuid
