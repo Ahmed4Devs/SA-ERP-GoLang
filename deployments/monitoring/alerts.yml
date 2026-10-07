@@ -1,0 +1,28 @@
+groups:
+  - name: erp
+    rules:
+      - alert: ERPAPIUnavailable
+        expr: up{job="erp-api"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: ERP API cannot be scraped}
+      - alert: ERPAPIHighErrorRate
+        expr: sum(rate(erp_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(erp_http_requests_total[5m])), 0.001) > 0.02
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: ERP API errors exceed two percent}
+      - alert: ERPBackupOverdue
+        expr: time() - erp_backup_last_success_timestamp_seconds > 93600
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: ERP coordinated backup is older than 26 hours}
+      - alert: ERPBackupNeverCompleted
+        expr: absent(erp_backup_last_success_timestamp_seconds)
+        for: 15m
+        labels: {severity: critical}
+        annotations: {summary: No successful ERP backup has been recorded}
+      - alert: ERPBackupMetricsUnavailable
+        expr: up{job="erp-backup"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: ERP backup metrics cannot be scraped}

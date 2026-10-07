@@ -2,9 +2,9 @@
 
 The API exposes Prometheus metrics at `/metrics` on its internal port 8080.
 Production requires `Authorization: Bearer <METRICS_BEARER_TOKEN>`. Nginx does
-not expose this endpoint publicly. Prometheus, Grafana, Alertmanager, database
-exporters, and host exporters must be installed separately; they are not part of
-the checked-in Compose deployment.
+not expose this endpoint publicly. An optional `docker-compose.monitoring.yml` overlay provides Prometheus and a
+textfile exporter for backup metrics. Grafana, Alertmanager and database/host
+exporters remain deployment choices.
 
 ## Metrics currently emitted
 
@@ -76,3 +76,23 @@ Dashboards should show availability, request rate, error rate, latency, and
 concurrent requests. Add business-throughput panels only after their actual
 instrumentation has been implemented and verified. Test alert delivery through
 the deployment's chosen incident channel before go-live.
+
+## Checked-in monitoring overlay
+
+Create a restricted file containing the API metrics token, set
+`METRICS_BEARER_TOKEN_FILE`, and combine both Compose files:
+
+```bash
+docker compose --env-file deployments/compose/.env.production \
+  -f deployments/compose/docker-compose.prod.yml \
+  -f deployments/compose/docker-compose.monitoring.yml up -d
+```
+
+No monitoring ports are exposed publicly. Prometheus rules in
+`deployments/monitoring/alerts.yml` include API health and backup age/absence.
+Backup jobs atomically publish `erp_backup_last_success_timestamp_seconds` and
+`erp_backup_archive_bytes` into the `backupmetrics` volume after all required
+destinations succeed. File permissions allow the exporter to read these metrics.
+Configure Alertmanager/incident routing and test delivery before relying on these
+rules for on-call response. The overlay is a deployment template, not evidence
+that monitoring is running on an external installation.

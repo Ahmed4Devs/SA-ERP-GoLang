@@ -13,7 +13,7 @@ and an optional backup job via Docker Compose:
 - **`erp-migrate`**: Ephemeral schema migration runner executing Goose database migrations before API launch.
 - **`erp-provision`** and **`erp-grants`**: Provision database roles and grant runtime privileges before API launch. See [database identities](database-roles.md).
 - **`postgres`**: PostgreSQL 18 relational database with Saudi localized schema (`Asia/Riyadh` TZ).
-- **`erp-backup`**: On-demand encrypted logical-backup job in the `operations` profile; an external scheduler must invoke it.
+- **`erp-backup`**: Encrypted database + attachment recovery job in the `operations` profile; invoke through `scripts/backup-coordinated.sh`. A systemd timer template is included.
 
 ---
 
@@ -174,3 +174,7 @@ Ensure `postgresql.conf` parameters match host hardware:
 1. **Level 1 (Ops Engineer)**: Monitor alerts, execute initial runbook steps, restart crashed containers. (SLA: 15 mins)
 2. **Level 2 (Lead Platform Engineer)**: Investigate DB locks, worker failures, or release rollbacks. (SLA: 30 mins)
 3. **Level 3 (VP of Engineering / Security Officer)**: Security incidents, ZATCA regulatory compliance outages, critical data loss events. (SLA: Immediate)
+
+## Recovery and regulatory operation
+
+See [coordinated backups](../backup/backup-strategy.md), [restore procedure](../restore/restore-guide.md), and [regulatory integration boundaries](regulatory-integrations.md) before deployment.

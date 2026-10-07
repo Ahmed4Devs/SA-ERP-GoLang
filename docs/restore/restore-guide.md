@@ -1,78 +1,49 @@
-# ERP-GO Disaster-Recovery Restore Guide
+# Restore a database and attachment recovery bundle
 
-## Scope
+Stop incoming writes and all workers. Preserve the existing database and document
+volume separately. Provision the required database roles on a new server.
+`restore.sh` drops and recreates only the explicit target database, so double-check
+the target host, port, and name. The document destination must be empty: the
+script never deletes an existing attachment tree.
 
-This guide restores the encrypted PostgreSQL custom-format archive produced by
-`scripts/backup.sh`. The checked-in deployment does not implement WAL archiving
-or point-in-time recovery. See the backup strategy before assigning RPO/RTO
-commitments.
-
-## Before restoring
-
-1. Isolate incoming traffic and stop writers:
-
-   ```bash
-   docker compose --env-file deployments/compose/.env.production \
-     -f deployments/compose/docker-compose.prod.yml stop erp-api erp-worker
-   ```
-
-2. Preserve a forensic snapshot of the damaged state when safe.
-3. Confirm the target host, database name, owner, backup path, and encryption
-   key with the incident commander. Restoration drops and recreates the target
-   database.
-4. Verify that both the artifact and its adjacent `.sha256` file are present.
-
-## Restore an encrypted logical backup
-
-Run from the repository root with the production database variables loaded from
-the secret manager:
+Use PostgreSQL 18 client tools, Bash, Python 3.12+, OpenSSL and coreutils, or the
+built backup image with its `/usr/local/bin/restore.sh` entrypoint. Mount backups
+read-only and a fresh writable document destination. Restore must run with a
+role allowed to create databases and assign `RESTORE_OWNER`.
 
 ```bash
-export BACKUP_ENCRYPTION_KEY='read-from-your-secret-manager'
-export POSTGRES_HOST='database-host'
-export POSTGRES_PORT='5432'
-export POSTGRES_USER='erp_admin'
-export POSTGRES_PASSWORD='read-from-your-secret-manager'
-export POSTGRES_DB='erp_db'
-export RESTORE_OWNER='erp_owner'
-export COMPOSE_ENV_FILE='deployments/compose/.env.production'
-
-./scripts/restore.sh /backups/erp_erp_db_20260918_020000.dump.enc --force
+export POSTGRES_HOST=isolated-database-host
+export POSTGRES_PORT=5432
+export POSTGRES_USER=erp_admin
+export POSTGRES_PASSWORD='from-secret-manager'
+export POSTGRES_DB=erp_recovered
+export RESTORE_OWNER=erp_migrator
+export BACKUP_ENCRYPTION_KEY='from-separate-secret-manager'
+export STORAGE_LOCAL_DIR=/srv/erp-recovered-documents
+export RESTORE_QUIESCED=true
+bash scripts/restore.sh /backups/erp_erp_db_TIMESTAMP.tar.gz.enc --force
 ```
 
-The utility verifies SHA-256 before decryption, recreates the target database,
-runs `pg_restore --exit-on-error --no-owner --role=erp_owner`, and then runs the
-migration and runtime-grant services. Use the installation administrator for
-restore: the read-only `erp_backup` login cannot recreate databases. Ensure the
-production roles are provisioned before recovery onto a new PostgreSQL server.
-Unencrypted legacy archives remain readable, but new production
-backups are rejected unless encryption is configured.
+The utility verifies the external checksum, decrypts, rejects unsafe tar members,
+checks the full manifest inventory and every file hash, and validates the dump
+before touching the database. It restores the database in one `pg_restore`
+transaction, copies documents, and verifies their hashes again. Any failure
+returns nonzero; keep writers stopped. In a failed recovery, the target database
+may be empty or partially prepared; the original bundle remains untouched.
 
-## Post-restore verification
+Version-1 bundles replace the old database-only `.dump.enc` format. Legacy
+archives must follow the old `pg_restore` procedure with a separately recovered
+attachment backup; they cannot meet the coordinated-bundle contract.
 
-1. Confirm the schema version:
+Migrations and grants are deliberately separate: set their connection strings
+explicitly to the recovered target before running them. A restore script must
+not silently invoke a Compose migration job pointing to a different database.
+Then check schema version, readiness and document storage access, verify the audit
+chain, and reconcile representative ledger, inventory, AR/AP, payroll and
+attachment records. Match restored filesystem ownership to the API service user
+before reattaching a document volume. Record elapsed time and newest recovered
+transaction, and restart writers only after verification.
 
-   ```bash
-   docker compose --env-file deployments/compose/.env.production \
-     -f deployments/compose/docker-compose.prod.yml run --rm erp-migrate status
-   ```
-
-2. Run the system doctor and the release smoke tests.
-3. Verify audit-chain integrity through `GET /api/v1/audit/verify`.
-4. Reconcile representative ledger, inventory, receivable, payable, payroll,
-   document, and outbox counts against the incident record.
-5. Record elapsed restore time and the newest recovered transaction timestamp.
-6. Restart writers only after business and technical owners sign off:
-
-   ```bash
-   docker compose --env-file deployments/compose/.env.production \
-     -f deployments/compose/docker-compose.prod.yml start erp-api erp-worker
-   ```
-
-## Point-in-time recovery
-
-PITR is unavailable in the repository's standalone Compose baseline. If the
-production database platform provides WAL archiving, follow that platform's
-reviewed runbook and test it separately. Creating `recovery.signal` without a
-verified base backup, WAL archive, restore command, and timeline plan is not a
-valid recovery procedure.
+For PITR, use the deployed database platform's tested WAL/base-backup runbook and
+the corresponding attachment recovery point. The standalone Compose stack does
+not include PITR.

@@ -110,6 +110,7 @@ services:
       SMTP_USERNAME: "${SMTP_USERNAME:?SMTP_USERNAME is required}"
       SMTP_PASSWORD: "${SMTP_PASSWORD:?SMTP_PASSWORD is required}"
       SMTP_FROM: "${SMTP_FROM:?SMTP_FROM is required}"
+      GOSI_INTEGRATION_MODE: "${GOSI_INTEGRATION_MODE:-file}"
       ZATCA_ENABLED: "${ZATCA_ENABLED:-false}"
       ZATCA_ENVIRONMENT: "${ZATCA_ENVIRONMENT:-simulation}"
       ZATCA_PRODUCTION_ACKNOWLEDGED: "${ZATCA_PRODUCTION_ACKNOWLEDGED:-false}"
@@ -148,6 +149,7 @@ services:
       SMTP_USERNAME: "${SMTP_USERNAME:?required}"
       SMTP_PASSWORD: "${SMTP_PASSWORD:?required}"
       SMTP_FROM: "${SMTP_FROM:?required}"
+      GOSI_INTEGRATION_MODE: "${GOSI_INTEGRATION_MODE:-file}"
       ZATCA_ENABLED: "${ZATCA_ENABLED:-false}"
       ZATCA_ENVIRONMENT: "${ZATCA_ENVIRONMENT:-simulation}"
       ZATCA_PRODUCTION_ACKNOWLEDGED: "${ZATCA_PRODUCTION_ACKNOWLEDGED:-false}"
@@ -160,8 +162,8 @@ services:
     networks:
       - erp-internal
 
-  # 5. On-demand encrypted database backup job. Invoke this service from a
-  # host scheduler; the "operations" profile keeps it out of normal startup.
+  # 5. Database + documents recovery bundle. Invoke through backup-coordinated.sh
+  # so API and worker writes are stopped throughout the snapshot.
   erp-backup:
     build:
       context: ../../
@@ -176,9 +178,19 @@ services:
       BACKUP_ENCRYPTION_KEY: "${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY is required}"
       RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}"
       BACKUP_DIR: /backups
+      STORAGE_LOCAL_DIR: /app/data/storage
+      BACKUP_METRICS_FILE: /metrics/erp_backup.prom
+      BACKUP_REQUIRE_OFFSITE: "${BACKUP_REQUIRE_OFFSITE:-false}"
+      RESTIC_REPOSITORY: "${RESTIC_REPOSITORY:-}"
+      RESTIC_PASSWORD: "${RESTIC_PASSWORD:-}"
+      AWS_ACCESS_KEY_ID: "${BACKUP_S3_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${BACKUP_S3_SECRET_ACCESS_KEY:-}"
+      AWS_DEFAULT_REGION: "${BACKUP_S3_REGION:-}"
       TZ: Asia/Riyadh
     volumes:
       - pgbackups:/backups
+      - documentdata:/app/data/storage:ro
+      - backupmetrics:/metrics
     depends_on:
       postgres:
         condition: service_healthy
@@ -235,5 +247,7 @@ volumes:
     name: erp-pgdata
   pgbackups:
     name: erp-pgbackups
+  backupmetrics:
+    name: erp-backupmetrics
   documentdata:
     name: erp-documentdata

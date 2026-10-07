@@ -322,23 +322,36 @@ jobs:
       PGPASSWORD: erp_backup_password
       PGDATABASE: erp_backup_drill
       BACKUP_ENCRYPTION_KEY: ci-backup-drill-encryption-key
-      RUN_MIGRATIONS_AFTER_RESTORE: "false"
+      BACKUP_QUIESCED: "true"
+      RESTORE_QUIESCED: "true"
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-      - name: Seed drill marker and create encrypted backup
+      - name: Verify recovery bundle integrity defenses
+        run: python3 -m unittest discover -s scripts -p test_backup_bundle.py -v
+      - name: Build recovery image
+        run: docker build -f deployments/docker/Dockerfile.backup -t erp-backup:drill .
+      - name: Seed isolated database and attachment markers
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: |
           docker exec "${POSTGRES_CONTAINER}" psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -v ON_ERROR_STOP=1 \
-            -c "CREATE TABLE backup_drill_marker (id integer PRIMARY KEY, value text NOT NULL);"
-          docker exec "${POSTGRES_CONTAINER}" psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -v ON_ERROR_STOP=1 \
-            -c "INSERT INTO backup_drill_marker VALUES (1, 'verified');"
-          BACKUP_DIR="${RUNNER_TEMP}/backups" ./scripts/backup.sh
-      - name: Restore and verify encrypted backup
-        env:
-          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+            -c "CREATE TABLE backup_drill_marker (id integer PRIMARY KEY, value text NOT NULL); INSERT INTO backup_drill_marker VALUES (1, 'verified');"
+          mkdir -p "${RUNNER_TEMP}/backups" "${RUNNER_TEMP}/documents" "${RUNNER_TEMP}/restored-documents"
+          printf 'verified document\n' > "${RUNNER_TEMP}/documents/invoice.txt"
+          chmod 777 "${RUNNER_TEMP}/backups" "${RUNNER_TEMP}/restored-documents"
+      - name: Back up and restore encrypted database and attachments
         run: |
-          backup_file="$(find "${RUNNER_TEMP}/backups" -name '*.dump.enc' -type f -print -quit)"
+          docker run --rm --network host -e POSTGRES_HOST -e POSTGRES_PORT -e POSTGRES_USER -e POSTGRES_PASSWORD -e POSTGRES_DB \
+            -e BACKUP_ENCRYPTION_KEY -e BACKUP_QUIESCED \
+            -v "${RUNNER_TEMP}/backups:/backups" -v "${RUNNER_TEMP}/documents:/app/data/storage:ro" erp-backup:drill
+          backup_file="$(find "${RUNNER_TEMP}/backups" -name '*.tar.gz.enc' -type f -print -quit)"
           test -n "${backup_file}"
-          ./scripts/restore.sh "${backup_file}" --force
-          test "$(docker exec "${POSTGRES_CONTAINER}" psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -Atqc 'SELECT value FROM backup_drill_marker WHERE id = 1')" = "verified"
+          docker run --rm --network host -e POSTGRES_HOST -e POSTGRES_PORT -e POSTGRES_USER -e POSTGRES_PASSWORD \
+            -e POSTGRES_DB=erp_restored_drill -e BACKUP_ENCRYPTION_KEY -e RESTORE_QUIESCED -e STORAGE_LOCAL_DIR=/restored \
+            -v "${RUNNER_TEMP}/backups:/backups:ro" -v "${RUNNER_TEMP}/restored-documents:/restored" \
+            --entrypoint /usr/local/bin/restore.sh erp-backup:drill "/backups/$(basename "${backup_file}")" --force
+          cmp "${RUNNER_TEMP}/documents/invoice.txt" "${RUNNER_TEMP}/restored-documents/invoice.txt"
+      - name: Verify restored database marker
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: test "$(docker exec "${POSTGRES_CONTAINER}" psql -U "${POSTGRES_USER}" -d erp_restored_drill -Atqc 'SELECT value FROM backup_drill_marker WHERE id = 1')" = "verified"

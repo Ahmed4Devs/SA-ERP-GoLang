@@ -1,122 +1,63 @@
 #!/usr/bin/env bash
-# Restores a PostgreSQL custom-format archive produced by backup.sh.
+# Restore a verified database+documents bundle. Keep all writers stopped until verification succeeds.
 set -euo pipefail
 umask 077
-
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 BACKUP_FILE="${1:-}"
-FORCE="${2:-}"
-
-if [ -z "${BACKUP_FILE}" ] || [ ! -f "${BACKUP_FILE}" ]; then
-    echo "Usage: $0 <backup.dump[.enc]> [--force]" >&2
-    exit 1
-fi
-
-CHECKSUM_FILE="${BACKUP_FILE}.sha256"
-if [ ! -f "${CHECKSUM_FILE}" ]; then
-    echo "Error: required checksum file is missing: ${CHECKSUM_FILE}" >&2
-    exit 1
-fi
-(
-    cd "$(dirname "${BACKUP_FILE}")"
-    sha256sum -c "$(basename "${CHECKSUM_FILE}")"
-)
-
-WORKING_FILE="${BACKUP_FILE}"
-TEMP_FILE=""
-cleanup() {
-    if [ -n "${TEMP_FILE}" ] && [ -f "${TEMP_FILE}" ]; then
-        rm -f -- "${TEMP_FILE}"
-    fi
-}
-trap cleanup EXIT
-
-if [[ "${BACKUP_FILE}" == *.enc ]]; then
-    if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
-        echo "Error: BACKUP_ENCRYPTION_KEY is required for this encrypted backup." >&2
-        exit 1
-    fi
-    command -v openssl >/dev/null 2>&1 || { echo "Error: openssl is required for decryption." >&2; exit 1; }
-    TEMP_FILE="$(mktemp "${TMPDIR:-/tmp}/erp-restore.XXXXXX.dump")"
-    export BACKUP_ENCRYPTION_KEY
-    openssl enc -d -aes-256-cbc -pbkdf2 \
-        -in "${BACKUP_FILE}" \
-        -out "${TEMP_FILE}" \
-        -pass env:BACKUP_ENCRYPTION_KEY
-    WORKING_FILE="${TEMP_FILE}"
-fi
-
-if [ "${FORCE}" != "--force" ]; then
-    read -rp "WARNING: this recreates the target database. Continue? (y/N): " CONFIRM
-    [[ "${CONFIRM}" =~ ^[Yy]$ ]] || { echo "Restoration cancelled."; exit 0; }
-fi
-
+[[ -f "$BACKUP_FILE" && -f "$BACKUP_FILE.sha256" ]] || { echo "Usage: restore.sh <bundle.tar.gz[.enc]> [--force]; checksum sidecar required" >&2; exit 1; }
+[[ "${RESTORE_QUIESCED:-false}" == true ]] || { echo "Stop and isolate all application/database/storage writers, then set RESTORE_QUIESCED=true" >&2; exit 1; }
 DB_HOST="${POSTGRES_HOST:-postgres}"
 DB_PORT="${POSTGRES_PORT:-5432}"
-DB_USER="${POSTGRES_USER:-erp_user}"
-DB_NAME="${POSTGRES_DB:-erp_db}"
-DB_OWNER="${RESTORE_OWNER:-${DB_USER}}"
-COMPOSE_FILE="${COMPOSE_FILE:-$(dirname "$0")/../deployments/compose/docker-compose.prod.yml}"
-COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-}"
-POSTGRES_SERVICE="${POSTGRES_SERVICE:-postgres}"
-MIGRATE_SERVICE="${MIGRATE_SERVICE:-erp-migrate}"
-GRANTS_SERVICE="${GRANTS_SERVICE:-erp-grants}"
-POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-}"
-
-if [[ ! "${DB_USER}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || [[ ! "${DB_NAME}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || [[ ! "${DB_OWNER}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-    echo "Error: POSTGRES_USER, POSTGRES_DB, and RESTORE_OWNER must be simple PostgreSQL identifiers." >&2
-    exit 1
+DB_USER="${POSTGRES_USER:-erp_admin}"
+DB_NAME="${POSTGRES_DB:-erp_restore}"
+DB_OWNER="${RESTORE_OWNER:-$DB_USER}"
+STORAGE_LOCAL_DIR="${STORAGE_LOCAL_DIR:?Set STORAGE_LOCAL_DIR to an EMPTY restore destination}"
+for name in "$DB_USER" "$DB_NAME" "$DB_OWNER"; do [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || { echo "Invalid database identifier" >&2; exit 1; }; done
+for command in psql pg_restore "$PYTHON_BIN" sha256sum; do command -v "$command" >/dev/null || { echo "$command is required" >&2; exit 1; }; done
+# Existing attachments are preserved separately by the operator; never delete a storage tree.
+mkdir -p "$STORAGE_LOCAL_DIR"
+[[ -z "$(find "$STORAGE_LOCAL_DIR" -mindepth 1 -print -quit)" ]] || { echo "Restore destination must be empty; preserve current documents in a separate location first" >&2; exit 1; }
+EXPECTED="$(awk 'NR==1 {print $1}' "$BACKUP_FILE.sha256")"
+[[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ && "$(sha256sum "$BACKUP_FILE" | cut -d' ' -f1)" == "$EXPECTED" ]] || { echo "Backup checksum mismatch" >&2; exit 1; }
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/erp-restore.XXXXXX")"
+cleanup() { rm -rf -- "$STAGE"; }
+trap cleanup EXIT
+ARCHIVE="$BACKUP_FILE"
+if [[ "$BACKUP_FILE" == *.enc ]]; then
+    : "${BACKUP_ENCRYPTION_KEY:?Encryption key is required}"
+    export BACKUP_ENCRYPTION_KEY
+    ARCHIVE="$STAGE/decrypted.tar.gz"
+    openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in "$BACKUP_FILE" -out "$ARCHIVE" -pass env:BACKUP_ENCRYPTION_KEY
 fi
-
-TERMINATE_SQL="SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}' AND pid <> pg_backend_pid();"
-
-compose() {
-    if [ -n "${COMPOSE_ENV_FILE}" ]; then
-        docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" "$@"
-    else
-        docker compose -f "${COMPOSE_FILE}" "$@"
-    fi
-}
-
-if [ -n "${POSTGRES_CONTAINER}" ]; then
-    docker exec "${POSTGRES_CONTAINER}" \
-        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="${TERMINATE_SQL}"
-    docker exec "${POSTGRES_CONTAINER}" \
-        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="DROP DATABASE IF EXISTS \"${DB_NAME}\";"
-    docker exec "${POSTGRES_CONTAINER}" \
-        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_OWNER}\";"
-    docker exec -i "${POSTGRES_CONTAINER}" \
-        pg_restore --username="${DB_USER}" --dbname="${DB_NAME}" --role="${DB_OWNER}" --exit-on-error --no-owner < "${WORKING_FILE}"
-elif command -v psql >/dev/null 2>&1 && command -v pg_restore >/dev/null 2>&1; then
-    export PGPASSWORD="${POSTGRES_PASSWORD:-}"
-    psql --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" --dbname=postgres \
-        --set=ON_ERROR_STOP=1 --command="${TERMINATE_SQL}"
-    psql --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" --dbname=postgres \
-        --set=ON_ERROR_STOP=1 --command="DROP DATABASE IF EXISTS \"${DB_NAME}\";"
-    psql --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" --dbname=postgres \
-        --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_OWNER}\";"
-    pg_restore --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" \
-        --dbname="${DB_NAME}" --role="${DB_OWNER}" --exit-on-error --no-owner "${WORKING_FILE}"
-elif command -v docker >/dev/null 2>&1; then
-    compose exec -T "${POSTGRES_SERVICE}" \
-        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="${TERMINATE_SQL}"
-    compose exec -T "${POSTGRES_SERVICE}" \
-        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="DROP DATABASE IF EXISTS \"${DB_NAME}\";"
-    compose exec -T "${POSTGRES_SERVICE}" \
-        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_OWNER}\";"
-    compose exec -T "${POSTGRES_SERVICE}" \
-        pg_restore --username="${DB_USER}" --dbname="${DB_NAME}" --role="${DB_OWNER}" --exit-on-error --no-owner < "${WORKING_FILE}"
-else
-    echo "Error: PostgreSQL client tools or Docker are required." >&2
-    exit 1
+mkdir "$STAGE/verified"
+"$PYTHON_BIN" "$SCRIPT_DIR/backup_bundle.py" verify "$STAGE/verified" "$ARCHIVE"
+pg_restore --list "$STAGE/verified/database.dump" > /dev/null
+if [[ "${2:-}" != --force ]]; then
+    read -rp "Recreate database $DB_NAME on $DB_HOST:$DB_PORT and restore documents to $STORAGE_LOCAL_DIR? (y/N): " CONFIRM
+    [[ "$CONFIRM" =~ ^[Yy]$ ]] || exit 0
 fi
-
-if [ "${RUN_MIGRATIONS_AFTER_RESTORE:-true}" = "true" ]; then
-    command -v docker >/dev/null 2>&1 || {
-        echo "Error: Docker is required to run post-restore migrations. Set RUN_MIGRATIONS_AFTER_RESTORE=false only for a controlled drill." >&2
-        exit 1
-    }
-    compose run --rm "${MIGRATE_SERVICE}"
-    compose run --rm "${GRANTS_SERVICE}"
-fi
-
-echo "Restore completed successfully: ${DB_NAME}"
+export PGPASSWORD="${POSTGRES_PASSWORD:-}"
+PSQL=(psql --host="$DB_HOST" --port="$DB_PORT" --username="$DB_USER" --dbname=postgres --set=ON_ERROR_STOP=1)
+"${PSQL[@]}" --command="SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();"
+"${PSQL[@]}" --command="DROP DATABASE IF EXISTS \"$DB_NAME\";"
+"${PSQL[@]}" --command="CREATE DATABASE \"$DB_NAME\" OWNER \"$DB_OWNER\";"
+pg_restore --host="$DB_HOST" --port="$DB_PORT" --username="$DB_USER" --dbname="$DB_NAME" --role="$DB_OWNER" --exit-on-error --single-transaction --no-owner "$STAGE/verified/database.dump"
+cp -R "$STAGE/verified/attachments/." "$STORAGE_LOCAL_DIR/"
+# Verify every restored object independently of the archive extraction.
+"$PYTHON_BIN" - "$STAGE/verified/manifest.json" "$STORAGE_LOCAL_DIR" <<'PY'
+import hashlib, json, pathlib, sys
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text())
+root = pathlib.Path(sys.argv[2])
+for name, expected in manifest['files'].items():
+    if not name.startswith('attachments/'):
+        continue
+    path = root / name.removeprefix('attachments/')
+    with path.open('rb') as source:
+        if hashlib.file_digest(source, 'sha256').hexdigest() != expected['sha256']:
+            raise ValueError('restored attachment checksum mismatch: ' + name)
+print('Restored attachment hashes verified')
+PY
+# Migrations are a separate explicit operation against the restored target; never
+# invoke a Compose migration job whose DATABASE_URL could refer to another database.
+printf 'Restore completed: %s on %s:%s. Keep writers stopped until migrations, grants and readiness checks pass.\n' "$DB_NAME" "$DB_HOST" "$DB_PORT"

@@ -65,3 +65,7 @@ Thumbs.db
 # Database storage mounts for local docker
 docker/data/
 *.tsbuildinfo
+
+# Python recovery tooling cache
+__pycache__/
+*.pyc

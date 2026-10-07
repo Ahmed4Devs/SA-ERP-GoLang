@@ -1,0 +1,12 @@
+[Unit]
+Description=ERP coordinated database and document backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/erp-go
+Environment=COMPOSE_ENV_FILE=/etc/erp-go/production.env
+ExecStart=/bin/bash /opt/erp-go/scripts/backup-coordinated.sh
+TimeoutStartSec=4h
+User=root

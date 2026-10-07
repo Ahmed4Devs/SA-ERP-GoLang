@@ -1,0 +1,25 @@
+# Combine with docker-compose.prod.yml; metrics remain on the private network.
+services:
+  erp-prometheus:
+    image: prom/prometheus:v3.2.1
+    restart: unless-stopped
+    command: ['--config.file=/etc/prometheus/prometheus.yml', '--storage.tsdb.retention.time=30d']
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheusdata:/prometheus
+    secrets:
+      - erp_metrics_token
+    networks: [erp-internal]
+  erp-backup-metrics:
+    image: prom/node-exporter:v1.9.1
+    restart: unless-stopped
+    command: ['--collector.disable-defaults', '--collector.textfile', '--collector.textfile.directory=/metrics']
+    volumes:
+      - backupmetrics:/metrics:ro
+    networks: [erp-internal]
+secrets:
+  erp_metrics_token:
+    file: ${METRICS_BEARER_TOKEN_FILE:?Path to file containing METRICS_BEARER_TOKEN}
+volumes:
+  prometheusdata:

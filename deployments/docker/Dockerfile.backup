@@ -1,12 +1,11 @@
 FROM alpine:3.23
 
-RUN apk --no-cache add bash coreutils openssl postgresql18-client tzdata && \
+RUN apk --no-cache upgrade && apk --no-cache add bash coreutils openssl postgresql18-client python3 restic tzdata && \
     addgroup -S backupgroup && adduser -S backupuser -G backupgroup
 
-COPY scripts/backup.sh /usr/local/bin/erp-backup
-RUN chmod 0555 /usr/local/bin/erp-backup && \
-    mkdir -p /backups && chown backupuser:backupgroup /backups
+COPY scripts/backup.sh scripts/restore.sh scripts/backup_bundle.py /usr/local/bin/
+RUN chmod 0555 /usr/local/bin/backup.sh /usr/local/bin/restore.sh /usr/local/bin/backup_bundle.py && \
+    mkdir -p /backups /metrics && chown backupuser:backupgroup /backups /metrics
 
 USER backupuser
-
-ENTRYPOINT ["/usr/local/bin/erp-backup"]
+ENTRYPOINT ["/usr/local/bin/backup.sh"]
