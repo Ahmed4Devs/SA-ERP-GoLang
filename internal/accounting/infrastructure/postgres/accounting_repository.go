@@ -8,6 +8,7 @@ import (
 	"erp/internal/accounting/domain"
 	"erp/internal/accounting/ports"
 	"erp/internal/platform/database/sqlc"
+	"erp/internal/platform/transaction"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -38,9 +39,17 @@ func NewPostingRepository(pool *pgxpool.Pool) ports.PostingRepository {
 	}
 }
 
+// queriesFor binds every accounting operation to the caller's transaction.
+func (r *accountingRepository) queriesFor(ctx context.Context) *sqlc.Queries {
+	if tx, ok := transaction.TxFromContext(ctx); ok {
+		return r.queries.WithTx(tx)
+	}
+	return r.queries
+}
+
 // Chart of Accounts
 func (r *accountingRepository) ListChartOfAccounts(ctx context.Context, legalEntityID uuid.UUID) ([]domain.ChartOfAccounts, error) {
-	rows, err := r.queries.ListChartOfAccountsByLegalEntity(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queriesFor(ctx).ListChartOfAccountsByLegalEntity(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +73,7 @@ func (r *accountingRepository) ListChartOfAccounts(ctx context.Context, legalEnt
 }
 
 func (r *accountingRepository) GetChartOfAccountsByID(ctx context.Context, id uuid.UUID) (*domain.ChartOfAccounts, error) {
-	row, err := r.queries.GetChartOfAccountsByID(ctx, toPgUUID(id))
+	row, err := r.queriesFor(ctx).GetChartOfAccountsByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrAccountNotFound
@@ -87,7 +96,7 @@ func (r *accountingRepository) GetChartOfAccountsByID(ctx context.Context, id uu
 
 // Accounts
 func (r *accountingRepository) CreateAccount(ctx context.Context, acc domain.Account) (*domain.Account, error) {
-	row, err := r.queries.CreateAccount(ctx, sqlc.CreateAccountParams{
+	row, err := r.queriesFor(ctx).CreateAccount(ctx, sqlc.CreateAccountParams{
 		LegalEntityID:    toPgUUID(acc.LegalEntityID),
 		ChartID:          toPgUUID(acc.ChartID),
 		ParentID:         toPgUUIDPtr(acc.ParentID),
@@ -107,7 +116,7 @@ func (r *accountingRepository) CreateAccount(ctx context.Context, acc domain.Acc
 }
 
 func (r *accountingRepository) UpdateAccount(ctx context.Context, acc domain.Account) (*domain.Account, error) {
-	row, err := r.queries.UpdateAccount(ctx, sqlc.UpdateAccountParams{
+	row, err := r.queriesFor(ctx).UpdateAccount(ctx, sqlc.UpdateAccountParams{
 		ID:               toPgUUID(acc.ID),
 		NameEn:           acc.NameEn,
 		NameAr:           acc.NameAr,
@@ -125,7 +134,15 @@ func (r *accountingRepository) UpdateAccount(ctx context.Context, acc domain.Acc
 }
 
 func (r *accountingRepository) GetAccountByID(ctx context.Context, id uuid.UUID) (*domain.Account, error) {
-	row, err := r.queries.GetAccountByID(ctx, toPgUUID(id))
+	if tx, ok := transaction.TxFromContext(ctx); ok {
+		if err := tx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE id=$1 FOR SHARE", id).Scan(&id); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, domain.ErrAccountNotFound
+			}
+			return nil, err
+		}
+	}
+	row, err := r.queriesFor(ctx).GetAccountByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrAccountNotFound
@@ -136,7 +153,7 @@ func (r *accountingRepository) GetAccountByID(ctx context.Context, id uuid.UUID)
 }
 
 func (r *accountingRepository) GetAccountByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.Account, error) {
-	row, err := r.queries.GetAccountByCode(ctx, sqlc.GetAccountByCodeParams{
+	row, err := r.queriesFor(ctx).GetAccountByCode(ctx, sqlc.GetAccountByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Code:          code,
 	})
@@ -150,7 +167,7 @@ func (r *accountingRepository) GetAccountByCode(ctx context.Context, legalEntity
 }
 
 func (r *accountingRepository) ListAccounts(ctx context.Context, legalEntityID uuid.UUID) ([]domain.Account, error) {
-	rows, err := r.queries.ListAccountsByLegalEntity(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queriesFor(ctx).ListAccountsByLegalEntity(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +201,7 @@ func toDomainAccount(row *sqlc.AccountingAccounts) *domain.Account {
 
 // Fiscal Years & Periods
 func (r *accountingRepository) ListFiscalYears(ctx context.Context, legalEntityID uuid.UUID) ([]domain.FiscalYear, error) {
-	rows, err := r.queries.ListFiscalYearsByLegalEntity(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queriesFor(ctx).ListFiscalYearsByLegalEntity(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +226,7 @@ func (r *accountingRepository) ListFiscalYears(ctx context.Context, legalEntityI
 }
 
 func (r *accountingRepository) GetFiscalYearByID(ctx context.Context, id uuid.UUID) (*domain.FiscalYear, error) {
-	row, err := r.queries.GetFiscalYearByID(ctx, toPgUUID(id))
+	row, err := r.queriesFor(ctx).GetFiscalYearByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrFiscalPeriodNotFound
@@ -232,7 +249,7 @@ func (r *accountingRepository) GetFiscalYearByID(ctx context.Context, id uuid.UU
 }
 
 func (r *accountingRepository) GetFiscalYearByDate(ctx context.Context, legalEntityID uuid.UUID, date time.Time) (*domain.FiscalYear, error) {
-	row, err := r.queries.GetFiscalYearByDate(ctx, sqlc.GetFiscalYearByDateParams{
+	row, err := r.queriesFor(ctx).GetFiscalYearByDate(ctx, sqlc.GetFiscalYearByDateParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Column2:       toPgDate(date),
 	})
@@ -258,7 +275,7 @@ func (r *accountingRepository) GetFiscalYearByDate(ctx context.Context, legalEnt
 }
 
 func (r *accountingRepository) ListFiscalPeriods(ctx context.Context, fiscalYearID uuid.UUID) ([]domain.FiscalPeriod, error) {
-	rows, err := r.queries.ListFiscalPeriodsByYear(ctx, toPgUUID(fiscalYearID))
+	rows, err := r.queriesFor(ctx).ListFiscalPeriodsByYear(ctx, toPgUUID(fiscalYearID))
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +302,7 @@ func (r *accountingRepository) ListFiscalPeriods(ctx context.Context, fiscalYear
 }
 
 func (r *accountingRepository) GetFiscalPeriodByID(ctx context.Context, id uuid.UUID) (*domain.FiscalPeriod, error) {
-	row, err := r.queries.GetFiscalPeriodByID(ctx, toPgUUID(id))
+	row, err := r.queriesFor(ctx).GetFiscalPeriodByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrFiscalPeriodNotFound
@@ -310,7 +327,16 @@ func (r *accountingRepository) GetFiscalPeriodByID(ctx context.Context, id uuid.
 }
 
 func (r *accountingRepository) GetFiscalPeriodByDate(ctx context.Context, legalEntityID uuid.UUID, date time.Time) (*domain.FiscalPeriod, error) {
-	row, err := r.queries.GetFiscalPeriodByDate(ctx, sqlc.GetFiscalPeriodByDateParams{
+	if tx, ok := transaction.TxFromContext(ctx); ok {
+		// Hold the period open until the whole posting transaction commits.
+		var periodID uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT id FROM accounting.fiscal_periods
+			WHERE legal_entity_id = $1 AND $2::date BETWEEN start_date AND end_date
+			ORDER BY start_date DESC LIMIT 1 FOR SHARE`, legalEntityID, date).Scan(&periodID); err != nil {
+			return nil, err
+		}
+	}
+	row, err := r.queriesFor(ctx).GetFiscalPeriodByDate(ctx, sqlc.GetFiscalPeriodByDateParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Column2:       toPgDate(date),
 	})
@@ -338,7 +364,7 @@ func (r *accountingRepository) GetFiscalPeriodByDate(ctx context.Context, legalE
 }
 
 func (r *accountingRepository) UpdateFiscalPeriodStatus(ctx context.Context, id uuid.UUID, status domain.FiscalPeriodStatus) (*domain.FiscalPeriod, error) {
-	row, err := r.queries.UpdateFiscalPeriodStatus(ctx, sqlc.UpdateFiscalPeriodStatusParams{
+	row, err := r.queriesFor(ctx).UpdateFiscalPeriodStatus(ctx, sqlc.UpdateFiscalPeriodStatusParams{
 		ID:     toPgUUID(id),
 		Status: string(status),
 	})
@@ -367,7 +393,7 @@ func (r *accountingRepository) UpdateFiscalPeriodStatus(ctx context.Context, id 
 
 // Journals
 func (r *accountingRepository) ListJournals(ctx context.Context, legalEntityID uuid.UUID) ([]domain.Journal, error) {
-	rows, err := r.queries.ListJournalsByLegalEntity(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queriesFor(ctx).ListJournalsByLegalEntity(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +417,15 @@ func (r *accountingRepository) ListJournals(ctx context.Context, legalEntityID u
 }
 
 func (r *accountingRepository) GetJournalByID(ctx context.Context, id uuid.UUID) (*domain.Journal, error) {
-	row, err := r.queries.GetJournalByID(ctx, toPgUUID(id))
+	if tx, ok := transaction.TxFromContext(ctx); ok {
+		if err := tx.QueryRow(ctx, "SELECT id FROM accounting.journals WHERE id=$1 FOR SHARE", id).Scan(&id); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, domain.ErrJournalNotFound
+			}
+			return nil, err
+		}
+	}
+	row, err := r.queriesFor(ctx).GetJournalByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrJournalNotFound
@@ -413,7 +447,7 @@ func (r *accountingRepository) GetJournalByID(ctx context.Context, id uuid.UUID)
 }
 
 func (r *accountingRepository) GetJournalByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.Journal, error) {
-	row, err := r.queries.GetJournalByCode(ctx, sqlc.GetJournalByCodeParams{
+	row, err := r.queriesFor(ctx).GetJournalByCode(ctx, sqlc.GetJournalByCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Code:          code,
 	})
@@ -438,7 +472,7 @@ func (r *accountingRepository) GetJournalByCode(ctx context.Context, legalEntity
 }
 
 func (r *accountingRepository) CreateJournal(ctx context.Context, j domain.Journal) (*domain.Journal, error) {
-	row, err := r.queries.CreateJournal(ctx, sqlc.CreateJournalParams{
+	row, err := r.queriesFor(ctx).CreateJournal(ctx, sqlc.CreateJournalParams{
 		LegalEntityID: toPgUUID(j.LegalEntityID),
 		Code:          j.Code,
 		NameEn:        j.NameEn,
@@ -465,13 +499,16 @@ func (r *accountingRepository) CreateJournal(ctx context.Context, j domain.Journ
 
 // Journal Entries & Lines
 func (r *accountingRepository) CreateJournalEntry(ctx context.Context, entry domain.JournalEntry, lines []domain.JournalLine) (*domain.JournalEntry, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return nil, err
+	if _, ok := transaction.TxFromContext(ctx); !ok {
+		var result *domain.JournalEntry
+		err := transaction.NewManager(r.pool).WithinTx(ctx, func(txCtx context.Context) error {
+			var err error
+			result, err = r.CreateJournalEntry(txCtx, entry, lines)
+			return err
+		})
+		return result, err
 	}
-	defer tx.Rollback(ctx)
-
-	qtx := r.queries.WithTx(tx)
+	qtx := r.queriesFor(ctx)
 
 	rate := entry.ExchangeRate
 	if rate.IsZero() {
@@ -506,6 +543,9 @@ func (r *accountingRepository) CreateJournalEntry(ctx context.Context, entry dom
 
 	createdLines := make([]domain.JournalLine, 0, len(lines))
 	for _, l := range lines {
+		if err := r.ValidateLineDimensions(ctx, entry.LegalEntityID, l); err != nil {
+			return nil, err
+		}
 		lRate := l.ExchangeRate
 		if lRate.IsZero() {
 			lRate = rate
@@ -554,17 +594,21 @@ func (r *accountingRepository) CreateJournalEntry(ctx context.Context, entry dom
 		})
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-
 	res := toDomainJournalEntry(&entryRow)
 	res.Lines = createdLines
 	return res, nil
 }
 
 func (r *accountingRepository) GetJournalEntryByID(ctx context.Context, id uuid.UUID) (*domain.JournalEntry, error) {
-	row, err := r.queries.GetJournalEntryByID(ctx, toPgUUID(id))
+	if tx, ok := transaction.TxFromContext(ctx); ok {
+		if err := tx.QueryRow(ctx, "SELECT id FROM accounting.journal_entries WHERE id = $1 FOR UPDATE", id).Scan(&id); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, domain.ErrJournalEntryNotFound
+			}
+			return nil, err
+		}
+	}
+	row, err := r.queriesFor(ctx).GetJournalEntryByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrJournalEntryNotFound
@@ -574,7 +618,7 @@ func (r *accountingRepository) GetJournalEntryByID(ctx context.Context, id uuid.
 
 	entry := toDomainJournalEntry(&row)
 
-	lineRows, err := r.queries.ListJournalLinesByEntryID(ctx, toPgUUID(id))
+	lineRows, err := r.queriesFor(ctx).ListJournalLinesByEntryID(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -607,7 +651,7 @@ func (r *accountingRepository) GetJournalEntryByID(ctx context.Context, id uuid.
 }
 
 func (r *accountingRepository) GetJournalEntryByNumber(ctx context.Context, legalEntityID uuid.UUID, number string) (*domain.JournalEntry, error) {
-	row, err := r.queries.GetJournalEntryByNumber(ctx, sqlc.GetJournalEntryByNumberParams{
+	row, err := r.queriesFor(ctx).GetJournalEntryByNumber(ctx, sqlc.GetJournalEntryByNumberParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		EntryNumber:   number,
 	})
@@ -621,7 +665,7 @@ func (r *accountingRepository) GetJournalEntryByNumber(ctx context.Context, lega
 }
 
 func (r *accountingRepository) ListJournalEntries(ctx context.Context, legalEntityID uuid.UUID, limit, offset int32) ([]domain.JournalEntry, int64, error) {
-	rows, err := r.queries.ListJournalEntriesByLegalEntity(ctx, sqlc.ListJournalEntriesByLegalEntityParams{
+	rows, err := r.queriesFor(ctx).ListJournalEntriesByLegalEntity(ctx, sqlc.ListJournalEntriesByLegalEntityParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Limit:         limit,
 		Offset:        offset,
@@ -630,7 +674,7 @@ func (r *accountingRepository) ListJournalEntries(ctx context.Context, legalEnti
 		return nil, 0, err
 	}
 
-	totalCount, err := r.queries.CountJournalEntriesByLegalEntity(ctx, toPgUUID(legalEntityID))
+	totalCount, err := r.queriesFor(ctx).CountJournalEntriesByLegalEntity(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -643,7 +687,7 @@ func (r *accountingRepository) ListJournalEntries(ctx context.Context, legalEnti
 }
 
 func (r *accountingRepository) PostJournalEntry(ctx context.Context, id uuid.UUID, postedBy uuid.UUID) (*domain.JournalEntry, error) {
-	row, err := r.queries.PostJournalEntry(ctx, sqlc.PostJournalEntryParams{
+	row, err := r.queriesFor(ctx).PostJournalEntry(ctx, sqlc.PostJournalEntryParams{
 		ID:       toPgUUID(id),
 		PostedBy: toPgUUID(postedBy),
 	})
@@ -663,13 +707,16 @@ func (r *accountingRepository) ReverseJournalEntry(
 	reversalLines []domain.JournalLine,
 	reversedBy uuid.UUID,
 ) (*domain.JournalEntry, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return nil, err
+	if _, ok := transaction.TxFromContext(ctx); !ok {
+		var result *domain.JournalEntry
+		err := transaction.NewManager(r.pool).WithinTx(ctx, func(txCtx context.Context) error {
+			var err error
+			result, err = r.ReverseJournalEntry(txCtx, originalID, reversalEntry, reversalLines, reversedBy)
+			return err
+		})
+		return result, err
 	}
-	defer tx.Rollback(ctx)
-
-	qtx := r.queries.WithTx(tx)
+	qtx := r.queriesFor(ctx)
 
 	// 1. Create reversal journal entry
 	rate := reversalEntry.ExchangeRate
@@ -707,14 +754,17 @@ func (r *accountingRepository) ReverseJournalEntry(
 
 	// 2. Insert reversed lines (swap debit and credit)
 	for _, l := range reversalLines {
+		if err := r.ValidateLineDimensions(ctx, reversalEntry.LegalEntityID, l); err != nil {
+			return nil, err
+		}
 		_, err := qtx.CreateJournalLine(ctx, sqlc.CreateJournalLineParams{
 			JournalEntryID:    revRow.ID,
 			LegalEntityID:     toPgUUID(reversalEntry.LegalEntityID),
 			LineNumber:        l.LineNumber,
 			AccountID:         toPgUUID(l.AccountID),
 			Description:       toPgTextPtr(l.Description),
-			CurrencyCode:      curr,
-			ExchangeRate:      toPgNumeric(rate),
+			CurrencyCode:      l.CurrencyCode,
+			ExchangeRate:      toPgNumeric(l.ExchangeRate),
 			TransactionDebit:  toPgNumeric(l.TransactionDebit),
 			TransactionCredit: toPgNumeric(l.TransactionCredit),
 			BaseDebit:         toPgNumeric(l.BaseDebit),
@@ -746,11 +796,34 @@ func (r *accountingRepository) ReverseJournalEntry(
 		return nil, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-
 	return r.GetJournalEntryByID(ctx, toUUID(revRow.ID))
+}
+
+// Dimension identifiers are independently selectable in journal commands. They
+// must be scoped on the server even when the account itself is valid.
+func (r *accountingRepository) ValidateLineDimensions(ctx context.Context, entityID uuid.UUID, line domain.JournalLine) error {
+	tx, ok := transaction.TxFromContext(ctx)
+	if !ok {
+		return errors.New("journal dimension validation requires a transaction")
+	}
+	for _, dimension := range []struct {
+		table string
+		id    *uuid.UUID
+	}{{"organization.branches", line.BranchID}, {"organization.departments", line.DepartmentID}, {"organization.cost_centers", line.CostCenterID}} {
+		if dimension.id == nil {
+			continue
+		}
+		var ownerID uuid.UUID
+		// Table names come only from the fixed list above, never request input.
+		err := tx.QueryRow(ctx, "SELECT legal_entity_id FROM "+dimension.table+" WHERE id=$1 FOR SHARE", *dimension.id).Scan(&ownerID)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && ownerID != entityID) {
+			return domain.ErrInvalidPostingDimension
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *accountingRepository) GetTrialBalance(ctx context.Context, legalEntityID uuid.UUID, asOfDate *time.Time) (*domain.TrialBalanceReport, error) {
@@ -764,7 +837,7 @@ func (r *accountingRepository) GetTrialBalance(ctx context.Context, legalEntityI
 		dateParam = toPgDate(reportDate)
 	}
 
-	rows, err := r.queries.GetTrialBalance(ctx, sqlc.GetTrialBalanceParams{
+	rows, err := r.queriesFor(ctx).GetTrialBalance(ctx, sqlc.GetTrialBalanceParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Column2:       dateParam,
 	})
@@ -772,7 +845,7 @@ func (r *accountingRepository) GetTrialBalance(ctx context.Context, legalEntityI
 		return nil, err
 	}
 
-	summary, err := r.queries.GetTrialBalanceSummary(ctx, sqlc.GetTrialBalanceSummaryParams{
+	summary, err := r.queriesFor(ctx).GetTrialBalanceSummary(ctx, sqlc.GetTrialBalanceSummaryParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Column2:       dateParam,
 	})
@@ -841,7 +914,15 @@ func toDomainJournalEntry(row *sqlc.AccountingJournalEntries) *domain.JournalEnt
 // (legal_entity_id, source_module, source_type, source_id) triple.
 // Used by the PostingEngine for idempotency enforcement.
 func (r *accountingRepository) GetJournalEntryBySource(ctx context.Context, legalEntityID uuid.UUID, sourceModule, sourceType string, sourceID uuid.UUID) (*domain.JournalEntry, error) {
-	row, err := r.queries.GetJournalEntryBySource(ctx, sqlc.GetJournalEntryBySourceParams{
+	if tx, ok := transaction.TxFromContext(ctx); ok {
+		// Serialize simultaneous attempts for the same source, including the
+		// first attempt when no journal row exists yet.
+		key := legalEntityID.String() + ":" + sourceModule + ":" + sourceType + ":" + sourceID.String()
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", key); err != nil {
+			return nil, err
+		}
+	}
+	row, err := r.queriesFor(ctx).GetJournalEntryBySource(ctx, sqlc.GetJournalEntryBySourceParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		SourceModule:  sourceModule,
 		SourceType:    toPgText(sourceType),
@@ -859,7 +940,7 @@ func (r *accountingRepository) GetJournalEntryBySource(ctx context.Context, lega
 // UpsertAccountBalance atomically inserts or accumulates account period balances.
 // Uses PostgreSQL ON CONFLICT DO UPDATE for thread-safe accumulation.
 func (r *accountingRepository) UpsertAccountBalance(ctx context.Context, balance domain.AccountBalance) (*domain.AccountBalance, error) {
-	row, err := r.queries.UpsertAccountBalance(ctx, sqlc.UpsertAccountBalanceParams{
+	row, err := r.queriesFor(ctx).UpsertAccountBalance(ctx, sqlc.UpsertAccountBalanceParams{
 		LegalEntityID:  toPgUUID(balance.LegalEntityID),
 		AccountID:      toPgUUID(balance.AccountID),
 		FiscalPeriodID: toPgUUID(balance.FiscalPeriodID),

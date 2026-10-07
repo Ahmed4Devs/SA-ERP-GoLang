@@ -14,11 +14,12 @@ import (
 )
 
 type ledgerService struct {
-	repo ports.AccountingRepository
+	repo    ports.AccountingRepository
+	posting ports.PostingEngine
 }
 
-func NewLedgerService(repo ports.AccountingRepository) ports.LedgerService {
-	return &ledgerService{repo: repo}
+func NewLedgerService(repo ports.AccountingRepository, posting ports.PostingEngine) ports.LedgerService {
+	return &ledgerService{repo: repo, posting: posting}
 }
 
 func (s *ledgerService) CreateJournalEntry(ctx context.Context, entry domain.JournalEntry, lines []domain.JournalLine) (*domain.JournalEntry, error) {
@@ -66,10 +67,10 @@ func (s *ledgerService) CreateJournalEntry(ctx context.Context, entry domain.Jou
 
 		// Calculate base amounts if not set
 		if line.BaseDebit.IsZero() && line.TransactionDebit.GreaterThan(decimal.Zero) {
-			line.BaseDebit = line.TransactionDebit.Mul(line.ExchangeRate)
+			line.BaseDebit = line.TransactionDebit.Mul(line.ExchangeRate).Round(4)
 		}
 		if line.BaseCredit.IsZero() && line.TransactionCredit.GreaterThan(decimal.Zero) {
-			line.BaseCredit = line.TransactionCredit.Mul(line.ExchangeRate)
+			line.BaseCredit = line.TransactionCredit.Mul(line.ExchangeRate).Round(4)
 		}
 
 		// Verify account exists and can post
@@ -125,94 +126,19 @@ func (s *ledgerService) ListJournalEntries(ctx context.Context, legalEntityID uu
 }
 
 func (s *ledgerService) PostJournalEntry(ctx context.Context, id uuid.UUID, postedBy uuid.UUID) (*domain.JournalEntry, error) {
-	entry, err := s.repo.GetJournalEntryByID(ctx, id)
+	result, err := s.posting.PostDraft(ctx, id, postedBy)
 	if err != nil {
 		return nil, err
 	}
-
-	if entry.Status == domain.JournalEntryStatusPosted {
-		return nil, domain.ErrAlreadyPosted
-	}
-	if entry.Status == domain.JournalEntryStatusReversed {
-		return nil, domain.ErrAlreadyReversed
-	}
-
-	// Verify period is OPEN
-	period, err := s.repo.GetFiscalPeriodByID(ctx, entry.FiscalPeriodID)
-	if err != nil {
-		return nil, domain.ErrFiscalPeriodNotFound
-	}
-	if err := domain.ValidatePeriodCanPost(period.Status); err != nil {
-		return nil, err
-	}
-
-	// Verify balance
-	if _, _, err := domain.ValidateJournalEntryBalance(entry.Lines); err != nil {
-		return nil, err
-	}
-
-	return s.repo.PostJournalEntry(ctx, id, postedBy)
+	return s.repo.GetJournalEntryByID(ctx, result.JournalEntryID)
 }
 
 func (s *ledgerService) ReverseJournalEntry(ctx context.Context, id uuid.UUID, reason string, reversedBy uuid.UUID) (*domain.JournalEntry, error) {
-	original, err := s.repo.GetJournalEntryByID(ctx, id)
+	result, err := s.posting.Reverse(ctx, id, reason, reversedBy)
 	if err != nil {
 		return nil, err
 	}
-
-	if original.Status != domain.JournalEntryStatusPosted {
-		return nil, domain.ErrCannotReverseUnposted
-	}
-	if original.ReversalOfID != nil {
-		return nil, domain.ErrAlreadyReversed
-	}
-
-	reversalDate := time.Now().UTC()
-	period, err := s.repo.GetFiscalPeriodByDate(ctx, original.LegalEntityID, reversalDate)
-	if err != nil {
-		return nil, domain.ErrFiscalPeriodNotFound
-	}
-	if err := domain.ValidatePeriodCanPost(period.Status); err != nil {
-		return nil, err
-	}
-
-	// Prepare reversal lines (swap debits and credits)
-	reversalLines := make([]domain.JournalLine, 0, len(original.Lines))
-	for _, l := range original.Lines {
-		reversalLines = append(reversalLines, domain.JournalLine{
-			LineNumber:        l.LineNumber,
-			AccountID:         l.AccountID,
-			Description:       l.Description,
-			CurrencyCode:      l.CurrencyCode,
-			ExchangeRate:      l.ExchangeRate,
-			TransactionDebit:  l.TransactionCredit, // SWAPPED
-			TransactionCredit: l.TransactionDebit,  // SWAPPED
-			BaseDebit:         l.BaseCredit,        // SWAPPED
-			BaseCredit:        l.BaseDebit,         // SWAPPED
-			BranchID:          l.BranchID,
-			DepartmentID:      l.DepartmentID,
-			CostCenterID:      l.CostCenterID,
-		})
-	}
-
-	reversalEntry := domain.JournalEntry{
-		LegalEntityID:  original.LegalEntityID,
-		JournalID:      original.JournalID,
-		FiscalPeriodID: period.ID,
-		EntryNumber:    fmt.Sprintf("REV-%s", original.EntryNumber),
-		AccountingDate: reversalDate,
-		Status:         domain.JournalEntryStatusPosted,
-		SourceModule:   "GL",
-		Reference:      &original.EntryNumber,
-		Description:    fmt.Sprintf("عكس القيد المحاسبي %s: %s", original.EntryNumber, reason),
-		CurrencyCode:   original.CurrencyCode,
-		ExchangeRate:   original.ExchangeRate,
-		TotalDebit:     original.TotalCredit,
-		TotalCredit:    original.TotalDebit,
-		CreatedBy:      reversedBy,
-	}
-
-	return s.repo.ReverseJournalEntry(ctx, id, reversalEntry, reversalLines, reversedBy)
+	return s.repo.GetJournalEntryByID(ctx, result.JournalEntryID)
 }
 
 func (s *ledgerService) GetTrialBalance(ctx context.Context, legalEntityID uuid.UUID, asOfDate *time.Time) (*domain.TrialBalanceReport, error) {

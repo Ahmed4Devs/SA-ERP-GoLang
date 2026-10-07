@@ -19,6 +19,8 @@ type recordingAuditService struct {
 	accesses []ports.RecordAccessEventCommand
 }
 
+func (s *recordingAuditService) LockChain(context.Context) error { return nil }
+
 func (s *recordingAuditService) RecordEvent(_ context.Context, cmd ports.RecordEventCommand) (*domain.AuditEvent, error) {
 	s.events = append(s.events, cmd)
 	return &domain.AuditEvent{ID: uuid.New()}, nil

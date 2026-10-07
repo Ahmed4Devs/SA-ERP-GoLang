@@ -10,6 +10,7 @@ import (
 
 // AuditRepository defines the persistence operations for audit trail data.
 type AuditRepository interface {
+	LockChain(ctx context.Context) error
 	AppendEvent(ctx context.Context, event *domain.AuditEvent, changes []domain.EntityChange) (*domain.AuditEvent, error)
 	GetEventByID(ctx context.Context, id uuid.UUID) (*domain.AuditEvent, error)
 	ListEvents(ctx context.Context, filter domain.AuditFilter) ([]domain.AuditEvent, int64, error)
@@ -26,6 +27,9 @@ type AuditRepository interface {
 
 // AuditService defines the application operations for managing and verifying the audit trail.
 type AuditService interface {
+	// LockChain must precede business row locks in a transaction that will
+	// append financial audit records. The lock lasts until that transaction ends.
+	LockChain(ctx context.Context) error
 	RecordEvent(ctx context.Context, cmd RecordEventCommand) (*domain.AuditEvent, error)
 	GetEvent(ctx context.Context, id uuid.UUID) (*domain.AuditEvent, error)
 	SearchEvents(ctx context.Context, filter domain.AuditFilter) ([]domain.AuditEvent, int64, error)

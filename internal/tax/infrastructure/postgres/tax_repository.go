@@ -37,7 +37,7 @@ func (r *taxRepository) queriesFor(ctx context.Context) *sqlc.Queries {
 
 // 1. Tax Categories & Reasons
 func (r *taxRepository) ListTaxCategories(ctx context.Context) ([]domain.TaxCategory, error) {
-	rows, err := r.queries.ListTaxCategories(ctx)
+	rows, err := r.queriesFor(ctx).ListTaxCategories(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (r *taxRepository) ListTaxCategories(ctx context.Context) ([]domain.TaxCate
 }
 
 func (r *taxRepository) GetTaxCategoryByCode(ctx context.Context, code string) (*domain.TaxCategory, error) {
-	row, err := r.queries.GetTaxCategoryByCode(ctx, code)
+	row, err := r.queriesFor(ctx).GetTaxCategoryByCode(ctx, code)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -76,7 +76,7 @@ func (r *taxRepository) GetTaxCategoryByCode(ctx context.Context, code string) (
 }
 
 func (r *taxRepository) ListExemptionReasons(ctx context.Context) ([]domain.ExemptionReason, error) {
-	rows, err := r.queries.ListExemptionReasons(ctx)
+	rows, err := r.queriesFor(ctx).ListExemptionReasons(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (r *taxRepository) ListExemptionReasons(ctx context.Context) ([]domain.Exem
 }
 
 func (r *taxRepository) ListZeroRateReasons(ctx context.Context) ([]domain.ZeroRateReason, error) {
-	rows, err := r.queries.ListZeroRateReasons(ctx)
+	rows, err := r.queriesFor(ctx).ListZeroRateReasons(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (r *taxRepository) ListZeroRateReasons(ctx context.Context) ([]domain.ZeroR
 
 // 2. Tax Codes & Rates
 func (r *taxRepository) ListTaxCodesByEntity(ctx context.Context, legalEntityID uuid.UUID) ([]domain.TaxCode, error) {
-	rows, err := r.queries.ListTaxCodesByEntity(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queriesFor(ctx).ListTaxCodesByEntity(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (r *taxRepository) ListTaxCodesByEntity(ctx context.Context, legalEntityID 
 }
 
 func (r *taxRepository) GetTaxCodeByID(ctx context.Context, id uuid.UUID) (*domain.TaxCode, error) {
-	row, err := r.queries.GetTaxCodeByID(ctx, toPgUUID(id))
+	row, err := r.queriesFor(ctx).GetTaxCodeByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrTaxCodeNotFound
@@ -178,7 +178,7 @@ func (r *taxRepository) GetTaxCodeByID(ctx context.Context, id uuid.UUID) (*doma
 }
 
 func (r *taxRepository) GetTaxCodeByCode(ctx context.Context, legalEntityID uuid.UUID, code string) (*domain.TaxCode, error) {
-	row, err := r.queries.GetTaxCodeByEntityAndCode(ctx, sqlc.GetTaxCodeByEntityAndCodeParams{
+	row, err := r.queriesFor(ctx).GetTaxCodeByEntityAndCode(ctx, sqlc.GetTaxCodeByEntityAndCodeParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Code:          code,
 	})
@@ -230,7 +230,7 @@ func (r *taxRepository) CreateTaxCode(ctx context.Context, code *domain.TaxCode)
 }
 
 func (r *taxRepository) UpdateTaxCode(ctx context.Context, code *domain.TaxCode) (*domain.TaxCode, error) {
-	row, err := r.queries.UpdateTaxCode(ctx, sqlc.UpdateTaxCodeParams{
+	row, err := r.queriesFor(ctx).UpdateTaxCode(ctx, sqlc.UpdateTaxCodeParams{
 		ID:                   toPgUUID(code.ID),
 		NameEn:               code.NameEn,
 		NameAr:               code.NameAr,
@@ -269,7 +269,7 @@ func (r *taxRepository) CreateTaxRateVersion(ctx context.Context, rate *domain.T
 }
 
 func (r *taxRepository) GetActiveRateVersion(ctx context.Context, taxCodeID uuid.UUID, targetDate time.Time) (*domain.TaxRateVersion, error) {
-	row, err := r.queries.GetActiveTaxRateVersion(ctx, sqlc.GetActiveTaxRateVersionParams{
+	row, err := r.queriesFor(ctx).GetActiveTaxRateVersion(ctx, sqlc.GetActiveTaxRateVersionParams{
 		TaxCodeID:     toPgUUID(taxCodeID),
 		EffectiveFrom: toPgDate(targetDate),
 	})
@@ -292,7 +292,7 @@ func (r *taxRepository) GetActiveRateVersion(ctx context.Context, taxCodeID uuid
 }
 
 func (r *taxRepository) ListRateVersions(ctx context.Context, taxCodeID uuid.UUID) ([]domain.TaxRateVersion, error) {
-	rows, err := r.queries.ListTaxRateVersionsByCode(ctx, toPgUUID(taxCodeID))
+	rows, err := r.queriesFor(ctx).ListTaxRateVersionsByCode(ctx, toPgUUID(taxCodeID))
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +314,7 @@ func (r *taxRepository) ListRateVersions(ctx context.Context, taxCodeID uuid.UUI
 
 // 3. Tax Periods
 func (r *taxRepository) ListTaxPeriods(ctx context.Context, legalEntityID uuid.UUID) ([]domain.TaxPeriod, error) {
-	rows, err := r.queries.ListTaxPeriodsByEntity(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queriesFor(ctx).ListTaxPeriodsByEntity(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +338,7 @@ func (r *taxRepository) ListTaxPeriods(ctx context.Context, legalEntityID uuid.U
 }
 
 func (r *taxRepository) GetTaxPeriodByID(ctx context.Context, id uuid.UUID) (*domain.TaxPeriod, error) {
-	row, err := r.queries.GetTaxPeriodByID(ctx, toPgUUID(id))
+	row, err := r.queriesFor(ctx).GetTaxPeriodByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrTaxPeriodNotFound
@@ -361,7 +361,7 @@ func (r *taxRepository) GetTaxPeriodByID(ctx context.Context, id uuid.UUID) (*do
 }
 
 func (r *taxRepository) GetOpenPeriodForDate(ctx context.Context, legalEntityID uuid.UUID, date time.Time) (*domain.TaxPeriod, error) {
-	row, err := r.queries.GetOpenTaxPeriodForDate(ctx, sqlc.GetOpenTaxPeriodForDateParams{
+	row, err := r.queriesFor(ctx).GetOpenTaxPeriodForDate(ctx, sqlc.GetOpenTaxPeriodForDateParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		StartDate:     toPgDate(date),
 	})
@@ -387,7 +387,7 @@ func (r *taxRepository) GetOpenPeriodForDate(ctx context.Context, legalEntityID 
 }
 
 func (r *taxRepository) CreateTaxPeriod(ctx context.Context, period *domain.TaxPeriod) (*domain.TaxPeriod, error) {
-	row, err := r.queries.CreateTaxPeriod(ctx, sqlc.CreateTaxPeriodParams{
+	row, err := r.queriesFor(ctx).CreateTaxPeriod(ctx, sqlc.CreateTaxPeriodParams{
 		LegalEntityID: toPgUUID(period.LegalEntityID),
 		PeriodNumber:  int32(period.PeriodNumber),
 		FiscalYear:    int32(period.FiscalYear),
@@ -407,7 +407,7 @@ func (r *taxRepository) CreateTaxPeriod(ctx context.Context, period *domain.TaxP
 }
 
 func (r *taxRepository) UpdateTaxPeriodStatus(ctx context.Context, id uuid.UUID, status domain.TaxPeriodStatus) (*domain.TaxPeriod, error) {
-	row, err := r.queries.UpdateTaxPeriodStatus(ctx, sqlc.UpdateTaxPeriodStatusParams{
+	row, err := r.queriesFor(ctx).UpdateTaxPeriodStatus(ctx, sqlc.UpdateTaxPeriodStatusParams{
 		ID:     toPgUUID(id),
 		Status: string(status),
 	})
@@ -431,13 +431,16 @@ func (r *taxRepository) UpdateTaxPeriodStatus(ctx context.Context, id uuid.UUID,
 
 // 4. Tax Transactions
 func (r *taxRepository) CreateTaxTransaction(ctx context.Context, txRecord *domain.TaxTransaction) (*domain.TaxTransaction, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return nil, err
+	if _, ok := transaction.TxFromContext(ctx); !ok {
+		var result *domain.TaxTransaction
+		err := transaction.NewManager(r.pool).WithinTx(ctx, func(txCtx context.Context) error {
+			var err error
+			result, err = r.CreateTaxTransaction(txCtx, txRecord)
+			return err
+		})
+		return result, err
 	}
-	defer tx.Rollback(ctx)
-
-	qtx := r.queries.WithTx(tx)
+	qtx := r.queriesFor(ctx)
 
 	// 1. Insert Header
 	headerRow, err := qtx.CreateTaxTransaction(ctx, sqlc.CreateTaxTransactionParams{
@@ -497,16 +500,12 @@ func (r *taxRepository) CreateTaxTransaction(ctx context.Context, txRecord *doma
 		createdLines = append(createdLines, line)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-
 	txRecord.Lines = createdLines
 	return txRecord, nil
 }
 
 func (r *taxRepository) GetTaxTransactionByID(ctx context.Context, id uuid.UUID) (*domain.TaxTransaction, error) {
-	row, err := r.queries.GetTaxTransactionByID(ctx, toPgUUID(id))
+	row, err := r.queriesFor(ctx).GetTaxTransactionByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -514,7 +513,7 @@ func (r *taxRepository) GetTaxTransactionByID(ctx context.Context, id uuid.UUID)
 		return nil, err
 	}
 
-	linesRows, err := r.queries.ListTaxTransactionLines(ctx, toPgUUID(id))
+	linesRows, err := r.queriesFor(ctx).ListTaxTransactionLines(ctx, toPgUUID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -566,7 +565,7 @@ func (r *taxRepository) GetTaxTransactionByID(ctx context.Context, id uuid.UUID)
 }
 
 func (r *taxRepository) GetTaxTransactionBySource(ctx context.Context, legalEntityID uuid.UUID, sourceModule, sourceType string, sourceID uuid.UUID) (*domain.TaxTransaction, error) {
-	row, err := r.queries.GetTaxTransactionBySource(ctx, sqlc.GetTaxTransactionBySourceParams{
+	row, err := r.queriesFor(ctx).GetTaxTransactionBySource(ctx, sqlc.GetTaxTransactionBySourceParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		SourceModule:  sourceModule,
 		SourceType:    sourceType,
@@ -582,7 +581,7 @@ func (r *taxRepository) GetTaxTransactionBySource(ctx context.Context, legalEnti
 }
 
 func (r *taxRepository) ListTaxTransactionsByEntity(ctx context.Context, legalEntityID uuid.UUID, limit, offset int32) ([]domain.TaxTransaction, error) {
-	rows, err := r.queries.ListTaxTransactionsByEntity(ctx, sqlc.ListTaxTransactionsByEntityParams{
+	rows, err := r.queriesFor(ctx).ListTaxTransactionsByEntity(ctx, sqlc.ListTaxTransactionsByEntityParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		Limit:         limit,
 		Offset:        offset,
@@ -618,7 +617,7 @@ func (r *taxRepository) ListTaxTransactionsByEntity(ctx context.Context, legalEn
 }
 
 func (r *taxRepository) ListTaxTransactionsByPeriod(ctx context.Context, periodID uuid.UUID) ([]domain.TaxTransaction, error) {
-	rows, err := r.queries.ListTaxTransactionsByPeriod(ctx, toPgUUIDPtr(&periodID))
+	rows, err := r.queriesFor(ctx).ListTaxTransactionsByPeriod(ctx, toPgUUIDPtr(&periodID))
 	if err != nil {
 		return nil, err
 	}
@@ -656,7 +655,7 @@ func (r *taxRepository) CreateTaxReturn(ctx context.Context, ret *domain.TaxRetu
 		return nil, err
 	}
 
-	row, err := r.queries.CreateTaxReturn(ctx, sqlc.CreateTaxReturnParams{
+	row, err := r.queriesFor(ctx).CreateTaxReturn(ctx, sqlc.CreateTaxReturnParams{
 		LegalEntityID:         toPgUUID(ret.LegalEntityID),
 		TaxPeriodID:           toPgUUID(ret.TaxPeriodID),
 		ReturnNumber:          ret.ReturnNumber,
@@ -681,7 +680,7 @@ func (r *taxRepository) CreateTaxReturn(ctx context.Context, ret *domain.TaxRetu
 }
 
 func (r *taxRepository) GetTaxReturnByID(ctx context.Context, id uuid.UUID) (*domain.TaxReturn, error) {
-	row, err := r.queries.GetTaxReturnByID(ctx, toPgUUID(id))
+	row, err := r.queriesFor(ctx).GetTaxReturnByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -692,7 +691,7 @@ func (r *taxRepository) GetTaxReturnByID(ctx context.Context, id uuid.UUID) (*do
 }
 
 func (r *taxRepository) GetTaxReturnByPeriod(ctx context.Context, legalEntityID, periodID uuid.UUID) (*domain.TaxReturn, error) {
-	row, err := r.queries.GetTaxReturnByPeriod(ctx, sqlc.GetTaxReturnByPeriodParams{
+	row, err := r.queriesFor(ctx).GetTaxReturnByPeriod(ctx, sqlc.GetTaxReturnByPeriodParams{
 		LegalEntityID: toPgUUID(legalEntityID),
 		TaxPeriodID:   toPgUUID(periodID),
 	})
@@ -711,7 +710,7 @@ func (r *taxRepository) UpdateTaxReturn(ctx context.Context, ret *domain.TaxRetu
 		return nil, err
 	}
 
-	row, err := r.queries.UpdateTaxReturn(ctx, sqlc.UpdateTaxReturnParams{
+	row, err := r.queriesFor(ctx).UpdateTaxReturn(ctx, sqlc.UpdateTaxReturnParams{
 		ID:                    toPgUUID(ret.ID),
 		Status:                ret.Status,
 		FilingDate:            toPgDatePtr(ret.FilingDate),
@@ -733,7 +732,7 @@ func (r *taxRepository) UpdateTaxReturn(ctx context.Context, ret *domain.TaxRetu
 }
 
 func (r *taxRepository) ListTaxReturnsByEntity(ctx context.Context, legalEntityID uuid.UUID) ([]domain.TaxReturn, error) {
-	rows, err := r.queries.ListTaxReturnsByEntity(ctx, toPgUUID(legalEntityID))
+	rows, err := r.queriesFor(ctx).ListTaxReturnsByEntity(ctx, toPgUUID(legalEntityID))
 	if err != nil {
 		return nil, err
 	}
@@ -759,7 +758,7 @@ func (r *taxRepository) ListTaxReturnsByEntity(ctx context.Context, legalEntityI
 }
 
 func (r *taxRepository) AggregatePeriodSummary(ctx context.Context, periodID uuid.UUID) ([]ports.TaxPeriodAggregationRow, error) {
-	rows, err := r.queries.AggregateTaxPeriodSummary(ctx, toPgUUIDPtr(&periodID))
+	rows, err := r.queriesFor(ctx).AggregateTaxPeriodSummary(ctx, toPgUUIDPtr(&periodID))
 	if err != nil {
 		return nil, err
 	}

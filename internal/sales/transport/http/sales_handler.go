@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	iamhttp "erp/internal/iam/transport/http"
 	"erp/internal/sales/domain"
 	"erp/internal/sales/ports"
 	"github.com/go-chi/chi/v5"
@@ -101,16 +102,17 @@ func (h *SalesHandler) CreateQuotation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	quotation, err := h.salesService.CreateQuotation(r.Context(), ports.CreateQuotationCommand{
-		LegalEntityID:  req.LegalEntityID,
-		CustomerID:     req.CustomerID,
-		CustomerNameEn: req.CustomerNameEn,
-		CustomerNameAr: req.CustomerNameAr,
-		QuoteDate:      qDate,
-		ValidUntil:     vUntil,
-		CurrencyCode:   req.CurrencyCode,
-		ExchangeRate:   req.ExchangeRate,
-		Notes:          req.Notes,
-		Lines:          lines,
+		LegalEntityID:   req.LegalEntityID,
+		CustomerID:      req.CustomerID,
+		CustomerNameEn:  req.CustomerNameEn,
+		CustomerNameAr:  req.CustomerNameAr,
+		QuoteDate:       qDate,
+		ValidUntil:      vUntil,
+		CurrencyCode:    req.CurrencyCode,
+		ExchangeRate:    req.ExchangeRate,
+		Notes:           req.Notes,
+		Lines:           lines,
+		CreatedByUserID: salesActorID(r),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -179,7 +181,7 @@ func (h *SalesHandler) ConvertQuotationToOrder(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	order, err := h.salesService.ConvertQuotationToOrder(r.Context(), id, nil)
+	order, err := h.salesService.ConvertQuotationToOrder(r.Context(), id, salesActorID(r))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -239,6 +241,7 @@ func (h *SalesHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		ExchangeRate:         req.ExchangeRate,
 		Notes:                req.Notes,
 		Lines:                lines,
+		CreatedByUserID:      salesActorID(r),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -329,7 +332,7 @@ func (h *SalesHandler) CreateInvoiceFromOrder(w http.ResponseWriter, r *http.Req
 		invType = domain.InvoiceTypeSimplified
 	}
 
-	invoice, err := h.salesService.CreateInvoiceFromOrder(r.Context(), id, invType, nil)
+	invoice, err := h.salesService.CreateInvoiceFromOrder(r.Context(), id, invType, salesActorID(r))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -377,6 +380,7 @@ func (h *SalesHandler) CreateDelivery(w http.ResponseWriter, r *http.Request) {
 		ShippingReference: req.ShippingReference,
 		Notes:             req.Notes,
 		Lines:             lines,
+		CreatedByUserID:   salesActorID(r),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -513,6 +517,7 @@ func (h *SalesHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 		ExchangeRate:        req.ExchangeRate,
 		Notes:               req.Notes,
 		Lines:               lines,
+		CreatedByUserID:     salesActorID(r),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -531,7 +536,12 @@ func (h *SalesHandler) PostInvoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	invoice, err := h.salesService.PostInvoice(r.Context(), id)
+	actorID := salesActorID(r)
+	if actorID == nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	invoice, err := h.salesService.PostInvoice(r.Context(), id, *actorID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -634,6 +644,7 @@ func (h *SalesHandler) CreateCreditNote(w http.ResponseWriter, r *http.Request) 
 		ReasonDetails:     req.ReasonDetails,
 		CurrencyCode:      req.CurrencyCode,
 		Lines:             lines,
+		CreatedByUserID:   salesActorID(r),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -652,7 +663,12 @@ func (h *SalesHandler) PostCreditNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cn, err := h.salesService.PostCreditNote(r.Context(), id)
+	actorID := salesActorID(r)
+	if actorID == nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	cn, err := h.salesService.PostCreditNote(r.Context(), id, *actorID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -715,4 +731,11 @@ func (h *SalesHandler) ListCreditNotes(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(cns)
+}
+
+func salesActorID(r *http.Request) *uuid.UUID {
+	if user := iamhttp.UserFromContext(r.Context()); user != nil {
+		return &user.ID
+	}
+	return nil
 }

@@ -9,8 +9,10 @@ import (
 	"erp/internal/accounting/infrastructure/postgres"
 	"erp/internal/accounting/ports"
 	accountinghttp "erp/internal/accounting/transport/http"
+	"erp/internal/audit"
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
+	"erp/internal/platform/transaction"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -29,8 +31,8 @@ func NewModule(cfg *config.Config, db *database.DB) *Module {
 	repo := postgres.NewAccountingRepository(db.Pool)
 	postingRepo := postgres.NewPostingRepository(db.Pool)
 	accountingSvc := services.NewAccountingService(repo)
-	ledgerSvc := services.NewLedgerService(repo)
-	postingEngine := postingapp.NewPostingEngine(postingRepo)
+	postingEngine := postingapp.NewPostingEngine(postingRepo, transaction.NewManager(db.Pool), audit.NewModule(cfg, db).Service)
+	ledgerSvc := services.NewLedgerService(repo, postingEngine)
 	handler := accountinghttp.NewAccountingHandler(accountingSvc, ledgerSvc)
 
 	return &Module{

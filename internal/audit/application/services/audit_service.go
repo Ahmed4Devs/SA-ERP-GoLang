@@ -21,6 +21,10 @@ func NewAuditService(repo ports.AuditRepository) ports.AuditService {
 	}
 }
 
+func (s *auditService) LockChain(ctx context.Context) error {
+	return s.repo.LockChain(ctx)
+}
+
 func (s *auditService) RecordEvent(ctx context.Context, cmd ports.RecordEventCommand) (*domain.AuditEvent, error) {
 	canonicalPayload := domain.CanonicalizeJSON(cmd.Payload)
 

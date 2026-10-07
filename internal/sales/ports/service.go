@@ -159,13 +159,13 @@ type SalesService interface {
 	// Invoices
 	CreateInvoice(ctx context.Context, cmd CreateInvoiceCommand) (*domain.SalesInvoice, error)
 	CreateInvoiceFromOrder(ctx context.Context, orderID uuid.UUID, invoiceType domain.InvoiceType, userID *uuid.UUID) (*domain.SalesInvoice, error)
-	PostInvoice(ctx context.Context, invoiceID uuid.UUID) (*domain.SalesInvoice, error)
+	PostInvoice(ctx context.Context, invoiceID, actorID uuid.UUID) (*domain.SalesInvoice, error)
 	GetInvoice(ctx context.Context, id uuid.UUID) (*domain.SalesInvoice, error)
 	ListInvoices(ctx context.Context, legalEntityID uuid.UUID, customerID *uuid.UUID, invoiceType *domain.InvoiceType, status *domain.InvoiceStatus, limit, offset int) ([]*domain.SalesInvoice, error)
 
 	// Credit Notes
 	CreateCreditNote(ctx context.Context, cmd CreateCreditNoteCommand) (*domain.CreditNote, error)
-	PostCreditNote(ctx context.Context, creditNoteID uuid.UUID) (*domain.CreditNote, error)
+	PostCreditNote(ctx context.Context, creditNoteID, actorID uuid.UUID) (*domain.CreditNote, error)
 	GetCreditNote(ctx context.Context, id uuid.UUID) (*domain.CreditNote, error)
 	ListCreditNotes(ctx context.Context, legalEntityID uuid.UUID, customerID *uuid.UUID, originalInvoiceID *uuid.UUID, status *domain.CreditNoteStatus, limit, offset int) ([]*domain.CreditNote, error)
 }

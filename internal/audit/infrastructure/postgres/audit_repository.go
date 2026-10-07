@@ -8,6 +8,7 @@ import (
 	"erp/internal/audit/domain"
 	"erp/internal/audit/ports"
 	"erp/internal/platform/database/sqlc"
+	"erp/internal/platform/transaction"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -26,21 +27,42 @@ func NewAuditRepository(pool *pgxpool.Pool) ports.AuditRepository {
 	}
 }
 
+func (r *auditRepository) queriesFor(ctx context.Context) *sqlc.Queries {
+	if tx, ok := transaction.TxFromContext(ctx); ok {
+		return r.queries.WithTx(tx)
+	}
+	return r.queries
+}
+
+func (r *auditRepository) LockChain(ctx context.Context) error {
+	tx, ok := transaction.TxFromContext(ctx)
+	if !ok {
+		return errors.New("audit chain lock requires a transaction")
+	}
+	_, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended('audit.events.hash-chain', 0))")
+	return err
+}
+
 // AppendEvent serializes the global hash chain with a PostgreSQL transaction
 // advisory lock. The event and all associated changes commit atomically, so
 // multiple API replicas cannot fork the chain or leave partial state diffs.
 func (r *auditRepository) AppendEvent(ctx context.Context, event *domain.AuditEvent, changes []domain.EntityChange) (*domain.AuditEvent, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
+	tx, ok := transaction.TxFromContext(ctx)
+	if !ok {
+		var inserted *domain.AuditEvent
+		err := transaction.NewManager(r.pool).WithinTx(ctx, func(txCtx context.Context) error {
+			var err error
+			inserted, err = r.AppendEvent(txCtx, event, changes)
+			return err
+		})
+		return inserted, err
+	}
+
+	if err := r.LockChain(ctx); err != nil {
 		return nil, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended('audit.events.hash-chain', 0))"); err != nil {
-		return nil, err
-	}
-
-	qtx := r.queries.WithTx(tx)
+	qtx := r.queriesFor(ctx).WithTx(tx)
 	previousHash := domain.GenesisHash
 	latest, err := qtx.GetLatestAuditEvent(ctx)
 	if err == nil {
@@ -52,6 +74,11 @@ func (r *auditRepository) AppendEvent(ctx context.Context, event *domain.AuditEv
 	event.Payload = domain.CanonicalizeJSON(event.Payload)
 	event.PreviousHash = previousHash
 	event.OccurredAt = time.Now().UTC().Truncate(time.Microsecond)
+	// Keep chronological verification stable across clock corrections and
+	// multiple records created within one timestamp resolution.
+	if latest.OccurredAt.Valid && !event.OccurredAt.After(latest.OccurredAt.Time) {
+		event.OccurredAt = latest.OccurredAt.Time.Add(time.Microsecond)
+	}
 	event.RecordHash = domain.ComputeRecordHash(
 		event.PreviousHash,
 		event.UserID,
@@ -96,16 +123,13 @@ func (r *auditRepository) AppendEvent(ctx context.Context, event *domain.AuditEv
 		inserted.Changes = append(inserted.Changes, *toDomainEntityChange(&changeRow))
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
 	return inserted, nil
 }
 
 func (r *auditRepository) InsertEvent(ctx context.Context, event *domain.AuditEvent) (*domain.AuditEvent, error) {
 	payload := domain.CanonicalizeJSON(event.Payload)
 
-	row, err := r.queries.InsertAuditEvent(ctx, sqlc.InsertAuditEventParams{
+	row, err := r.queriesFor(ctx).InsertAuditEvent(ctx, sqlc.InsertAuditEventParams{
 		UserID:        toPgUUIDPtr(event.UserID),
 		LegalEntityID: toPgUUIDPtr(event.LegalEntityID),
 		Action:        event.Action,
@@ -126,7 +150,7 @@ func (r *auditRepository) InsertEvent(ctx context.Context, event *domain.AuditEv
 }
 
 func (r *auditRepository) GetLatestEvent(ctx context.Context) (*domain.AuditEvent, error) {
-	row, err := r.queries.GetLatestAuditEvent(ctx)
+	row, err := r.queriesFor(ctx).GetLatestAuditEvent(ctx)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -137,7 +161,7 @@ func (r *auditRepository) GetLatestEvent(ctx context.Context) (*domain.AuditEven
 }
 
 func (r *auditRepository) GetEventByID(ctx context.Context, id uuid.UUID) (*domain.AuditEvent, error) {
-	row, err := r.queries.GetAuditEventByID(ctx, toPgUUID(id))
+	row, err := r.queriesFor(ctx).GetAuditEventByID(ctx, toPgUUID(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrEventNotFound
@@ -157,7 +181,7 @@ func (r *auditRepository) ListEvents(ctx context.Context, filter domain.AuditFil
 		offset = int32(filter.Offset)
 	}
 
-	count, err := r.queries.CountAuditEvents(ctx, sqlc.CountAuditEventsParams{
+	count, err := r.queriesFor(ctx).CountAuditEvents(ctx, sqlc.CountAuditEventsParams{
 		LegalEntityID: toPgUUIDPtr(filter.LegalEntityID),
 		UserID:        toPgUUIDPtr(filter.UserID),
 		Action:        toPgText(filter.Action),
@@ -170,7 +194,7 @@ func (r *auditRepository) ListEvents(ctx context.Context, filter domain.AuditFil
 		return nil, 0, err
 	}
 
-	rows, err := r.queries.ListAuditEvents(ctx, sqlc.ListAuditEventsParams{
+	rows, err := r.queriesFor(ctx).ListAuditEvents(ctx, sqlc.ListAuditEventsParams{
 		Limit:         limit,
 		Offset:        offset,
 		LegalEntityID: toPgUUIDPtr(filter.LegalEntityID),
@@ -194,7 +218,7 @@ func (r *auditRepository) ListEvents(ctx context.Context, filter domain.AuditFil
 }
 
 func (r *auditRepository) ListEventsChronological(ctx context.Context, limit, offset int32) ([]domain.AuditEvent, error) {
-	rows, err := r.queries.ListAuditEventsChronological(ctx, sqlc.ListAuditEventsChronologicalParams{
+	rows, err := r.queriesFor(ctx).ListAuditEventsChronological(ctx, sqlc.ListAuditEventsChronologicalParams{
 		Limit:  limit,
 		Offset: offset,
 	})
@@ -210,7 +234,7 @@ func (r *auditRepository) ListEventsChronological(ctx context.Context, limit, of
 }
 
 func (r *auditRepository) InsertEntityChange(ctx context.Context, change *domain.EntityChange) (*domain.EntityChange, error) {
-	row, err := r.queries.InsertEntityChange(ctx, sqlc.InsertEntityChangeParams{
+	row, err := r.queriesFor(ctx).InsertEntityChange(ctx, sqlc.InsertEntityChangeParams{
 		EventID:     toPgUUID(change.EventID),
 		TableName:   change.TableName,
 		RecordID:    change.RecordID,
@@ -225,7 +249,7 @@ func (r *auditRepository) InsertEntityChange(ctx context.Context, change *domain
 }
 
 func (r *auditRepository) ListEntityChanges(ctx context.Context, eventID uuid.UUID) ([]domain.EntityChange, error) {
-	rows, err := r.queries.ListEntityChangesByEventID(ctx, toPgUUID(eventID))
+	rows, err := r.queriesFor(ctx).ListEntityChangesByEventID(ctx, toPgUUID(eventID))
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +267,7 @@ func (r *auditRepository) InsertSecurityEvent(ctx context.Context, event *domain
 		details = []byte("{}")
 	}
 
-	row, err := r.queries.InsertSecurityEvent(ctx, sqlc.InsertSecurityEventParams{
+	row, err := r.queriesFor(ctx).InsertSecurityEvent(ctx, sqlc.InsertSecurityEventParams{
 		UserID:    toPgUUIDPtr(event.UserID),
 		EventType: event.EventType,
 		Status:    event.Status,
@@ -261,7 +285,7 @@ func (r *auditRepository) ListSecurityEvents(ctx context.Context, userID *uuid.U
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := r.queries.ListSecurityEvents(ctx, sqlc.ListSecurityEventsParams{
+	rows, err := r.queriesFor(ctx).ListSecurityEvents(ctx, sqlc.ListSecurityEventsParams{
 		UserID:    toPgUUIDPtr(userID),
 		EventType: toPgText(eventType),
 		Status:    toPgText(status),
@@ -280,7 +304,7 @@ func (r *auditRepository) ListSecurityEvents(ctx context.Context, userID *uuid.U
 }
 
 func (r *auditRepository) InsertAccessEvent(ctx context.Context, event *domain.AccessEvent) (*domain.AccessEvent, error) {
-	row, err := r.queries.InsertAccessEvent(ctx, sqlc.InsertAccessEventParams{
+	row, err := r.queriesFor(ctx).InsertAccessEvent(ctx, sqlc.InsertAccessEventParams{
 		UserID:       toPgUUIDPtr(event.UserID),
 		ResourcePath: event.ResourcePath,
 		Method:       event.Method,
@@ -299,7 +323,7 @@ func (r *auditRepository) ListAccessEvents(ctx context.Context, userID *uuid.UUI
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := r.queries.ListAccessEvents(ctx, sqlc.ListAccessEventsParams{
+	rows, err := r.queriesFor(ctx).ListAccessEvents(ctx, sqlc.ListAccessEventsParams{
 		UserID:       toPgUUIDPtr(userID),
 		ResourcePath: toPgText(resourcePath),
 		Limit:        limit,

@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"erp/internal/accounting/domain"
+	auditdomain "erp/internal/audit/domain"
+	auditports "erp/internal/audit/ports"
 
 	"github.com/google/uuid"
 )
@@ -30,6 +32,10 @@ type PostingEngine interface {
 		request domain.PostingRequest,
 	) (domain.PostingResult, error)
 
+	// PostDraft posts an existing journal without replacing its identity or lines.
+	// Repeated attempts return ErrAlreadyPosted without changing projections.
+	PostDraft(ctx context.Context, journalEntryID, actorID uuid.UUID) (domain.PostingResult, error)
+
 	// Reverse creates a mirror journal entry that exactly offsets the original,
 	// marks the original as REVERSED, and updates account balances accordingly.
 	// Only POSTED entries can be reversed; reversing a REVERSED entry returns ErrAlreadyReversed.
@@ -46,10 +52,19 @@ type PostingEngine interface {
 type PostingRepository interface {
 	AccountingRepository
 
+	// ValidateLineDimensions locks dimensions and verifies legal-entity ownership.
+	ValidateLineDimensions(context.Context, uuid.UUID, domain.JournalLine) error
+
 	// GetJournalEntryBySource checks for existing entries by source triple (idempotency).
 	GetJournalEntryBySource(ctx context.Context, legalEntityID uuid.UUID, sourceModule, sourceType string, sourceID uuid.UUID) (*domain.JournalEntry, error)
 
 	// UpsertAccountBalance atomically inserts or updates account period balances.
 	// Uses ON CONFLICT DO UPDATE for thread-safe accumulation.
 	UpsertAccountBalance(ctx context.Context, balance domain.AccountBalance) (*domain.AccountBalance, error)
+}
+
+// PostingAuditRecorder appends an audit event within the posting transaction.
+type PostingAuditRecorder interface {
+	LockChain(context.Context) error
+	RecordEvent(context.Context, auditports.RecordEventCommand) (*auditdomain.AuditEvent, error)
 }

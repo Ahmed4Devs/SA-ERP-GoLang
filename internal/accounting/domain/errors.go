@@ -20,4 +20,5 @@ var (
 	ErrDuplicateLineNumber     = errors.New("duplicate_line_number: journal lines must have unique ascending numbers")
 	ErrDuplicatePosting        = errors.New("duplicate_posting: a journal entry with the same source already exists (idempotent reject)")
 	ErrInvalidPostingRequest   = errors.New("invalid_posting_request: posting request is missing required fields")
+	ErrInvalidPostingDimension = errors.New("invalid_posting_dimension: journal dimensions must belong to the journal legal entity")
 )

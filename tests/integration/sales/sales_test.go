@@ -20,6 +20,7 @@ import (
 	"erp/internal/sales"
 	"erp/internal/sales/domain"
 	"erp/internal/sales/ports"
+	"erp/internal/tax"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -59,13 +60,20 @@ func setupSalesTest(t *testing.T) (*sales.Module, *receivables.Module, *database
 	_ = prodMod.SeedDefaultProductsData(ctx, le.ID)
 	_ = invMod.SeedDefaultInventoryData(ctx, le.ID)
 	_ = recMod.SeedDefaultReceivablesData(ctx, le.ID)
+	if err := tax.NewModule(cfg, db).SeedDefaultTaxData(ctx, le.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	// Get admin user
 	admin, err := iamMod.AuthService.GetUserByIdentifier(ctx, "admin")
 	var adminID uuid.UUID
-	if err == nil && admin != nil {
-		adminID = admin.ID
+	if err != nil || admin == nil {
+		admin, err = iamMod.AuthService.SeedAdmin(ctx, "admin", "sales-admin@example.test", "Sales test admin", "SalesTest@123")
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
+	adminID = admin.ID
 
 	// Lookup a sample product item and warehouse
 	var itemID, warehouseID uuid.UUID
@@ -132,7 +140,7 @@ func TestSales_QuotationToOrderConversion(t *testing.T) {
 				Quantity:        decimal.NewFromInt(10),
 				UnitPrice:       decimal.NewFromInt(500),
 				DiscountPercent: decimal.NewFromInt(10),
-				TaxCode:         "VAT-15",
+				TaxCode:         "VAT-STD-15",
 				TaxRatePercent:  decimal.NewFromInt(15),
 			},
 		},
@@ -218,7 +226,7 @@ func TestSales_OrderCreditLimitValidation(t *testing.T) {
 				Quantity:        decimal.NewFromInt(15),
 				UnitPrice:       decimal.NewFromInt(1000),
 				DiscountPercent: decimal.Zero,
-				TaxCode:         "EXEMPT",
+				TaxCode:         "VAT-EXEMPT-0",
 				TaxRatePercent:  decimal.Zero,
 			},
 		},
@@ -240,7 +248,7 @@ func TestSales_OrderCreditLimitValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create invoice from order 1: %v", err)
 	}
-	_, err = salesSvc.PostInvoice(ctx, inv1.ID)
+	_, err = salesSvc.PostInvoice(ctx, inv1.ID, adminID)
 	if err != nil {
 		t.Fatalf("failed to post invoice 1: %v", err)
 	}
@@ -267,7 +275,7 @@ func TestSales_OrderCreditLimitValidation(t *testing.T) {
 				Quantity:        decimal.NewFromInt(10),
 				UnitPrice:       decimal.NewFromInt(1000),
 				DiscountPercent: decimal.Zero,
-				TaxCode:         "EXEMPT",
+				TaxCode:         "VAT-EXEMPT-0",
 				TaxRatePercent:  decimal.Zero,
 			},
 		},
@@ -300,7 +308,7 @@ func TestSales_OrderCreditLimitValidation(t *testing.T) {
 				Quantity:        decimal.NewFromInt(1),
 				UnitPrice:       decimal.NewFromInt(100),
 				DiscountPercent: decimal.Zero,
-				TaxCode:         "EXEMPT",
+				TaxCode:         "VAT-EXEMPT-0",
 				TaxRatePercent:  decimal.Zero,
 			},
 		},
@@ -338,7 +346,7 @@ func TestSales_DeliveryAndStockDeduction(t *testing.T) {
 				Quantity:        decimal.NewFromInt(20),
 				UnitPrice:       decimal.NewFromInt(100),
 				DiscountPercent: decimal.Zero,
-				TaxCode:         "VAT-15",
+				TaxCode:         "VAT-STD-15",
 				TaxRatePercent:  decimal.NewFromInt(15),
 			},
 		},
@@ -448,7 +456,7 @@ func TestSales_StandardInvoicePosting(t *testing.T) {
 				Quantity:        decimal.NewFromInt(1),
 				UnitPrice:       decimal.NewFromInt(5000),
 				DiscountPercent: decimal.Zero,
-				TaxCode:         "VAT-15",
+				TaxCode:         "VAT-STD-15",
 				TaxRatePercent:  decimal.NewFromInt(15),
 			},
 		},
@@ -483,7 +491,7 @@ func TestSales_StandardInvoicePosting(t *testing.T) {
 				Quantity:        decimal.NewFromInt(2),
 				UnitPrice:       decimal.NewFromInt(10000),
 				DiscountPercent: decimal.Zero,
-				TaxCode:         "VAT-15",
+				TaxCode:         "VAT-STD-15",
 				TaxRatePercent:  decimal.NewFromInt(15),
 			},
 		},
@@ -502,7 +510,7 @@ func TestSales_StandardInvoicePosting(t *testing.T) {
 	}
 
 	// 3. Post Invoice
-	postedInv, err := salesSvc.PostInvoice(ctx, invoice.ID)
+	postedInv, err := salesSvc.PostInvoice(ctx, invoice.ID, adminID)
 	if err != nil {
 		t.Fatalf("failed to post invoice: %v", err)
 	}
@@ -591,7 +599,7 @@ func TestSales_SimplifiedInvoicePosting(t *testing.T) {
 				Quantity:        decimal.NewFromInt(3),
 				UnitPrice:       decimal.NewFromInt(200),
 				DiscountPercent: decimal.Zero,
-				TaxCode:         "VAT-15",
+				TaxCode:         "VAT-STD-15",
 				TaxRatePercent:  decimal.NewFromInt(15),
 			},
 		},
@@ -606,7 +614,7 @@ func TestSales_SimplifiedInvoicePosting(t *testing.T) {
 		t.Errorf("expected SIMPLIFIED type, got %s", invoice.InvoiceType)
 	}
 
-	posted, err := salesSvc.PostInvoice(ctx, invoice.ID)
+	posted, err := salesSvc.PostInvoice(ctx, invoice.ID, adminID)
 	if err != nil {
 		t.Fatalf("failed to post simplified invoice: %v", err)
 	}
@@ -617,7 +625,7 @@ func TestSales_SimplifiedInvoicePosting(t *testing.T) {
 
 	// Verify line snapshot attributes
 	line := posted.Lines[0]
-	if line.TaxCode != "VAT-15" {
+	if line.TaxCode != "VAT-STD-15" {
 		t.Errorf("expected snapshot tax_code VAT-15, got %s", line.TaxCode)
 	}
 	if !line.TaxRatePercent.Equal(decimal.NewFromInt(15)) {
@@ -658,7 +666,7 @@ func TestSales_CreditNoteLifecycle(t *testing.T) {
 				Quantity:        decimal.NewFromInt(10),
 				UnitPrice:       decimal.NewFromInt(1000),
 				DiscountPercent: decimal.Zero,
-				TaxCode:         "VAT-15",
+				TaxCode:         "VAT-STD-15",
 				TaxRatePercent:  decimal.NewFromInt(15),
 			},
 		},
@@ -668,7 +676,7 @@ func TestSales_CreditNoteLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create invoice: %v", err)
 	}
-	postedInv, err := salesSvc.PostInvoice(ctx, invoice.ID)
+	postedInv, err := salesSvc.PostInvoice(ctx, invoice.ID, adminID)
 	if err != nil {
 		t.Fatalf("failed to post invoice: %v", err)
 	}
@@ -695,7 +703,7 @@ func TestSales_CreditNoteLifecycle(t *testing.T) {
 				Description:    "إرجاع حديد تسليح",
 				Quantity:       decimal.NewFromInt(2),
 				UnitPrice:      decimal.NewFromInt(1000),
-				TaxCode:        "VAT-15",
+				TaxCode:        "VAT-STD-15",
 				TaxRatePercent: decimal.NewFromInt(15),
 			},
 		},
@@ -711,7 +719,7 @@ func TestSales_CreditNoteLifecycle(t *testing.T) {
 	}
 
 	// 3. Post Credit Note
-	postedCN, err := salesSvc.PostCreditNote(ctx, cn.ID)
+	postedCN, err := salesSvc.PostCreditNote(ctx, cn.ID, adminID)
 	if err != nil {
 		t.Fatalf("failed to post credit note: %v", err)
 	}

@@ -11,24 +11,30 @@ package posting
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"erp/internal/accounting/domain"
 	"erp/internal/accounting/ports"
+	auditports "erp/internal/audit/ports"
 	"erp/internal/platform/identifiers"
+	"erp/internal/platform/transaction"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
 type postingEngine struct {
-	repo ports.PostingRepository
+	repo  ports.PostingRepository
+	tx    transaction.Manager
+	audit ports.PostingAuditRecorder
 }
 
 // NewPostingEngine creates a new PostingEngine backed by the given PostingRepository.
-func NewPostingEngine(repo ports.PostingRepository) ports.PostingEngine {
-	return &postingEngine{repo: repo}
+func NewPostingEngine(repo ports.PostingRepository, tx transaction.Manager, audit ports.PostingAuditRecorder) ports.PostingEngine {
+	return &postingEngine{repo: repo, tx: tx, audit: audit}
 }
 
 // Post creates a balanced journal entry, posts it atomically, and updates
@@ -44,6 +50,19 @@ func NewPostingEngine(repo ports.PostingRepository) ports.PostingEngine {
 //  7. Atomic posting (entry created as DRAFT, lines inserted, then posted)
 //  8. Account balance accumulation for the fiscal period
 func (e *postingEngine) Post(ctx context.Context, request domain.PostingRequest) (domain.PostingResult, error) {
+	var result domain.PostingResult
+	err := e.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := e.lockPosting(txCtx); err != nil {
+			return err
+		}
+		var err error
+		result, err = e.post(txCtx, request)
+		return err
+	})
+	return result, err
+}
+
+func (e *postingEngine) post(ctx context.Context, request domain.PostingRequest) (domain.PostingResult, error) {
 	// 1. Validate request
 	if err := validatePostingRequest(request); err != nil {
 		return domain.PostingResult{}, err
@@ -66,7 +85,7 @@ func (e *postingEngine) Post(ctx context.Context, request domain.PostingRequest)
 	if err != nil {
 		return domain.PostingResult{}, domain.ErrJournalNotFound
 	}
-	if !journal.IsActive {
+	if !journal.IsActive || journal.LegalEntityID != request.LegalEntityID {
 		return domain.PostingResult{}, domain.ErrJournalNotFound
 	}
 
@@ -97,6 +116,9 @@ func (e *postingEngine) Post(ctx context.Context, request domain.PostingRequest)
 		if err != nil {
 			return domain.PostingResult{}, fmt.Errorf("line %d: %w", lineNum, domain.ErrAccountNotFound)
 		}
+		if acc.LegalEntityID != request.LegalEntityID {
+			return domain.PostingResult{}, domain.ErrAccountNotFound
+		}
 		if err := domain.ValidateAccountCanPost(acc.AllowPosting, acc.IsActive); err != nil {
 			return domain.PostingResult{}, fmt.Errorf("line %d (account %s): %w", lineNum, acc.Code, err)
 		}
@@ -105,10 +127,10 @@ func (e *postingEngine) Post(ctx context.Context, request domain.PostingRequest)
 		baseDebit := line.BaseDebit
 		baseCredit := line.BaseCredit
 		if baseDebit.IsZero() && line.TransactionDebit.GreaterThan(decimal.Zero) {
-			baseDebit = line.TransactionDebit.Mul(request.ExchangeRate)
+			baseDebit = line.TransactionDebit.Mul(request.ExchangeRate).Round(4)
 		}
 		if baseCredit.IsZero() && line.TransactionCredit.GreaterThan(decimal.Zero) {
-			baseCredit = line.TransactionCredit.Mul(request.ExchangeRate)
+			baseCredit = line.TransactionCredit.Mul(request.ExchangeRate).Round(4)
 		}
 
 		journalLines = append(journalLines, domain.JournalLine{
@@ -165,38 +187,160 @@ func (e *postingEngine) Post(ctx context.Context, request domain.PostingRequest)
 		return domain.PostingResult{}, fmt.Errorf("posting create entry: %w", err)
 	}
 
-	// 10. Post the journal entry (transitions DRAFT → POSTED)
-	posted, err := e.repo.PostJournalEntry(ctx, created.ID, request.ActorID)
+	return e.postEntry(ctx, created, request.ActorID)
+}
+
+// PostDraft preserves the draft ID, number, creator and persisted lines. The
+// journal lock serializes retries before any balances or audit are written.
+func (e *postingEngine) PostDraft(ctx context.Context, journalEntryID, actorID uuid.UUID) (domain.PostingResult, error) {
+	var result domain.PostingResult
+	err := e.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if actorID == uuid.Nil || journalEntryID == uuid.Nil {
+			return fmt.Errorf("%w: journal_entry_id and actor_id are required", domain.ErrInvalidPostingRequest)
+		}
+		if err := e.lockPosting(txCtx); err != nil {
+			return err
+		}
+		entry, err := e.repo.GetJournalEntryByID(txCtx, journalEntryID)
+		if err != nil {
+			return err
+		}
+		switch entry.Status {
+		case domain.JournalEntryStatusPosted:
+			return domain.ErrAlreadyPosted
+		case domain.JournalEntryStatusReversed:
+			return domain.ErrAlreadyReversed
+		case domain.JournalEntryStatusDraft, domain.JournalEntryStatusSubmitted, domain.JournalEntryStatusApproved:
+		default:
+			return fmt.Errorf("%w: journal status %s cannot be posted", domain.ErrInvalidPostingRequest, entry.Status)
+		}
+		result, err = e.postEntry(txCtx, entry, actorID)
+		return err
+	})
+	return result, err
+}
+
+func (e *postingEngine) postEntry(ctx context.Context, entry *domain.JournalEntry, actorID uuid.UUID) (domain.PostingResult, error) {
+	if err := e.validateEntryForPosting(ctx, entry); err != nil {
+		return domain.PostingResult{}, err
+	}
+	posted, err := e.repo.PostJournalEntry(ctx, entry.ID, actorID)
 	if err != nil {
 		return domain.PostingResult{}, fmt.Errorf("posting post entry: %w", err)
 	}
+	if err := e.updateBalances(ctx, posted); err != nil {
+		return domain.PostingResult{}, err
+	}
+	if err := e.recordPostingAudit(ctx, "accounting.journal.post", actorID, posted, nil, ""); err != nil {
+		return domain.PostingResult{}, err
+	}
+	return domain.PostingResult{JournalEntryID: posted.ID, EntryNumber: posted.EntryNumber}, nil
+}
 
-	// 11. Update account balances for each line
-	for _, line := range journalLines {
-		closingDelta := line.BaseDebit.Sub(line.BaseCredit)
-		_, err := e.repo.UpsertAccountBalance(ctx, domain.AccountBalance{
-			LegalEntityID:  request.LegalEntityID,
-			AccountID:      line.AccountID,
-			FiscalPeriodID: period.ID,
-			OpeningBalance: decimal.Zero,
-			PeriodDebit:    line.BaseDebit,
-			PeriodCredit:   line.BaseCredit,
-			ClosingBalance: closingDelta,
-		})
+// Revalidate stored drafts at the posting boundary: the selected journal,
+// period or accounts may have changed since the draft was saved. Repository
+// reads retain shared row locks until the surrounding transaction finishes.
+func (e *postingEngine) validateEntryForPosting(ctx context.Context, entry *domain.JournalEntry) error {
+	if entry.ExchangeRate.LessThanOrEqual(decimal.Zero) || strings.TrimSpace(entry.CurrencyCode) == "" {
+		return fmt.Errorf("%w: currency and a positive exchange rate are required", domain.ErrInvalidPostingRequest)
+	}
+	journal, err := e.repo.GetJournalByID(ctx, entry.JournalID)
+	if err != nil {
+		return err
+	}
+	if !journal.IsActive || journal.LegalEntityID != entry.LegalEntityID {
+		return domain.ErrJournalNotFound
+	}
+	period, err := e.repo.GetFiscalPeriodByDate(ctx, entry.LegalEntityID, entry.AccountingDate)
+	if err != nil {
+		return err
+	}
+	if period.ID != entry.FiscalPeriodID {
+		return domain.ErrFiscalPeriodNotFound
+	}
+	if err := domain.ValidatePeriodCanPost(period.Status); err != nil {
+		return err
+	}
+	for _, line := range entry.Lines {
+		if line.LegalEntityID != entry.LegalEntityID {
+			return domain.ErrAccountNotFound
+		}
+		account, err := e.repo.GetAccountByID(ctx, line.AccountID)
 		if err != nil {
-			return domain.PostingResult{}, fmt.Errorf("posting update balance for account %s: %w", line.AccountID, err)
+			return err
+		}
+		if account.LegalEntityID != entry.LegalEntityID {
+			return domain.ErrAccountNotFound
+		}
+		if err := domain.ValidateAccountCanPost(account.AllowPosting, account.IsActive); err != nil {
+			return fmt.Errorf("line %d: %w", line.LineNumber, err)
+		}
+		if err := e.repo.ValidateLineDimensions(ctx, entry.LegalEntityID, line); err != nil {
+			return fmt.Errorf("line %d: %w", line.LineNumber, err)
+		}
+		if line.ExchangeRate.LessThanOrEqual(decimal.Zero) || strings.TrimSpace(line.CurrencyCode) == "" {
+			return fmt.Errorf("%w: line %d requires currency and a positive exchange rate", domain.ErrInvalidPostingRequest, line.LineNumber)
+		}
+		if line.TransactionDebit.IsNegative() || line.TransactionCredit.IsNegative() ||
+			(line.TransactionDebit.IsPositive() && !line.BaseDebit.IsPositive()) ||
+			(line.TransactionCredit.IsPositive() && !line.BaseCredit.IsPositive()) {
+			return domain.ErrInvalidLineAmounts
 		}
 	}
+	debit, credit, err := domain.ValidateJournalEntryBalance(entry.Lines)
+	if err != nil {
+		return err
+	}
+	if !debit.Equal(entry.TotalDebit) || !credit.Equal(entry.TotalCredit) {
+		return fmt.Errorf("%w: journal totals differ from persisted lines", domain.ErrUnbalancedJournalEntry)
+	}
+	return nil
+}
 
-	return domain.PostingResult{
-		JournalEntryID: posted.ID,
-		EntryNumber:    posted.EntryNumber,
-	}, nil
+func (e *postingEngine) updateBalances(ctx context.Context, entry *domain.JournalEntry) error {
+	for _, line := range entry.Lines {
+		_, err := e.repo.UpsertAccountBalance(ctx, domain.AccountBalance{
+			LegalEntityID: entry.LegalEntityID, AccountID: line.AccountID,
+			FiscalPeriodID: entry.FiscalPeriodID, OpeningBalance: decimal.Zero,
+			PeriodDebit: line.BaseDebit, PeriodCredit: line.BaseCredit,
+			ClosingBalance: line.BaseDebit.Sub(line.BaseCredit),
+		})
+		if err != nil {
+			return fmt.Errorf("posting update balance for account %s: %w", line.AccountID, err)
+		}
+	}
+	return nil
 }
 
 // Reverse creates a mirror journal entry that exactly offsets the original posted entry,
 // marks the original as REVERSED, and adjusts account balances accordingly.
 func (e *postingEngine) Reverse(ctx context.Context, journalEntryID uuid.UUID, reason string, actorID uuid.UUID) (domain.PostingResult, error) {
+	var result domain.PostingResult
+	err := e.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := e.lockPosting(txCtx); err != nil {
+			return err
+		}
+		var err error
+		result, err = e.reverse(txCtx, journalEntryID, reason, actorID)
+		return err
+	})
+	return result, err
+}
+
+func (e *postingEngine) lockPosting(ctx context.Context) error {
+	if e.audit == nil {
+		return fmt.Errorf("posting audit recorder is not configured")
+	}
+	// Acquire the audit-chain lock before financial row locks, including when
+	// several posts are composed in one outer transaction. All posting callers
+	// that lock their own business rows must acquire this same lock first.
+	return e.audit.LockChain(ctx)
+}
+
+func (e *postingEngine) reverse(ctx context.Context, journalEntryID uuid.UUID, reason string, actorID uuid.UUID) (domain.PostingResult, error) {
+	if actorID == uuid.Nil || strings.TrimSpace(reason) == "" {
+		return domain.PostingResult{}, fmt.Errorf("%w: reversal actor and reason are required", domain.ErrInvalidPostingRequest)
+	}
 	// 1. Load original entry with lines
 	original, err := e.repo.GetJournalEntryByID(ctx, journalEntryID)
 	if err != nil {
@@ -259,27 +403,23 @@ func (e *postingEngine) Reverse(ctx context.Context, journalEntryID uuid.UUID, r
 		CreatedBy:      actorID,
 	}
 
+	reversalEntry.Lines = reversalLines
+	if err := e.validateEntryForPosting(ctx, &reversalEntry); err != nil {
+		return domain.PostingResult{}, err
+	}
+
 	// 6. Delegate to repository for atomic reversal
 	reversed, err := e.repo.ReverseJournalEntry(ctx, journalEntryID, reversalEntry, reversalLines, actorID)
 	if err != nil {
 		return domain.PostingResult{}, fmt.Errorf("posting reverse: %w", err)
 	}
 
-	// 7. Update account balances for the reversal lines
-	for _, line := range reversalLines {
-		closingDelta := line.BaseDebit.Sub(line.BaseCredit)
-		_, err := e.repo.UpsertAccountBalance(ctx, domain.AccountBalance{
-			LegalEntityID:  original.LegalEntityID,
-			AccountID:      line.AccountID,
-			FiscalPeriodID: period.ID,
-			OpeningBalance: decimal.Zero,
-			PeriodDebit:    line.BaseDebit,
-			PeriodCredit:   line.BaseCredit,
-			ClosingBalance: closingDelta,
-		})
-		if err != nil {
-			return domain.PostingResult{}, fmt.Errorf("posting reverse balance for account %s: %w", line.AccountID, err)
-		}
+	if err := e.updateBalances(ctx, reversed); err != nil {
+		return domain.PostingResult{}, err
+	}
+
+	if err := e.recordPostingAudit(ctx, "accounting.journal.reverse", actorID, reversed, original, reason); err != nil {
+		return domain.PostingResult{}, err
 	}
 
 	return domain.PostingResult{
@@ -290,6 +430,9 @@ func (e *postingEngine) Reverse(ctx context.Context, journalEntryID uuid.UUID, r
 
 // validatePostingRequest ensures all required fields are present.
 func validatePostingRequest(r domain.PostingRequest) error {
+	if r.ExchangeRate.IsNegative() {
+		return fmt.Errorf("%w: exchange_rate must be positive", domain.ErrInvalidPostingRequest)
+	}
 	if r.LegalEntityID == uuid.Nil {
 		return fmt.Errorf("%w: legal_entity_id is required", domain.ErrInvalidPostingRequest)
 	}
@@ -313,6 +456,28 @@ func validatePostingRequest(r domain.PostingRequest) error {
 	}
 	if r.ActorID == uuid.Nil {
 		return fmt.Errorf("%w: actor_id is required", domain.ErrInvalidPostingRequest)
+	}
+	return nil
+}
+
+func (e *postingEngine) recordPostingAudit(ctx context.Context, action string, actorID uuid.UUID, entry, original *domain.JournalEntry, reason string) error {
+	if e.audit == nil {
+		return fmt.Errorf("posting audit recorder is not configured")
+	}
+	payload, err := json.Marshal(struct {
+		JournalEntry         *domain.JournalEntry `json:"journal_entry"`
+		OriginalJournalEntry *domain.JournalEntry `json:"original_journal_entry,omitempty"`
+		Reason               string               `json:"reason,omitempty"`
+	}{entry, original, reason})
+	if err != nil {
+		return fmt.Errorf("encode posting audit: %w", err)
+	}
+	_, err = e.audit.RecordEvent(ctx, auditports.RecordEventCommand{
+		UserID: &actorID, LegalEntityID: &entry.LegalEntityID, Action: action,
+		ResourceType: "accounting.journal", ResourceID: entry.ID.String(), Payload: payload,
+	})
+	if err != nil {
+		return fmt.Errorf("record posting audit: %w", err)
 	}
 	return nil
 }
