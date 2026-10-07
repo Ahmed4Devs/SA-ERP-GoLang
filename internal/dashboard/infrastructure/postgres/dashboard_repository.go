@@ -52,7 +52,7 @@ func (r *dashboardRepository) GetFinancialKPIs(ctx context.Context, legalEntityI
 		FROM accounting.journal_lines jl
 		JOIN accounting.accounts a ON a.id = jl.account_id
 		JOIN accounting.journal_entries je ON je.id = jl.journal_entry_id
-		WHERE jl.legal_entity_id = $1 AND je.status = 'POSTED'
+		WHERE jl.legal_entity_id = $1 AND je.status IN ('POSTED', 'REVERSED')
 	`
 
 	var revDec, expDec decimal.Decimal

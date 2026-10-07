@@ -31,7 +31,7 @@ LEFT JOIN (
     FROM accounting.journal_lines jl
     JOIN accounting.journal_entries je ON je.id = jl.journal_entry_id
     WHERE je.legal_entity_id = $1
-      AND je.status = 'POSTED'
+      AND je.status IN ('POSTED', 'REVERSED')
       AND ($2::DATE IS NULL OR je.accounting_date <= $2::DATE)
 ) l ON l.account_id = a.id
 WHERE a.legal_entity_id = $1
@@ -94,7 +94,7 @@ SELECT
 FROM accounting.journal_lines l
 JOIN accounting.journal_entries je ON je.id = l.journal_entry_id
 WHERE je.legal_entity_id = $1
-  AND je.status = 'POSTED'
+  AND je.status IN ('POSTED', 'REVERSED')
   AND ($2::DATE IS NULL OR je.accounting_date <= $2::DATE)
 `
 

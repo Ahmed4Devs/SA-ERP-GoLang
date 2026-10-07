@@ -46,7 +46,7 @@ LEFT JOIN (
     JOIN accounting.journal_entries je ON je.id = jl.journal_entry_id
     JOIN accounting.accounts acc ON acc.id = jl.account_id
     WHERE je.legal_entity_id = $1
-      AND je.status = 'POSTED'
+      AND je.status IN ('POSTED', 'REVERSED')
     GROUP BY jl.account_id, acc.normal_balance
 ) act ON act.account_id = bl.account_id
 WHERE b.legal_entity_id = $1

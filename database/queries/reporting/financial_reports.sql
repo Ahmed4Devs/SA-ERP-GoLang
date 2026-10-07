@@ -18,7 +18,7 @@ LEFT JOIN (
     FROM accounting.journal_lines jl
     JOIN accounting.journal_entries je ON je.id = jl.journal_entry_id
     WHERE je.legal_entity_id = $1
-      AND je.status = 'POSTED'
+      AND je.status IN ('POSTED', 'REVERSED')
       AND ($2::DATE IS NULL OR je.accounting_date >= $2::DATE)
       AND ($3::DATE IS NULL OR je.accounting_date <= $3::DATE)
 ) l ON l.account_id = a.id
@@ -47,7 +47,7 @@ FROM accounting.journal_entries je
 JOIN accounting.journal_lines jl ON jl.journal_entry_id = je.id
 JOIN accounting.accounts a ON a.id = jl.account_id
 WHERE je.legal_entity_id = $1
-  AND je.status = 'POSTED'
+  AND je.status IN ('POSTED', 'REVERSED')
   AND ($2::UUID IS NULL OR a.id = $2::UUID)
   AND ($3::DATE IS NULL OR je.accounting_date >= $3::DATE)
   AND ($4::DATE IS NULL OR je.accounting_date <= $4::DATE)
@@ -71,7 +71,7 @@ LEFT JOIN (
     FROM accounting.journal_lines jl
     JOIN accounting.journal_entries je ON je.id = jl.journal_entry_id
     WHERE je.legal_entity_id = $1
-      AND je.status = 'POSTED'
+      AND je.status IN ('POSTED', 'REVERSED')
       AND ($2::DATE IS NULL OR je.accounting_date <= $2::DATE)
 ) l ON l.account_id = a.id
 WHERE a.legal_entity_id = $1
@@ -98,7 +98,7 @@ LEFT JOIN (
     FROM accounting.journal_lines jl
     JOIN accounting.journal_entries je ON je.id = jl.journal_entry_id
     WHERE je.legal_entity_id = $1
-      AND je.status = 'POSTED'
+      AND je.status IN ('POSTED', 'REVERSED')
       AND ($2::DATE IS NULL OR je.accounting_date >= $2::DATE)
       AND ($3::DATE IS NULL OR je.accounting_date <= $3::DATE)
 ) l ON l.account_id = a.id
