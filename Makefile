@@ -7,6 +7,7 @@ build:
 	go build -o bin/erp-api.exe ./cmd/erp-api
 	go build -o bin/erp-worker.exe ./cmd/erp-worker
 	go build -o bin/erp-cli.exe ./cmd/erp-cli
+	go build -o bin/erp-migrate.exe ./cmd/erp-migrate
 
 test:
 	@test -n "$(TEST_DATABASE_URL)" || (echo "Set TEST_DATABASE_URL to a disposable PostgreSQL database; integration tests rebuild its application schemas." >&2; exit 1)
@@ -14,7 +15,7 @@ test:
 
 # Frontend
 web-install:
-	cd apps/web && npm install
+	cd apps/web && npm ci
 
 web-build:
 	cd apps/web && npm run build

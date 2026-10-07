@@ -81,9 +81,9 @@ echo ""
 echo "==> 2. Checking Regulatory & Timezone Settings..."
 CURRENT_TZ="${TZ:-$(cat /etc/timezone 2>/dev/null || date +%Z)}"
 if [[ "${CURRENT_TZ}" =~ (Riyadh|AST|Asia/Riyadh|\+03) ]]; then
-    check_pass "Timezone matches Saudi Arabia regulatory standard (${CURRENT_TZ})"
+    check_pass "Host timezone is Asia/Riyadh-compatible (${CURRENT_TZ})"
 else
-    check_warn "Timezone is '${CURRENT_TZ}'. Recommended: 'Asia/Riyadh' (UTC+3) for ZATCA compliance."
+    check_warn "Host timezone is '${CURRENT_TZ}'. Production containers use Asia/Riyadh; host timezone alone does not establish regulatory compliance."
 fi
 
 # 3. Check Database Migrations & Structure
@@ -124,7 +124,7 @@ if [ -d "${WEB_DIR}" ]; then
     if [ -d "${WEB_DIR}/node_modules" ]; then
         check_pass "Frontend node_modules present"
     else
-        check_warn "node_modules missing in apps/web. Run 'npm install' inside apps/web."
+        check_warn "node_modules missing in apps/web. Run 'npm ci' inside apps/web."
     fi
     if [ -f "${WEB_DIR}/package-lock.json" ]; then
         check_pass "Frontend dependency lockfile is present"
@@ -156,7 +156,7 @@ fi
 ENV_EXAMPLE="${WORKSPACE_ROOT}/.env.production.example"
 if [ -f "${ENV_EXAMPLE}" ]; then
     MISSING_KEYS=""
-    for key in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB DATABASE_URL APP_URL TLS_CERT_PATH TLS_KEY_PATH MFA_ENCRYPTION_KEY METRICS_BEARER_TOKEN SMTP_HOST SMTP_USERNAME SMTP_PASSWORD SMTP_FROM; do
+    for key in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB DATABASE_URL MIGRATION_DATABASE_URL ERP_MIGRATOR_PASSWORD ERP_APP_PASSWORD ERP_BACKUP_PASSWORD BACKUP_ENCRYPTION_KEY APP_URL TLS_CERT_PATH TLS_KEY_PATH MFA_ENCRYPTION_KEY METRICS_BEARER_TOKEN SMTP_HOST SMTP_USERNAME SMTP_PASSWORD SMTP_FROM; do
         if ! grep -q "^${key}=" "${ENV_EXAMPLE}"; then MISSING_KEYS="${MISSING_KEYS} ${key}"; fi
     done
     if [ -n "${MISSING_KEYS}" ]; then
@@ -168,7 +168,10 @@ else
     check_fail ".env.production.example template missing at repository root"
 fi
 
-ENV_PROD="${WORKSPACE_ROOT}/.env.production"
+ENV_PROD="${PRODUCTION_ENV_FILE:-${WORKSPACE_ROOT}/deployments/compose/.env.production}"
+if [ -z "${PRODUCTION_ENV_FILE:-}" ] && [ ! -f "${ENV_PROD}" ]; then
+    ENV_PROD="${WORKSPACE_ROOT}/.env.production"
+fi
 if [ -f "${ENV_PROD}" ]; then
     check_pass "Found active .env.production"
     if command -v docker &> /dev/null; then
@@ -189,13 +192,15 @@ fi
 echo ""
 echo "==> 6. Probing Running Endpoints (Local)..."
 if command -v curl &> /dev/null; then
-    API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE_URL}/healthz" 2>/dev/null || echo "DOWN")
+    API_STATUS=$(curl --connect-timeout 2 --max-time 5 -s -o /dev/null -w "%{http_code}" "${API_BASE_URL}/healthz" 2>/dev/null) || API_STATUS="DOWN"
     if [ "${API_STATUS}" == "200" ]; then
         check_pass "API liveness probe passed at ${API_BASE_URL}/healthz"
-        READY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE_URL}/readyz" 2>/dev/null || echo "DOWN")
+        READY_STATUS=$(curl --connect-timeout 2 --max-time 5 -s -o /dev/null -w "%{http_code}" "${API_BASE_URL}/readyz" 2>/dev/null) || READY_STATUS="DOWN"
         if [ "${READY_STATUS}" == "200" ]; then check_pass "API readiness probe passed"; else check_fail "API readiness probe failed (${READY_STATUS})"; fi
+    elif [ "${REQUIRE_API:-false}" = "true" ] || [ "${API_STATUS}" != "DOWN" ]; then
+        check_fail "API liveness failed at ${API_BASE_URL}/healthz (Status: ${API_STATUS})"
     else
-        check_warn "API is not reachable at ${API_BASE_URL} (Status: ${API_STATUS})"
+        check_warn "API is not reachable at ${API_BASE_URL} (set REQUIRE_API=true for deployment validation)"
     fi
 else
     check_warn "curl not available to test local health endpoints"

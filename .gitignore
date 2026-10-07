@@ -14,9 +14,11 @@
 coverage.txt
 coverage.html
 test-results/
+test-results-*/
 playwright-report/
 blob-report/
 .tmp-backup-drill/
+.tmp/
 
 # Go workspace & vendor
 /vendor/
@@ -37,6 +39,7 @@ out/
 
 # Environment Variables & Secrets
 .env
+.env.production
 .env*.local
 *.pem
 *.key

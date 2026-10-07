@@ -4,13 +4,15 @@
 This document provides standard operating procedures (SOP) for the 24/7 operations, maintenance, and incident response of the Saudi Enterprise ERP production system.
 
 ### Container Topology
-The production deployment orchestrates 6 primary containers and one optional operations container via Docker Compose:
-- **`erp-nginx`**: Edge reverse proxy handling TLS termination, rate limiting, and HTTP/2 routing.
+The production deployment starts five long-running services, three setup jobs,
+and an optional backup job via Docker Compose:
+- **`nginx`**: Edge reverse proxy handling TLS termination, rate limiting, and HTTP/2 routing.
 - **`erp-web`**: Next.js 16 standalone frontend web server (Port 3000).
 - **`erp-api`**: Go core backend API service with pgx connection pooling (Port 8080).
 - **`erp-worker`**: Go background worker that dispatches the transactional outbox, delivers queued email notifications, and—when enabled—retries pending ZATCA submissions.
 - **`erp-migrate`**: Ephemeral schema migration runner executing Goose database migrations before API launch.
-- **`erp-postgres`**: PostgreSQL 18 relational database with Saudi localized schema (`Asia/Riyadh` TZ).
+- **`erp-provision`** and **`erp-grants`**: Provision database roles and grant runtime privileges before API launch. See [database identities](database-roles.md).
+- **`postgres`**: PostgreSQL 18 relational database with Saudi localized schema (`Asia/Riyadh` TZ).
 - **`erp-backup`**: On-demand encrypted logical-backup job in the `operations` profile; an external scheduler must invoke it.
 
 ---
@@ -33,6 +35,19 @@ docker compose --env-file .env.production -f docker-compose.prod.yml build --no-
 # Start stack in background
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 ```
+
+For first installation, set `BOOTSTRAP_ADMIN_ENABLED=true`, provide the operator's
+email and a unique password of at least 16 characters, and leave demo data disabled.
+After the first successful login, set `BOOTSTRAP_ADMIN_ENABLED=false`, remove
+`BOOTSTRAP_ADMIN_PASSWORD` from the environment file, and recreate `erp-api`.
+Bootstrap does not reset an existing user's password.
+
+Set `APP_URL` to the actual HTTPS origin, update the Nginx `server_name` in
+`deployments/nginx/conf.d/erp.conf`, and install the matching certificate chain
+and private key at `TLS_CERT_PATH` / `TLS_KEY_PATH`. Restrict host-file access to
+the operator and container runtime. Configure certificate renewal externally;
+after renewal run `docker compose ... exec nginx nginx -t` followed by a reload.
+The Compose stack does not issue certificates automatically.
 
 ### Checking Stack Status & Health
 ```bash
@@ -66,6 +81,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec nginx 
 | Component | Target / Endpoint | Expected Response | Remediation If Failing |
 | :--- | :--- | :--- | :--- |
 | **API Core** | `GET https://erp.example.sa/healthz` | `HTTP 200 {"status":"ok"}` | Check `erp-api` logs for DB connection failure or OOM panic. |
+| **API Readiness** | `GET https://erp.example.sa/readyz` | `HTTP 200` | Check migration version, database connectivity, and document storage. |
 | **Edge Nginx** | Port 80/443 | `HTTP 200 / 301` | Verify certificate validity and Nginx syntax: `nginx -t`. |
 | **PostgreSQL** | `pg_isready -U erp_user -d erp_db` | `accepting connections` | Inspect storage capacity (`df -h`) and connection count. |
 | **Web Frontend** | `GET https://erp.example.sa/` | `HTTP 200` | Restart `erp-web` container; check Node SSR memory. |
@@ -75,7 +91,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec nginx 
 ## 4. Scaling Guidelines
 
 ### Horizontal Scaling
-- **`erp-api`**: API request processing is stateless, but uploaded documents use the Compose `document_data` volume. Multiple instances on one Docker host can share that volume. Cross-host scaling requires a reviewed shared filesystem or object-storage implementation before rollout:
+- **`erp-api`**: API request processing is stateless, but uploaded documents use the Compose `documentdata` volume. Multiple instances on one Docker host can share that volume. Cross-host scaling requires a reviewed shared filesystem or object-storage implementation before rollout:
   ```bash
   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --scale erp-api=4
   ```

@@ -54,14 +54,16 @@ DB_HOST="${POSTGRES_HOST:-postgres}"
 DB_PORT="${POSTGRES_PORT:-5432}"
 DB_USER="${POSTGRES_USER:-erp_user}"
 DB_NAME="${POSTGRES_DB:-erp_db}"
+DB_OWNER="${RESTORE_OWNER:-${DB_USER}}"
 COMPOSE_FILE="${COMPOSE_FILE:-$(dirname "$0")/../deployments/compose/docker-compose.prod.yml}"
 COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-}"
 POSTGRES_SERVICE="${POSTGRES_SERVICE:-postgres}"
 MIGRATE_SERVICE="${MIGRATE_SERVICE:-erp-migrate}"
+GRANTS_SERVICE="${GRANTS_SERVICE:-erp-grants}"
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-}"
 
-if [[ ! "${DB_USER}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || [[ ! "${DB_NAME}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-    echo "Error: POSTGRES_USER and POSTGRES_DB must be simple PostgreSQL identifiers." >&2
+if [[ ! "${DB_USER}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || [[ ! "${DB_NAME}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || [[ ! "${DB_OWNER}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    echo "Error: POSTGRES_USER, POSTGRES_DB, and RESTORE_OWNER must be simple PostgreSQL identifiers." >&2
     exit 1
 fi
 
@@ -81,9 +83,9 @@ if [ -n "${POSTGRES_CONTAINER}" ]; then
     docker exec "${POSTGRES_CONTAINER}" \
         psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="DROP DATABASE IF EXISTS \"${DB_NAME}\";"
     docker exec "${POSTGRES_CONTAINER}" \
-        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_USER}\";"
+        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_OWNER}\";"
     docker exec -i "${POSTGRES_CONTAINER}" \
-        pg_restore --username="${DB_USER}" --dbname="${DB_NAME}" --exit-on-error --no-owner < "${WORKING_FILE}"
+        pg_restore --username="${DB_USER}" --dbname="${DB_NAME}" --role="${DB_OWNER}" --exit-on-error --no-owner < "${WORKING_FILE}"
 elif command -v psql >/dev/null 2>&1 && command -v pg_restore >/dev/null 2>&1; then
     export PGPASSWORD="${POSTGRES_PASSWORD:-}"
     psql --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" --dbname=postgres \
@@ -91,18 +93,18 @@ elif command -v psql >/dev/null 2>&1 && command -v pg_restore >/dev/null 2>&1; t
     psql --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" --dbname=postgres \
         --set=ON_ERROR_STOP=1 --command="DROP DATABASE IF EXISTS \"${DB_NAME}\";"
     psql --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" --dbname=postgres \
-        --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_USER}\";"
+        --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_OWNER}\";"
     pg_restore --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" \
-        --dbname="${DB_NAME}" --exit-on-error --no-owner "${WORKING_FILE}"
+        --dbname="${DB_NAME}" --role="${DB_OWNER}" --exit-on-error --no-owner "${WORKING_FILE}"
 elif command -v docker >/dev/null 2>&1; then
     compose exec -T "${POSTGRES_SERVICE}" \
         psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="${TERMINATE_SQL}"
     compose exec -T "${POSTGRES_SERVICE}" \
         psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="DROP DATABASE IF EXISTS \"${DB_NAME}\";"
     compose exec -T "${POSTGRES_SERVICE}" \
-        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_USER}\";"
+        psql --username="${DB_USER}" --dbname=postgres --set=ON_ERROR_STOP=1 --command="CREATE DATABASE \"${DB_NAME}\" OWNER \"${DB_OWNER}\";"
     compose exec -T "${POSTGRES_SERVICE}" \
-        pg_restore --username="${DB_USER}" --dbname="${DB_NAME}" --exit-on-error --no-owner < "${WORKING_FILE}"
+        pg_restore --username="${DB_USER}" --dbname="${DB_NAME}" --role="${DB_OWNER}" --exit-on-error --no-owner < "${WORKING_FILE}"
 else
     echo "Error: PostgreSQL client tools or Docker are required." >&2
     exit 1
@@ -114,6 +116,7 @@ if [ "${RUN_MIGRATIONS_AFTER_RESTORE:-true}" = "true" ]; then
         exit 1
     }
     compose run --rm "${MIGRATE_SERVICE}"
+    compose run --rm "${GRANTS_SERVICE}"
 fi
 
 echo "Restore completed successfully: ${DB_NAME}"

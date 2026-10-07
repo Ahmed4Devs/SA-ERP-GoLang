@@ -31,17 +31,21 @@ the secret manager:
 export BACKUP_ENCRYPTION_KEY='read-from-your-secret-manager'
 export POSTGRES_HOST='database-host'
 export POSTGRES_PORT='5432'
-export POSTGRES_USER='erp_user'
+export POSTGRES_USER='erp_admin'
 export POSTGRES_PASSWORD='read-from-your-secret-manager'
 export POSTGRES_DB='erp_db'
+export RESTORE_OWNER='erp_owner'
 export COMPOSE_ENV_FILE='deployments/compose/.env.production'
 
 ./scripts/restore.sh /backups/erp_erp_db_20260918_020000.dump.enc --force
 ```
 
 The utility verifies SHA-256 before decryption, recreates the target database,
-runs `pg_restore --exit-on-error --no-owner`, and then runs the migration
-service. Unencrypted legacy archives remain readable, but new production
+runs `pg_restore --exit-on-error --no-owner --role=erp_owner`, and then runs the
+migration and runtime-grant services. Use the installation administrator for
+restore: the read-only `erp_backup` login cannot recreate databases. Ensure the
+production roles are provisioned before recovery onto a new PostgreSQL server.
+Unencrypted legacy archives remain readable, but new production
 backups are rejected unless encryption is configured.
 
 ## Post-restore verification

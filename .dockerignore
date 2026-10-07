@@ -6,9 +6,11 @@ data
 docs
 context
 .tmp-backup-drill
+.tmp
 **/node_modules
 **/.next
 **/test-results
+**/test-results-*
 **/playwright-report
 **/blob-report
 **/*.exe

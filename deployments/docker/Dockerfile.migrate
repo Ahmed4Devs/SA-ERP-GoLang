@@ -1,18 +1,21 @@
 # Production Schema Migration Runner Container
 FROM golang:1.27.1-alpine AS builder
 
-RUN go install \
-    -tags='no_azuresql no_clickhouse no_libsql no_mssql no_mysql no_sqlite3 no_vertica no_ydb' \
-    github.com/pressly/goose/v3/cmd/goose@v3.28.0
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-w -s" -o /bin/erp-migrate ./cmd/erp-migrate
 
 FROM alpine:3.21
 
-RUN apk --no-cache add ca-certificates tzdata && \
+RUN apk --no-cache upgrade && \
+    apk --no-cache add ca-certificates tzdata && \
     addgroup -S migrategroup && adduser -S migrateuser -G migrategroup
 
 WORKDIR /migrations
 
-COPY --from=builder /go/bin/goose /usr/local/bin/goose
+COPY --from=builder /bin/erp-migrate /usr/local/bin/erp-migrate
 COPY database/migrations /migrations/sql
 
 ENV GOOSE_DRIVER=postgres
@@ -20,5 +23,5 @@ ENV GOOSE_MIGRATION_DIR=/migrations/sql
 
 USER migrateuser
 
-ENTRYPOINT ["goose"]
+ENTRYPOINT ["erp-migrate"]
 CMD ["up"]

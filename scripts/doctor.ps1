@@ -8,7 +8,9 @@
 
 [CmdletBinding()]
 param(
-    [string]$ApiBaseUrl = "http://localhost:8080"
+    [string]$ApiBaseUrl = "http://localhost:8080",
+    [string]$ProductionEnvFile = "",
+    [switch]$RequireApi
 )
 
 Set-StrictMode -Version Latest
@@ -36,6 +38,12 @@ function Write-Fail {
 }
 
 $WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+if (-not $ProductionEnvFile) {
+    $ProductionEnvFile = Join-Path $WorkspaceRoot "deployments/compose/.env.production"
+    if (-not (Test-Path $ProductionEnvFile)) {
+        $ProductionEnvFile = Join-Path $WorkspaceRoot ".env.production"
+    }
+}
 
 Write-Host "====================================================================" -ForegroundColor Cyan
 Write-Host "        SAUDI ENTERPRISE ERP - SYSTEM DOCTOR DIAGNOSTIC TOOL        " -ForegroundColor Cyan
@@ -84,9 +92,9 @@ Write-Host "==> 2. Checking Regulatory & Timezone Settings..." -ForegroundColor 
 $CurrentTz = [System.TimeZoneInfo]::Local.Id
 $CurrentOffset = [System.TimeZoneInfo]::Local.BaseUtcOffset.Hours
 if ($CurrentOffset -eq 3 -or $CurrentTz -match "Arab|Riyadh") {
-    Write-Pass "Timezone is aligned with Saudi Arabia regulatory standard ($CurrentTz, UTC+3)"
+    Write-Pass "Host timezone is Asia/Riyadh-compatible ($CurrentTz, UTC+3)"
 } else {
-    Write-Warn "Timezone is '$CurrentTz' (UTC$CurrentOffset). Recommended for production: 'Asia/Riyadh' (UTC+3) for ZATCA e-invoicing compliance."
+    Write-Warn "Host timezone is '$CurrentTz' (UTC$CurrentOffset). Production containers use Asia/Riyadh; host timezone alone does not establish regulatory compliance."
 }
 
 # 3. Check Database Migrations & Schemas
@@ -127,7 +135,7 @@ if (Test-Path $WebDir) {
     if (Test-Path (Join-Path $WebDir "node_modules")) {
         Write-Pass "Frontend node_modules present"
     } else {
-        Write-Warn "node_modules missing in apps/web. Run 'npm install' in apps/web."
+        Write-Warn "node_modules missing in apps/web. Run 'npm ci' in apps/web."
     }
     if (Test-Path (Join-Path $WebDir "package-lock.json")) {
         Write-Pass "Frontend dependency lockfile is present"
@@ -161,7 +169,8 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
 $EnvExample = Join-Path $WorkspaceRoot ".env.production.example"
 if (Test-Path $EnvExample) {
     $RequiredVariables = @(
-        "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB", "DATABASE_URL", "APP_URL",
+        "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB", "DATABASE_URL", "MIGRATION_DATABASE_URL", "APP_URL",
+        "ERP_MIGRATOR_PASSWORD", "ERP_APP_PASSWORD", "ERP_BACKUP_PASSWORD", "BACKUP_ENCRYPTION_KEY",
         "TLS_CERT_PATH", "TLS_KEY_PATH", "MFA_ENCRYPTION_KEY", "METRICS_BEARER_TOKEN",
         "SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM"
     )
@@ -176,7 +185,7 @@ if (Test-Path $EnvExample) {
     Write-Fail ".env.production.example template missing at repository root"
 }
 
-$ProductionEnv = Join-Path $WorkspaceRoot ".env.production"
+$ProductionEnv = $ProductionEnvFile
 if (Test-Path $ProductionEnv) {
     if (Get-Command docker -ErrorAction SilentlyContinue) {
         docker compose --env-file $ProductionEnv -f $ComposeFile config --quiet
@@ -200,13 +209,21 @@ try {
     $Response = Invoke-WebRequest -Uri "$ApiBaseUrl/healthz" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
     if ($Response.StatusCode -eq 200) {
         Write-Pass "API liveness probe passed at $ApiBaseUrl/healthz"
-        $Ready = Invoke-WebRequest -Uri "$ApiBaseUrl/readyz" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
-        if ($Ready.StatusCode -eq 200) { Write-Pass "API readiness probe passed" } else { Write-Fail "API readiness probe returned $($Ready.StatusCode)" }
+        try {
+            $Ready = Invoke-WebRequest -Uri "$ApiBaseUrl/readyz" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
+            if ($Ready.StatusCode -eq 200) { Write-Pass "API readiness probe passed" } else { Write-Fail "API readiness probe returned $($Ready.StatusCode)" }
+        } catch {
+            Write-Fail "API is alive but readiness failed at $ApiBaseUrl/readyz; inspect database schema and document storage"
+        }
     } else {
-        Write-Warn "Local API responded with status $($Response.StatusCode)"
+        Write-Fail "API liveness responded with status $($Response.StatusCode)"
     }
 } catch {
-    Write-Warn "API is not currently reachable at $ApiBaseUrl (offline checks still completed)"
+    if ($RequireApi -or $_.Exception.PSObject.Properties['Response']) {
+        Write-Fail "API liveness failed at $ApiBaseUrl/healthz"
+    } else {
+        Write-Warn "API is not currently reachable at $ApiBaseUrl (offline checks still completed; use -RequireApi for deployment validation)"
+    }
 }
 
 # Final Summary

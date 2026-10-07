@@ -51,6 +51,7 @@ docker compose --env-file deployments/compose/.env.production -f deployments/com
 ```bash
 # Apply additive database migrations
 docker compose --env-file deployments/compose/.env.production -f deployments/compose/docker-compose.prod.yml run --rm erp-migrate up
+docker compose --env-file deployments/compose/.env.production -f deployments/compose/docker-compose.prod.yml run --rm erp-grants
 ```
 
 ### Phase 3: Rolling Application Deployment
@@ -59,7 +60,7 @@ docker compose --env-file deployments/compose/.env.production -f deployments/com
 docker compose --env-file deployments/compose/.env.production -f deployments/compose/docker-compose.prod.yml up -d --no-deps erp-api
 
 # 2. Wait for API healthcheck to turn healthy
-until [ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/healthz)" == "200" ]; do
+until docker compose --env-file deployments/compose/.env.production -f deployments/compose/docker-compose.prod.yml exec -T erp-api curl --max-time 5 -fsS http://localhost:8080/readyz; do
     echo "Waiting for erp-api to become healthy..."
     sleep 2
 done

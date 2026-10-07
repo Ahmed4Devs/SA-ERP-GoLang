@@ -2,73 +2,50 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"erp/internal/platform/config"
-	"erp/internal/platform/database"
+	"erp/internal/platform/migrationcli"
 )
 
 func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(1)
 	}
-
-	command := os.Args[1]
-
-	switch command {
+	var err error
+	switch os.Args[1] {
 	case "version":
-		cfg, err := config.Load()
-		if err != nil {
-			fmt.Printf("Saudi ERP CLI v1.0.0\n")
-			return
+		version := os.Getenv("APP_VERSION")
+		if version == "" {
+			version = "1.0.0"
 		}
-		fmt.Printf("Saudi ERP Platform v%s (%s)\n", cfg.AppVersion, cfg.Environment)
-
+		fmt.Printf("Saudi ERP CLI v%s\n", version)
 	case "migrate":
-		migrateCmd := flag.NewFlagSet("migrate", flag.ExitOnError)
-		direction := migrateCmd.String("dir", "up", "Migration direction: up, down, or status")
-		migrationsDir := migrateCmd.String("path", "database/migrations", "Path to migrations directory")
-		_ = migrateCmd.Parse(os.Args[2:])
-
-		cfg, err := config.Load()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
-			os.Exit(1)
-		}
-
-		ctx := context.Background()
-		switch *direction {
-		case "up":
-			if err := database.MigrateUp(ctx, cfg.Database.URL, *migrationsDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Migration failed: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Println("Database migrations applied successfully")
-		case "down":
-			if err := database.MigrateDown(ctx, cfg.Database.URL, *migrationsDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Rollback failed: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Println("Database rollback applied successfully")
-		case "status":
-			if err := database.MigrateStatus(ctx, cfg.Database.URL, *migrationsDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Status check failed: %v\n", err)
-				os.Exit(1)
-			}
-		default:
-			fmt.Fprintf(os.Stderr, "Unknown migration direction: %s (must be 'up', 'down', or 'status')\n", *direction)
-			os.Exit(1)
-		}
-
+		err = migrationcli.Run(ctx, os.Args[2:], os.Stdout, os.Stderr)
 	case "seed":
-		fmt.Println("Database seed requested: reference data seeds will execute in Phase 1")
-
-	default:
-		fmt.Printf("Unknown command: %s\n", command)
+		// Reference records are versioned with the schema. Demo business data
+		// is controlled separately by explicit API bootstrap configuration.
+		if len(os.Args) > 2 {
+			err = fmt.Errorf("seed accepts no options; use migrate up --path for a custom migration directory")
+			break
+		}
+		err = migrationcli.Run(ctx, []string{"up"}, os.Stdout, os.Stderr)
+		if err == nil {
+			fmt.Println("Reference data migrations are current. Demo records require BOOTSTRAP_DEMO_DATA_ENABLED=true in development.")
+		}
+	case "help", "--help", "-h":
 		printUsage()
+	default:
+		err = fmt.Errorf("unknown command: %s", os.Args[1])
+		printUsage()
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -76,9 +53,8 @@ func main() {
 func printUsage() {
 	fmt.Println("Saudi ERP CLI Utility")
 	fmt.Println("Usage: erp-cli <command> [options]")
-	fmt.Println("")
 	fmt.Println("Commands:")
-	fmt.Println("  version     Show application and CLI version")
-	fmt.Println("  migrate     Run database migrations")
-	fmt.Println("  seed        Seed reference database records")
+	fmt.Println("  version                  Show application version")
+	fmt.Println("  migrate [up|down|status]  Run database migrations (--path, --timeout)")
+	fmt.Println("  seed                     Apply schema and reference-data migrations")
 }

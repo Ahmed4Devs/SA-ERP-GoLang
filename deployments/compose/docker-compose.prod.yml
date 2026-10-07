@@ -23,6 +23,30 @@ services:
     networks:
       - erp-internal
 
+  # Provision distinct installation, migration, runtime, and backup identities.
+  erp-provision:
+    image: erp-postgres:18.6
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile.postgres
+    entrypoint: ["psql", "--no-psqlrc", "--file=/provision/provision-roles.sql"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      PGDATABASE: ${POSTGRES_DB:?POSTGRES_DB is required}
+      ERP_MIGRATOR_PASSWORD: ${ERP_MIGRATOR_PASSWORD:?ERP_MIGRATOR_PASSWORD is required}
+      ERP_APP_PASSWORD: ${ERP_APP_PASSWORD:?ERP_APP_PASSWORD is required}
+      ERP_BACKUP_PASSWORD: ${ERP_BACKUP_PASSWORD:?ERP_BACKUP_PASSWORD is required}
+    volumes:
+      - ../postgres:/provision:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - erp-internal
+
   # 2. Database Schema Migration Runner
   erp-migrate:
     build:
@@ -30,10 +54,30 @@ services:
       dockerfile: deployments/docker/Dockerfile.migrate
     environment:
       GOOSE_DRIVER: postgres
-      GOOSE_DBSTRING: "${DATABASE_URL:?DATABASE_URL is required}"
+      MIGRATION_DATABASE_URL: "${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}"
     depends_on:
-      postgres:
-        condition: service_healthy
+      erp-provision:
+        condition: service_completed_successfully
+    restart: "no"
+    networks:
+      - erp-internal
+
+  erp-grants:
+    image: erp-postgres:18.6
+    build:
+      context: ../../
+      dockerfile: deployments/docker/Dockerfile.postgres
+    entrypoint: ["psql", "--no-psqlrc", "--file=/provision/grant-runtime.sql"]
+    environment:
+      PGHOST: postgres
+      PGUSER: erp_migrator
+      PGPASSWORD: ${ERP_MIGRATOR_PASSWORD:?ERP_MIGRATOR_PASSWORD is required}
+      PGDATABASE: ${POSTGRES_DB:?POSTGRES_DB is required}
+    volumes:
+      - ../postgres:/provision:ro
+    depends_on:
+      erp-migrate:
+        condition: service_completed_successfully
     restart: "no"
     networks:
       - erp-internal
@@ -54,7 +98,11 @@ services:
       TRUSTED_PROXIES: "172.16.0.0/12"
       MFA_ENCRYPTION_KEY: "${MFA_ENCRYPTION_KEY:?MFA_ENCRYPTION_KEY is required}"
       METRICS_BEARER_TOKEN: "${METRICS_BEARER_TOKEN:?METRICS_BEARER_TOKEN is required}"
-      BOOTSTRAP_ADMIN_ENABLED: "false"
+      BOOTSTRAP_ADMIN_ENABLED: "${BOOTSTRAP_ADMIN_ENABLED:-false}"
+      BOOTSTRAP_ADMIN_USERNAME: "${BOOTSTRAP_ADMIN_USERNAME:-admin}"
+      BOOTSTRAP_ADMIN_EMAIL: "${BOOTSTRAP_ADMIN_EMAIL:-}"
+      BOOTSTRAP_ADMIN_NAME: "${BOOTSTRAP_ADMIN_NAME:-Administrator}"
+      BOOTSTRAP_ADMIN_PASSWORD: "${BOOTSTRAP_ADMIN_PASSWORD:-}"
       BOOTSTRAP_DEMO_DATA_ENABLED: "false"
       MAIL_DRIVER: smtp
       SMTP_HOST: "${SMTP_HOST:?SMTP_HOST is required}"
@@ -75,7 +123,7 @@ services:
     volumes:
       - documentdata:/app/data/storage
     depends_on:
-      erp-migrate:
+      erp-grants:
         condition: service_completed_successfully
     networks:
       - erp-internal
@@ -107,7 +155,7 @@ services:
       ZATCA_BASE_URL: "${ZATCA_BASE_URL:-https://gw-fatoora.zatca.gov.sa/e-invoicing/core}"
       TZ: Asia/Riyadh
     depends_on:
-      erp-migrate:
+      erp-grants:
         condition: service_completed_successfully
     networks:
       - erp-internal
@@ -122,8 +170,8 @@ services:
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
-      POSTGRES_USER: "${POSTGRES_USER:?POSTGRES_USER is required}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
+      POSTGRES_USER: erp_backup
+      POSTGRES_PASSWORD: "${ERP_BACKUP_PASSWORD:?ERP_BACKUP_PASSWORD is required}"
       POSTGRES_DB: "${POSTGRES_DB:?POSTGRES_DB is required}"
       BACKUP_ENCRYPTION_KEY: "${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY is required}"
       RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}"
