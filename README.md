@@ -1,15 +1,17 @@
-# Saudi Enterprise ERP Platform (v1.0.0)
+# Saudi Enterprise ERP Platform
 ### منصة تخطيط الموارد المؤسسية للشركات السعودية
 
 [![Backend](https://img.shields.io/badge/Backend-Go%201.27+-00ADD8.svg?style=flat-square&logo=go)](https://go.dev/)
 [![Database](https://img.shields.io/badge/Database-PostgreSQL%2018+-336791.svg?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![Frontend](https://img.shields.io/badge/Frontend-Next.js%2016%20%7C%20TypeScript-black.svg?style=flat-square&logo=next.js)](https://nextjs.org/)
-[![ZATCA](https://img.shields.io/badge/ZATCA-Integration%20Requires%20Certification-orange.svg?style=flat-square)](#complete-functional-modules-catalog)
+[![ZATCA](https://img.shields.io/badge/ZATCA-Integration%20Requires%20Certification-orange.svg?style=flat-square)](#-functional-modules-catalog)
 [![Saudi Labor](https://img.shields.io/badge/HR-Qiwa%20%7C%20Mudad%20WPS-green.svg?style=flat-square)](#saudi-labor-law--payroll)
 [![GOSI](https://img.shields.io/badge/GOSI-Social%20Insurance%20Engine-blue.svg?style=flat-square)](#gosi-social-insurance)
-[![Release](https://img.shields.io/badge/Release-v1.0.0-gold.svg?style=flat-square)](#release-v100)
+[![Status](https://img.shields.io/badge/Status-Readiness%20work%20in%20progress-orange.svg?style=flat-square)](docs/readiness-review-2026-10-07.md)
 
 An Enterprise Resource Planning (ERP) platform for Saudi organizations. It provides production deployment controls and broad business modules, but regulatory use—especially ZATCA, WPS/Qiwa, GOSI, retention, and PDPL obligations—still requires customer-specific configuration, testing, security review, and approval by the relevant authority or qualified adviser.
+
+**Current status (2026-10-07):** the project is runnable and has verified core workflows, but the canonical specification is not complete. See the [readiness review and remaining work](docs/readiness-review-2026-10-07.md), [financial review](docs/financial-posting-review-2026-10-06.md), [user administration](docs/operations/user-administration.md), and [sales invoice workflow](docs/operations/sales-invoice-workflow.md). The module catalog describes coverage areas, not a completed release certification.
 
 ---
 
@@ -48,7 +50,7 @@ An Enterprise Resource Planning (ERP) platform for Saudi organizations. It provi
 
 ---
 
-## 📦 Complete Functional Modules Catalog
+## 📦 Functional Modules Catalog
 
 | # | Module | Package Path | Regulatory / Business Function |
 | :-: | :--- | :--- | :--- |
@@ -102,20 +104,37 @@ An Enterprise Resource Planning (ERP) platform for Saudi organizations. It provi
 - **Docker & Docker Compose**
 - **PostgreSQL**: 18+
 
-#### Running the Backend
+See [the complete local setup guide](docs/operations/local-setup.md) for native
+Windows/Bash commands and environment variables. To run the full development
+stack including its background worker:
+
 ```bash
-# 1. Run migrations
-go run github.com/pressly/goose/v3/cmd/goose -dir database/migrations postgres "postgres://erp_user:erp_pass@localhost:5432/erp_db?sslmode=disable" up
+cp .env.example .env
+docker compose up -d --build
+```
+
+Open `http://localhost:3000` and sign in using the development-only account
+`admin` / `Admin@ERP123!`. Replace these values in `.env` before first startup
+when needed.
+
+#### Running the Backend against a disposable development database
+```bash
+# 1. Set the same database configuration for migrations, API, and worker
+export DATABASE_URL='postgres://erp_user:erp_secret_password@localhost:5432/erp_dev?sslmode=disable'
+export APP_ENV=development
+export MFA_ENCRYPTION_KEY='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+go run ./cmd/erp-migrate up
 
 # 2. Start Core API Server
 go run ./cmd/erp-api
 # Listening on :8080 (Health: http://localhost:8080/healthz)
+# In another terminal with the same environment: go run ./cmd/erp-worker
 ```
 
 #### Running the Frontend Web
 ```bash
 cd apps/web
-npm install
+npm ci
 npm run dev
 # Accessible at http://localhost:3000
 ```
@@ -125,6 +144,10 @@ npm run dev
 ## 🐳 Production Deployment (Docker Compose)
 
 The production deployment orchestrates all services in isolated containers with automated database migrations, healthchecks, and Nginx edge routing:
+
+Read the [operations runbook](docs/operations/runbook.md) and
+[database role setup](docs/operations/database-roles.md) before first deployment
+or upgrading an installation that previously used one database login.
 
 ```bash
 # 1. Enter Compose directory
