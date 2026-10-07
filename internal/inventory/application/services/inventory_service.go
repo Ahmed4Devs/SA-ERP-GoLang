@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	postingapp "erp/internal/accounting/application/posting"
+	accountingdomain "erp/internal/accounting/domain"
 	"fmt"
 	"strings"
 	"time"
@@ -18,15 +20,17 @@ import (
 )
 
 type InventoryService struct {
+	ledger  *postingapp.SourceService
 	repo    ports.StockRepository
 	costing *costing.CostingService
 	db      *database.DB
 	tx      transaction.Manager
 }
 
-func NewInventoryService(repo ports.StockRepository, db *database.DB) ports.InventoryService {
+func NewInventoryService(repo ports.StockRepository, db *database.DB, ledger *postingapp.SourceService) ports.InventoryService {
 	return &InventoryService{
 		repo:    repo,
+		ledger:  ledger,
 		costing: costing.NewCostingService(repo),
 		db:      db,
 		tx:      transaction.NewManager(db.Pool),
@@ -121,6 +125,14 @@ func (s *InventoryService) postStockMovement(ctx context.Context, req ports.Post
 			return nil, fmt.Errorf("failed to get default warehouse bin: %w", err)
 		}
 		binID = defBin.ID
+	}
+
+	var scope bool
+	if err := s.db.DBTX(ctx).QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM products.items i JOIN warehouse.warehouses w ON w.legal_entity_id=i.legal_entity_id JOIN warehouse.bin_locations b ON b.warehouse_id=w.id WHERE i.id=$1 AND w.id=$2 AND b.id=$3 AND i.legal_entity_id=$4)`, req.ItemID, req.WarehouseID, binID, req.LegalEntityID).Scan(&scope); err != nil {
+		return nil, err
+	}
+	if !scope {
+		return nil, fmt.Errorf("item, warehouse and bin must belong to the movement legal entity")
 	}
 
 	// Determine direction & quantity delta
@@ -431,17 +443,26 @@ func (s *InventoryService) GetTransferOrder(ctx context.Context, id uuid.UUID) (
 
 // 6. Adjustments
 func (s *InventoryService) CreateAdjustment(ctx context.Context, req ports.CreateAdjustmentRequest) (*domain.StockAdjustment, error) {
+	if req.CreatedBy == uuid.Nil || len(req.Lines) == 0 {
+		return nil, fmt.Errorf("adjustment requires a creator and lines")
+	}
+	for _, line := range req.Lines {
+		if !line.Quantity.IsPositive() || line.UnitCost.IsNegative() {
+			return nil, fmt.Errorf("adjustment requires positive quantities and nonnegative costs")
+		}
+	}
 	adjNum := identifiers.NewDocumentNumber("ADJ", time.Now())
 	adj := domain.StockAdjustment{
-		LegalEntityID:    req.LegalEntityID,
-		AdjustmentNumber: adjNum,
-		WarehouseID:      req.WarehouseID,
-		AdjustmentType:   req.AdjustmentType,
-		ReasonCode:       req.ReasonCode,
-		Status:           domain.AdjustmentStatusDraft,
-		AdjustmentDate:   time.Now().UTC(),
-		Notes:            req.Notes,
-		CreatedBy:        req.CreatedBy,
+		LegalEntityID:      req.LegalEntityID,
+		AdjustmentNumber:   adjNum,
+		InventoryAccountID: req.InventoryAccountID, OffsetAccountID: req.OffsetAccountID,
+		WarehouseID:    req.WarehouseID,
+		AdjustmentType: req.AdjustmentType,
+		ReasonCode:     req.ReasonCode,
+		Status:         domain.AdjustmentStatusDraft,
+		AdjustmentDate: time.Now().UTC(),
+		Notes:          req.Notes,
+		CreatedBy:      req.CreatedBy,
 	}
 
 	lines := make([]domain.StockAdjustmentLine, 0, len(req.Lines))
@@ -462,8 +483,11 @@ func (s *InventoryService) CreateAdjustment(ctx context.Context, req ports.Creat
 }
 
 func (s *InventoryService) PostAdjustment(ctx context.Context, adjustmentID uuid.UUID, userID uuid.UUID) (*domain.StockAdjustment, error) {
+	if userID == uuid.Nil {
+		return nil, fmt.Errorf("posting actor is required")
+	}
 	var posted *domain.StockAdjustment
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+	err := s.ledger.WithinTx(ctx, func(txCtx context.Context) error {
 		if err := s.lockRecord(txCtx, "inventory.stock_adjustments", adjustmentID); err != nil {
 			return fmt.Errorf("failed to lock stock adjustment: %w", err)
 		}
@@ -476,6 +500,10 @@ func (s *InventoryService) PostAdjustment(ctx context.Context, adjustmentID uuid
 			return nil
 		}
 
+		if adj.CreatedBy == userID || (adj.Status != domain.AdjustmentStatusDraft && adj.Status != domain.AdjustmentStatusApproved) {
+			return fmt.Errorf("adjustment requires an independent posting actor and an open state")
+		}
+		var variance decimal.Decimal
 		docType := "STOCK_ADJUSTMENT"
 		movType := domain.MovementTypeAdjustmentIn
 		if adj.AdjustmentType == domain.AdjustmentTypeDecrease || adj.AdjustmentType == domain.AdjustmentTypeScrap || adj.AdjustmentType == domain.AdjustmentTypeDamaged {
@@ -483,7 +511,7 @@ func (s *InventoryService) PostAdjustment(ctx context.Context, adjustmentID uuid
 		}
 
 		for _, l := range adj.Lines {
-			_, err := s.postStockMovement(txCtx, ports.PostMovementRequest{
+			movement, err := s.postStockMovement(txCtx, ports.PostMovementRequest{
 				LegalEntityID:   adj.LegalEntityID,
 				MovementType:    movType,
 				ItemID:          l.ItemID,
@@ -502,9 +530,24 @@ func (s *InventoryService) PostAdjustment(ctx context.Context, adjustmentID uuid
 			if err != nil {
 				return fmt.Errorf("failed to post adjustment line: %w", err)
 			}
+			if movement.Quantity.IsPositive() {
+				variance = variance.Add(movement.TotalCost)
+			} else {
+				variance = variance.Sub(movement.TotalCost)
+			}
+		}
+		journal, err := s.postVariance(txCtx, adj.LegalEntityID, adj.ID, userID, "ADJUSTMENT", adj.AdjustmentNumber, adj.AdjustmentDate, adj.InventoryAccountID, adj.OffsetAccountID, variance)
+		if err != nil {
+			return err
+		}
+		if _, err := s.db.DBTX(txCtx).Exec(txCtx, "UPDATE inventory.stock_adjustments SET journal_entry_id=$2 WHERE id=$1", adj.ID, journal); err != nil {
+			return err
 		}
 		posted, err = s.repo.UpdateStockAdjustmentStatus(txCtx, adjustmentID, domain.AdjustmentStatusPosted, &userID)
-		return err
+		if err != nil {
+			return err
+		}
+		return s.ledger.RecordSource(txCtx, adj.LegalEntityID, userID, adj.ID, "inventory.adjustment.post", posted)
 	})
 	return posted, err
 }
@@ -515,14 +558,23 @@ func (s *InventoryService) ListAdjustments(ctx context.Context, legalEntityID uu
 
 // 7. Counts
 func (s *InventoryService) CreateStockCount(ctx context.Context, req ports.CreateCountRequest) (*domain.StockCount, error) {
+	if req.CreatedBy == uuid.Nil || len(req.Lines) == 0 {
+		return nil, fmt.Errorf("count requires a creator and lines")
+	}
+	for _, line := range req.Lines {
+		if line.CountedQuantity.IsNegative() || line.UnitCost.IsNegative() {
+			return nil, fmt.Errorf("count quantities and costs cannot be negative")
+		}
+	}
 	cntNum := identifiers.NewDocumentNumber("CNT", time.Now())
 	count := domain.StockCount{
 		LegalEntityID: req.LegalEntityID,
 		CountNumber:   cntNum,
-		WarehouseID:   req.WarehouseID,
-		CountType:     req.CountType,
-		Status:        domain.CountStatusPlanned,
-		CountDate:     time.Now().UTC(),
+		CreatedBy:     &req.CreatedBy, InventoryAccountID: req.InventoryAccountID, OffsetAccountID: req.OffsetAccountID,
+		WarehouseID: req.WarehouseID,
+		CountType:   req.CountType,
+		Status:      domain.CountStatusPlanned,
+		CountDate:   time.Now().UTC(),
 	}
 
 	lines := make([]domain.StockCountLine, 0, len(req.Lines))
@@ -557,8 +609,8 @@ func (s *InventoryService) CreateStockCount(ctx context.Context, req ports.Creat
 			ItemID:          l.ItemID,
 			BinID:           &binID,
 			SystemQuantity:  sysQty,
-			CountedQuantity: l.CountedQuantity,
-			Notes:           l.Notes,
+			CountedQuantity: l.CountedQuantity, UnitCost: l.UnitCost,
+			Notes: l.Notes,
 		})
 	}
 
@@ -566,8 +618,11 @@ func (s *InventoryService) CreateStockCount(ctx context.Context, req ports.Creat
 }
 
 func (s *InventoryService) ReconcileStockCount(ctx context.Context, countID uuid.UUID, userID uuid.UUID) (*domain.StockCount, error) {
+	if userID == uuid.Nil {
+		return nil, fmt.Errorf("posting actor is required")
+	}
 	var reconciled *domain.StockCount
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+	err := s.ledger.WithinTx(ctx, func(txCtx context.Context) error {
 		if err := s.lockRecord(txCtx, "inventory.stock_counts", countID); err != nil {
 			return fmt.Errorf("failed to lock stock count: %w", err)
 		}
@@ -580,25 +635,53 @@ func (s *InventoryService) ReconcileStockCount(ctx context.Context, countID uuid
 			return nil
 		}
 
+		if cnt.CreatedBy == nil || *cnt.CreatedBy == userID || cnt.Status == domain.CountStatusCancelled {
+			return fmt.Errorf("count requires an independent posting actor and an open state")
+		}
+		var variance decimal.Decimal
 		docType := "STOCK_COUNT"
 		for _, l := range cnt.Lines {
 			if l.Variance.IsZero() {
 				continue
 			}
 
+			if err := s.lockStock(txCtx, cnt.LegalEntityID, l.ItemID, cnt.WarehouseID); err != nil {
+				return err
+			}
+			bin := uuid.Nil
+			if l.BinID != nil {
+				bin = *l.BinID
+			}
+			balance, err := s.repo.GetBalance(txCtx, domain.StockKey{LegalEntityID: cnt.LegalEntityID, ItemID: l.ItemID, WarehouseID: cnt.WarehouseID, BinID: bin})
+			if err != nil {
+				return err
+			}
+			quantity, cost := decimal.Zero, l.UnitCost
+			if balance != nil {
+				quantity = balance.QuantityOnHand
+				if balance.AverageCost.IsPositive() {
+					cost = balance.AverageCost
+				}
+			}
+			if !quantity.Equal(l.SystemQuantity) {
+				return fmt.Errorf("stock changed after count; recount before posting")
+			}
+			if l.Variance.IsPositive() && !cost.IsPositive() {
+				return fmt.Errorf("positive count variance requires a unit cost")
+			}
 			movType := domain.MovementTypeAdjustmentIn
 			qty := l.Variance.Abs()
 			if l.Variance.IsNegative() {
 				movType = domain.MovementTypeAdjustmentOut
 			}
 
-			_, err := s.postStockMovement(txCtx, ports.PostMovementRequest{
-				LegalEntityID:   cnt.LegalEntityID,
-				MovementType:    movType,
-				ItemID:          l.ItemID,
-				WarehouseID:     cnt.WarehouseID,
-				BinID:           l.BinID,
-				Quantity:        qty,
+			movement, err := s.postStockMovement(txCtx, ports.PostMovementRequest{
+				LegalEntityID: cnt.LegalEntityID,
+				MovementType:  movType,
+				ItemID:        l.ItemID,
+				WarehouseID:   cnt.WarehouseID,
+				BinID:         l.BinID,
+				Quantity:      qty, UnitCost: cost,
 				UOMID:           l.UOMID,
 				SourceDocType:   &docType,
 				SourceDocID:     &cnt.ID,
@@ -608,9 +691,24 @@ func (s *InventoryService) ReconcileStockCount(ctx context.Context, countID uuid
 			if err != nil {
 				return fmt.Errorf("failed to reconcile count variance for item %s: %w", l.ItemCode, err)
 			}
+			if movement.Quantity.IsPositive() {
+				variance = variance.Add(movement.TotalCost)
+			} else {
+				variance = variance.Sub(movement.TotalCost)
+			}
+		}
+		journal, err := s.postVariance(txCtx, cnt.LegalEntityID, cnt.ID, userID, "COUNT", cnt.CountNumber, cnt.CountDate, cnt.InventoryAccountID, cnt.OffsetAccountID, variance)
+		if err != nil {
+			return err
+		}
+		if _, err := s.db.DBTX(txCtx).Exec(txCtx, "UPDATE inventory.stock_counts SET journal_entry_id=$2 WHERE id=$1", cnt.ID, journal); err != nil {
+			return err
 		}
 		reconciled, err = s.repo.UpdateStockCountStatus(txCtx, countID, domain.CountStatusPosted, &userID)
-		return err
+		if err != nil {
+			return err
+		}
+		return s.ledger.RecordSource(txCtx, cnt.LegalEntityID, userID, cnt.ID, "inventory.count.post", reconciled)
 	})
 	return reconciled, err
 }
@@ -629,8 +727,11 @@ func (s *InventoryService) ListCostLayers(ctx context.Context, entityID uuid.UUI
 }
 
 func (s *InventoryService) ExecuteRevaluation(ctx context.Context, req ports.ExecuteRevaluationRequest) (*domain.InventoryRevaluation, error) {
+	if req.CreatedBy == uuid.Nil {
+		return nil, fmt.Errorf("revaluation actor is required")
+	}
 	var revaluation *domain.InventoryRevaluation
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+	err := s.ledger.WithinTx(ctx, func(txCtx context.Context) error {
 		if err := s.lockStock(txCtx, req.LegalEntityID, req.ItemID, req.WarehouseID); err != nil {
 			return err
 		}
@@ -641,10 +742,21 @@ func (s *InventoryService) ExecuteRevaluation(ctx context.Context, req ports.Exe
 			ItemID:         req.ItemID,
 			NewUnitCost:    req.NewUnitCost,
 			Reason:         req.Reason,
-			JournalEntryID: req.JournalEntryID,
+			JournalEntryID: nil,
 			CreatedBy:      req.CreatedBy,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		journal, err := s.postVariance(txCtx, req.LegalEntityID, revaluation.ID, req.CreatedBy, "REVALUATION", revaluation.RevaluationNumber, time.Now(), req.InventoryAccountID, req.OffsetAccountID, revaluation.VarianceAmount)
+		if err != nil {
+			return err
+		}
+		if _, err := s.db.DBTX(txCtx).Exec(txCtx, "UPDATE inventory.inventory_revaluations SET journal_entry_id=$2 WHERE id=$1", revaluation.ID, journal); err != nil {
+			return err
+		}
+		revaluation.JournalEntryID = journal
+		return s.ledger.RecordSource(txCtx, req.LegalEntityID, req.CreatedBy, revaluation.ID, "inventory.revaluation.post", revaluation)
 	})
 	return revaluation, err
 }
@@ -674,4 +786,33 @@ func (s *InventoryService) lockRecord(ctx context.Context, table string, id uuid
 
 func (s *InventoryService) ListRevaluations(ctx context.Context, entityID uuid.UUID, warehouseID, itemID *uuid.UUID, limit, offset int32) ([]domain.InventoryRevaluation, error) {
 	return s.costing.ListRevaluations(ctx, entityID, warehouseID, itemID, limit, offset)
+}
+
+func (s *InventoryService) postVariance(ctx context.Context, entity, source, actor uuid.UUID, kind, reference string, date time.Time, inventory, offset *uuid.UUID, variance decimal.Decimal) (*uuid.UUID, error) {
+	if variance.IsZero() {
+		return nil, nil
+	}
+	if inventory == nil || offset == nil {
+		return nil, fmt.Errorf("inventory and variance GL accounts must be selected")
+	}
+	stock, err := s.ledger.Account(ctx, entity, inventory, "")
+	if err != nil {
+		return nil, err
+	}
+	other, err := s.ledger.Account(ctx, entity, offset, "")
+	if err != nil {
+		return nil, err
+	}
+	if stock == other {
+		return nil, fmt.Errorf("inventory and variance accounts must differ")
+	}
+	debit, credit := stock, other
+	if variance.IsNegative() {
+		debit, credit = other, stock
+	}
+	journal, err := s.ledger.Post(ctx, "GENERAL", accountingdomain.PostingRequest{LegalEntityID: entity, SourceModule: "INVENTORY", SourceType: kind, SourceID: source, AccountingDate: date, Reference: reference, ActorID: actor, Lines: []accountingdomain.PostingLine{{AccountID: debit, TransactionDebit: variance.Abs()}, {AccountID: credit, TransactionCredit: variance.Abs()}}})
+	if err != nil {
+		return nil, err
+	}
+	return &journal, nil
 }

@@ -839,15 +839,16 @@ func (r *inventoryRepository) CreateStockAdjustment(ctx context.Context, adj *do
 	err := r.tx.WithinTx(ctx, func(txCtx context.Context) error {
 		qtx := r.queries(txCtx)
 		row, err := qtx.CreateStockAdjustment(txCtx, sqlc.CreateStockAdjustmentParams{
-			LegalEntityID:    toPgUUID(adj.LegalEntityID),
-			AdjustmentNumber: adj.AdjustmentNumber,
-			WarehouseID:      toPgUUID(adj.WarehouseID),
-			AdjustmentType:   string(adj.AdjustmentType),
-			ReasonCode:       adj.ReasonCode,
-			Status:           string(adj.Status),
-			AdjustmentDate:   toPgDate(adj.AdjustmentDate),
-			Notes:            toPgText(adj.Notes),
-			CreatedBy:        toPgUUID(adj.CreatedBy),
+			LegalEntityID:      toPgUUID(adj.LegalEntityID),
+			AdjustmentNumber:   adj.AdjustmentNumber,
+			InventoryAccountID: toPgUUIDPtr(adj.InventoryAccountID), OffsetAccountID: toPgUUIDPtr(adj.OffsetAccountID),
+			WarehouseID:    toPgUUID(adj.WarehouseID),
+			AdjustmentType: string(adj.AdjustmentType),
+			ReasonCode:     adj.ReasonCode,
+			Status:         string(adj.Status),
+			AdjustmentDate: toPgDate(adj.AdjustmentDate),
+			Notes:          toPgText(adj.Notes),
+			CreatedBy:      toPgUUID(adj.CreatedBy),
 		})
 		if err != nil {
 			return err
@@ -919,23 +920,24 @@ func (r *inventoryRepository) GetStockAdjustment(ctx context.Context, id uuid.UU
 	}
 
 	return &domain.StockAdjustment{
-		ID:               toUUID(row.ID),
-		LegalEntityID:    toUUID(row.LegalEntityID),
-		AdjustmentNumber: row.AdjustmentNumber,
-		WarehouseID:      toUUID(row.WarehouseID),
-		AdjustmentType:   domain.AdjustmentType(row.AdjustmentType),
-		ReasonCode:       row.ReasonCode,
-		Status:           domain.AdjustmentStatus(row.Status),
-		AdjustmentDate:   row.AdjustmentDate.Time,
-		PostedAt:         fromPgTimestamptz(row.PostedAt),
-		PostedBy:         toUUIDPtr(row.PostedBy),
-		Notes:            fromPgText(row.Notes),
-		CreatedBy:        toUUID(row.CreatedBy),
-		CreatedAt:        row.CreatedAt.Time,
-		UpdatedAt:        row.UpdatedAt.Time,
-		WarehouseCode:    row.WarehouseCode,
-		WarehouseNameAr:  row.WarehouseNameAr,
-		Lines:            lines,
+		ID:                 toUUID(row.ID),
+		LegalEntityID:      toUUID(row.LegalEntityID),
+		AdjustmentNumber:   row.AdjustmentNumber,
+		InventoryAccountID: toUUIDPtr(row.InventoryAccountID), OffsetAccountID: toUUIDPtr(row.OffsetAccountID), JournalEntryID: toUUIDPtr(row.JournalEntryID),
+		WarehouseID:     toUUID(row.WarehouseID),
+		AdjustmentType:  domain.AdjustmentType(row.AdjustmentType),
+		ReasonCode:      row.ReasonCode,
+		Status:          domain.AdjustmentStatus(row.Status),
+		AdjustmentDate:  row.AdjustmentDate.Time,
+		PostedAt:        fromPgTimestamptz(row.PostedAt),
+		PostedBy:        toUUIDPtr(row.PostedBy),
+		Notes:           fromPgText(row.Notes),
+		CreatedBy:       toUUID(row.CreatedBy),
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		WarehouseCode:   row.WarehouseCode,
+		WarehouseNameAr: row.WarehouseNameAr,
+		Lines:           lines,
 	}, nil
 }
 
@@ -956,20 +958,21 @@ func (r *inventoryRepository) ListStockAdjustments(ctx context.Context, legalEnt
 	res := make([]domain.StockAdjustment, 0, len(rows))
 	for _, row := range rows {
 		res = append(res, domain.StockAdjustment{
-			ID:               toUUID(row.ID),
-			LegalEntityID:    toUUID(row.LegalEntityID),
-			AdjustmentNumber: row.AdjustmentNumber,
-			WarehouseID:      toUUID(row.WarehouseID),
-			AdjustmentType:   domain.AdjustmentType(row.AdjustmentType),
-			ReasonCode:       row.ReasonCode,
-			Status:           domain.AdjustmentStatus(row.Status),
-			AdjustmentDate:   row.AdjustmentDate.Time,
-			PostedAt:         fromPgTimestamptz(row.PostedAt),
-			PostedBy:         toUUIDPtr(row.PostedBy),
-			Notes:            fromPgText(row.Notes),
-			CreatedAt:        row.CreatedAt.Time,
-			WarehouseCode:    row.WarehouseCode,
-			WarehouseNameAr:  row.WarehouseNameAr,
+			ID:                 toUUID(row.ID),
+			LegalEntityID:      toUUID(row.LegalEntityID),
+			AdjustmentNumber:   row.AdjustmentNumber,
+			InventoryAccountID: toUUIDPtr(row.InventoryAccountID), OffsetAccountID: toUUIDPtr(row.OffsetAccountID), JournalEntryID: toUUIDPtr(row.JournalEntryID),
+			WarehouseID:     toUUID(row.WarehouseID),
+			AdjustmentType:  domain.AdjustmentType(row.AdjustmentType),
+			ReasonCode:      row.ReasonCode,
+			Status:          domain.AdjustmentStatus(row.Status),
+			AdjustmentDate:  row.AdjustmentDate.Time,
+			PostedAt:        fromPgTimestamptz(row.PostedAt),
+			PostedBy:        toUUIDPtr(row.PostedBy),
+			Notes:           fromPgText(row.Notes),
+			CreatedAt:       row.CreatedAt.Time,
+			WarehouseCode:   row.WarehouseCode,
+			WarehouseNameAr: row.WarehouseNameAr,
 		})
 	}
 	return res, nil
@@ -995,10 +998,11 @@ func (r *inventoryRepository) CreateStockCount(ctx context.Context, count *domai
 		row, err := qtx.CreateStockCount(txCtx, sqlc.CreateStockCountParams{
 			LegalEntityID: toPgUUID(count.LegalEntityID),
 			CountNumber:   count.CountNumber,
-			WarehouseID:   toPgUUID(count.WarehouseID),
-			CountType:     string(count.CountType),
-			Status:        string(count.Status),
-			CountDate:     toPgDate(count.CountDate),
+			CreatedBy:     toPgUUIDPtr(count.CreatedBy), InventoryAccountID: toPgUUIDPtr(count.InventoryAccountID), OffsetAccountID: toPgUUIDPtr(count.OffsetAccountID),
+			WarehouseID: toPgUUID(count.WarehouseID),
+			CountType:   string(count.CountType),
+			Status:      string(count.Status),
+			CountDate:   toPgDate(count.CountDate),
 		})
 		if err != nil {
 			return err
@@ -1015,8 +1019,8 @@ func (r *inventoryRepository) CreateStockCount(ctx context.Context, count *domai
 				ItemID:          toPgUUID(l.ItemID),
 				BinID:           toPgUUIDPtr(l.BinID),
 				SystemQuantity:  toPgNumeric(l.SystemQuantity),
-				CountedQuantity: toPgNumeric(l.CountedQuantity),
-				Notes:           toPgText(l.Notes),
+				CountedQuantity: toPgNumeric(l.CountedQuantity), UnitCost: toPgNumeric(l.UnitCost),
+				Notes: toPgText(l.Notes),
 			})
 			if lErr != nil {
 				return lErr
@@ -1055,20 +1059,21 @@ func (r *inventoryRepository) GetStockCount(ctx context.Context, id uuid.UUID) (
 			UOMID:           toUUID(lr.UomID),
 			BinID:           toUUIDPtr(lr.BinID),
 			SystemQuantity:  fromPgNumeric(lr.SystemQuantity),
-			CountedQuantity: fromPgNumeric(lr.CountedQuantity),
-			Variance:        fromPgNumeric(lr.Variance),
-			Notes:           fromPgText(lr.Notes),
-			ItemCode:        lr.ItemCode,
-			ItemNameEn:      lr.ItemNameEn,
-			ItemNameAr:      lr.ItemNameAr,
-			BinCode:         fromPgText(lr.BinCode),
+			CountedQuantity: fromPgNumeric(lr.CountedQuantity), UnitCost: fromPgNumeric(lr.UnitCost),
+			Variance:   fromPgNumeric(lr.Variance),
+			Notes:      fromPgText(lr.Notes),
+			ItemCode:   lr.ItemCode,
+			ItemNameEn: lr.ItemNameEn,
+			ItemNameAr: lr.ItemNameAr,
+			BinCode:    fromPgText(lr.BinCode),
 		})
 	}
 
 	return &domain.StockCount{
-		ID:              toUUID(row.ID),
-		LegalEntityID:   toUUID(row.LegalEntityID),
-		CountNumber:     row.CountNumber,
+		ID:            toUUID(row.ID),
+		LegalEntityID: toUUID(row.LegalEntityID),
+		CountNumber:   row.CountNumber,
+		CreatedBy:     toUUIDPtr(row.CreatedBy), InventoryAccountID: toUUIDPtr(row.InventoryAccountID), OffsetAccountID: toUUIDPtr(row.OffsetAccountID), JournalEntryID: toUUIDPtr(row.JournalEntryID),
 		WarehouseID:     toUUID(row.WarehouseID),
 		CountType:       domain.CountType(row.CountType),
 		Status:          domain.CountStatus(row.Status),
@@ -1100,9 +1105,10 @@ func (r *inventoryRepository) ListStockCounts(ctx context.Context, legalEntityID
 	res := make([]domain.StockCount, 0, len(rows))
 	for _, row := range rows {
 		res = append(res, domain.StockCount{
-			ID:              toUUID(row.ID),
-			LegalEntityID:   toUUID(row.LegalEntityID),
-			CountNumber:     row.CountNumber,
+			ID:            toUUID(row.ID),
+			LegalEntityID: toUUID(row.LegalEntityID),
+			CountNumber:   row.CountNumber,
+			CreatedBy:     toUUIDPtr(row.CreatedBy), InventoryAccountID: toUUIDPtr(row.InventoryAccountID), OffsetAccountID: toUUIDPtr(row.OffsetAccountID), JournalEntryID: toUUIDPtr(row.JournalEntryID),
 			WarehouseID:     toUUID(row.WarehouseID),
 			CountType:       domain.CountType(row.CountType),
 			Status:          domain.CountStatus(row.Status),
@@ -1360,31 +1366,8 @@ func (r *inventoryRepository) GetValuationSummary(ctx context.Context, entityID 
 	return items, nil
 }
 
-func (r *inventoryRepository) UpdateStockBalanceCostAndValue(ctx context.Context, entityID, itemID, warehouseID uuid.UUID, avgCost, totalValue decimal.Decimal) (*domain.StockBalance, error) {
-	row, err := r.queries(ctx).UpdateStockBalanceCostAndValue(ctx, sqlc.UpdateStockBalanceCostAndValueParams{
-		LegalEntityID: toPgUUID(entityID),
-		ItemID:        toPgUUID(itemID),
-		WarehouseID:   toPgUUID(warehouseID),
-		AverageCost:   toPgNumeric(avgCost),
-		TotalValue:    toPgNumeric(totalValue),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &domain.StockBalance{
-		ID:                toUUID(row.ID),
-		LegalEntityID:     toUUID(row.LegalEntityID),
-		ItemID:            toUUID(row.ItemID),
-		WarehouseID:       toUUID(row.WarehouseID),
-		BinID:             toUUID(row.BinID),
-		QuantityOnHand:    fromPgNumeric(row.QuantityOnHand),
-		QuantityReserved:  fromPgNumeric(row.QuantityReserved),
-		QuantityAvailable: fromPgNumeric(row.QuantityAvailable),
-		AverageCost:       fromPgNumeric(row.AverageCost),
-		TotalValue:        fromPgNumeric(row.TotalValue),
-		UpdatedAt:         row.UpdatedAt.Time,
-		Version:           row.Version,
-	}, nil
+func (r *inventoryRepository) UpdateStockBalanceCostAndValue(ctx context.Context, entityID, itemID, warehouseID uuid.UUID, avgCost decimal.Decimal) error {
+	return r.queries(ctx).UpdateStockBalanceCostAndValue(ctx, sqlc.UpdateStockBalanceCostAndValueParams{LegalEntityID: toPgUUID(entityID), ItemID: toPgUUID(itemID), WarehouseID: toPgUUID(warehouseID), AverageCost: toPgNumeric(avgCost)})
 }
 
 func (r *inventoryRepository) GetItemCostingDetails(ctx context.Context, itemID uuid.UUID) (*domain.ItemCostingInfo, error) {

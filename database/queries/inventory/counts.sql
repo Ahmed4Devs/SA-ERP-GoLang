@@ -5,9 +5,9 @@ INSERT INTO inventory.stock_counts (
     warehouse_id,
     count_type,
     status,
-    count_date
+    count_date, created_by, inventory_account_id, offset_account_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING *;
 
@@ -25,7 +25,7 @@ RETURNING *;
 SELECT
     c.id,
     c.legal_entity_id,
-    c.count_number,
+    c.count_number, c.created_by, c.inventory_account_id, c.offset_account_id, c.journal_entry_id,
     c.warehouse_id,
     c.count_type,
     c.status,
@@ -44,7 +44,7 @@ WHERE c.id = $1;
 SELECT
     c.id,
     c.legal_entity_id,
-    c.count_number,
+    c.count_number, c.created_by, c.inventory_account_id, c.offset_account_id, c.journal_entry_id,
     c.warehouse_id,
     c.count_type,
     c.status,
@@ -68,10 +68,10 @@ INSERT INTO inventory.stock_count_lines (
     item_id,
     bin_id,
     system_quantity,
-    counted_quantity,
+    counted_quantity, unit_cost,
     notes
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $7, $6
 )
 RETURNING *;
 
@@ -82,7 +82,7 @@ SELECT
     cl.item_id,
     cl.bin_id,
     cl.system_quantity,
-    cl.counted_quantity,
+    cl.counted_quantity, cl.unit_cost,
     cl.variance,
     cl.notes,
     i.base_uom_id AS uom_id,

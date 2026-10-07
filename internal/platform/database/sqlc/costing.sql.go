@@ -606,17 +606,16 @@ func (q *Queries) UpdateCostLayerRemaining(ctx context.Context, arg UpdateCostLa
 	return i, err
 }
 
-const updateStockBalanceCostAndValue = `-- name: UpdateStockBalanceCostAndValue :one
+const updateStockBalanceCostAndValue = `-- name: UpdateStockBalanceCostAndValue :exec
 UPDATE inventory.stock_balances
 SET
     average_cost = $4,
-    total_value = $5,
+    total_value = round(quantity_on_hand * $4, 4),
     version = version + 1,
     updated_at = now()
 WHERE legal_entity_id = $1
   AND item_id = $2
   AND warehouse_id = $3
-RETURNING id, legal_entity_id, item_id, warehouse_id, bin_id, quantity_on_hand, quantity_reserved, quantity_available, average_cost, total_value, updated_at, version
 `
 
 type UpdateStockBalanceCostAndValueParams struct {
@@ -624,31 +623,14 @@ type UpdateStockBalanceCostAndValueParams struct {
 	ItemID        pgtype.UUID    `json:"item_id"`
 	WarehouseID   pgtype.UUID    `json:"warehouse_id"`
 	AverageCost   pgtype.Numeric `json:"average_cost"`
-	TotalValue    pgtype.Numeric `json:"total_value"`
 }
 
-func (q *Queries) UpdateStockBalanceCostAndValue(ctx context.Context, arg UpdateStockBalanceCostAndValueParams) (InventoryStockBalances, error) {
-	row := q.db.QueryRow(ctx, updateStockBalanceCostAndValue,
+func (q *Queries) UpdateStockBalanceCostAndValue(ctx context.Context, arg UpdateStockBalanceCostAndValueParams) error {
+	_, err := q.db.Exec(ctx, updateStockBalanceCostAndValue,
 		arg.LegalEntityID,
 		arg.ItemID,
 		arg.WarehouseID,
 		arg.AverageCost,
-		arg.TotalValue,
 	)
-	var i InventoryStockBalances
-	err := row.Scan(
-		&i.ID,
-		&i.LegalEntityID,
-		&i.ItemID,
-		&i.WarehouseID,
-		&i.BinID,
-		&i.QuantityOnHand,
-		&i.QuantityReserved,
-		&i.QuantityAvailable,
-		&i.AverageCost,
-		&i.TotalValue,
-		&i.UpdatedAt,
-		&i.Version,
-	)
-	return i, err
+	return err
 }

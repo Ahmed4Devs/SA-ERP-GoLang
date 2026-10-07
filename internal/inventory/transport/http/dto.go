@@ -76,14 +76,17 @@ type AdjustmentLineDTO struct {
 }
 
 type CreateAdjustmentRequestDTO struct {
-	WarehouseID    uuid.UUID           `json:"warehouse_id"`
-	AdjustmentType string              `json:"adjustment_type"`
-	ReasonCode     string              `json:"reason_code"`
-	Notes          string              `json:"notes,omitempty"`
-	Lines          []AdjustmentLineDTO `json:"lines"`
+	InventoryAccountID *uuid.UUID          `json:"inventory_account_id"`
+	OffsetAccountID    *uuid.UUID          `json:"offset_account_id"`
+	WarehouseID        uuid.UUID           `json:"warehouse_id"`
+	AdjustmentType     string              `json:"adjustment_type"`
+	ReasonCode         string              `json:"reason_code"`
+	Notes              string              `json:"notes,omitempty"`
+	Lines              []AdjustmentLineDTO `json:"lines"`
 }
 
 type CountLineDTO struct {
+	UnitCost        decimal.Decimal `json:"unit_cost"`
 	ItemID          uuid.UUID       `json:"item_id"`
 	BinID           *uuid.UUID      `json:"bin_id,omitempty"`
 	CountedQuantity decimal.Decimal `json:"counted_quantity"`
@@ -91,15 +94,19 @@ type CountLineDTO struct {
 }
 
 type CreateCountRequestDTO struct {
-	WarehouseID uuid.UUID      `json:"warehouse_id"`
-	CountType   string         `json:"count_type"`
-	Lines       []CountLineDTO `json:"lines"`
+	InventoryAccountID *uuid.UUID     `json:"inventory_account_id"`
+	OffsetAccountID    *uuid.UUID     `json:"offset_account_id"`
+	WarehouseID        uuid.UUID      `json:"warehouse_id"`
+	CountType          string         `json:"count_type"`
+	Lines              []CountLineDTO `json:"lines"`
 }
 
 type ExecuteRevaluationRequestDTO struct {
-	WarehouseID    uuid.UUID       `json:"warehouse_id"`
-	ItemID         uuid.UUID       `json:"item_id"`
-	NewUnitCost    decimal.Decimal `json:"new_unit_cost"`
-	Reason         string          `json:"reason"`
-	JournalEntryID *uuid.UUID      `json:"journal_entry_id,omitempty"`
+	InventoryAccountID *uuid.UUID      `json:"inventory_account_id"`
+	OffsetAccountID    *uuid.UUID      `json:"offset_account_id"`
+	WarehouseID        uuid.UUID       `json:"warehouse_id"`
+	ItemID             uuid.UUID       `json:"item_id"`
+	NewUnitCost        decimal.Decimal `json:"new_unit_cost"`
+	Reason             string          `json:"reason"`
+	JournalEntryID     *uuid.UUID      `json:"journal_entry_id,omitempty"`
 }

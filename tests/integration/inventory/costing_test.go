@@ -259,7 +259,7 @@ func TestCosting_FIFOLayerConsumption(t *testing.T) {
 
 // 3. Inventory Revaluation Test
 func TestCosting_InventoryRevaluation(t *testing.T) {
-	invMod, prodMod, _, leID, userID, ctx := setupInventoryTest(t)
+	invMod, prodMod, db, leID, userID, ctx := setupInventoryTest(t)
 
 	uoms, _ := prodMod.ProductService.ListUOMs(ctx)
 	pcsUOM := uoms[0]
@@ -302,6 +302,7 @@ func TestCosting_InventoryRevaluation(t *testing.T) {
 
 	// Revalue item from 2000 to 2200 SAR (+2000 SAR variance)
 	rev, err := invMod.InventoryService.ExecuteRevaluation(ctx, ports.ExecuteRevaluationRequest{
+		InventoryAccountID: inventoryAccount(t, db, ctx, leID, "113000"), OffsetAccountID: inventoryAccount(t, db, ctx, leID, "510000"),
 		LegalEntityID: leID,
 		WarehouseID:   mainWH.ID,
 		ItemID:        item.ID,

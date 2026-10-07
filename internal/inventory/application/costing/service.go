@@ -114,22 +114,27 @@ func (s *CostingService) ExecuteRevaluation(
 		return nil, domain.ErrNegativeUnitCost
 	}
 
-	bal, err := s.repo.GetBalance(ctx, domain.StockKey{
-		LegalEntityID: req.LegalEntityID,
-		ItemID:        req.ItemID,
-		WarehouseID:   req.WarehouseID,
-		BinID:         uuid.Nil,
-	})
+	item, err := s.repo.GetItemCostingDetails(ctx, req.ItemID)
 	if err != nil {
 		return nil, err
 	}
-	if bal == nil || bal.QuantityOnHand.IsZero() {
+	if item.CostingMethod != domain.CostingMethodWeightedAverage {
+		return nil, fmt.Errorf("revaluation is supported for weighted average costing only")
+	}
+	balances, err := s.repo.GetValuationSummary(ctx, req.LegalEntityID, &req.WarehouseID, &req.ItemID)
+	if err != nil {
+		return nil, err
+	}
+	var quantity, oldTotalValue, newTotalValue decimal.Decimal
+	for _, balance := range balances {
+		quantity = quantity.Add(balance.QuantityOnHand)
+		oldTotalValue = oldTotalValue.Add(balance.TotalValue)
+		newTotalValue = newTotalValue.Add(balance.QuantityOnHand.Mul(req.NewUnitCost).Round(4))
+	}
+	if quantity.IsZero() {
 		return nil, domain.ErrZeroQuantityRevaluation
 	}
-
-	oldUnitCost := bal.AverageCost
-	oldTotalValue := bal.TotalValue
-	newTotalValue := bal.QuantityOnHand.Mul(req.NewUnitCost).Round(4)
+	oldUnitCost := oldTotalValue.Div(quantity).Round(4)
 	varianceAmount := newTotalValue.Sub(oldTotalValue)
 
 	revNum := identifiers.NewDocumentNumber("REV", time.Now())
@@ -138,7 +143,7 @@ func (s *CostingService) ExecuteRevaluation(
 		RevaluationNumber: revNum,
 		WarehouseID:       req.WarehouseID,
 		ItemID:            req.ItemID,
-		QuantityOnHand:    bal.QuantityOnHand,
+		QuantityOnHand:    quantity,
 		OldUnitCost:       oldUnitCost,
 		NewUnitCost:       req.NewUnitCost,
 		OldTotalValue:     oldTotalValue,
@@ -155,7 +160,7 @@ func (s *CostingService) ExecuteRevaluation(
 	}
 
 	// Update stock balance atomically
-	_, err = s.repo.UpdateStockBalanceCostAndValue(ctx, req.LegalEntityID, req.ItemID, req.WarehouseID, req.NewUnitCost, newTotalValue)
+	err = s.repo.UpdateStockBalanceCostAndValue(ctx, req.LegalEntityID, req.ItemID, req.WarehouseID, req.NewUnitCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update stock balance: %w", err)
 	}

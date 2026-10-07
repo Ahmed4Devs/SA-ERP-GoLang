@@ -2,6 +2,9 @@ package inventory
 
 import (
 	"context"
+	"erp/internal/accounting"
+	postingapp "erp/internal/accounting/application/posting"
+	"erp/internal/audit"
 	"net/http"
 
 	"erp/internal/inventory/application/services"
@@ -24,7 +27,7 @@ type Module struct {
 
 func NewModule(cfg *config.Config, db *database.DB) *Module {
 	repo := postgres.NewInventoryRepository(db)
-	invSvc := services.NewInventoryService(repo, db)
+	invSvc := services.NewInventoryService(repo, db, postingapp.NewSourceService(db, accounting.NewModule(cfg, db).PostingEngine, audit.NewModule(cfg, db).Service))
 	handler := inventoryhttp.NewInventoryHandler(invSvc)
 
 	return &Module{

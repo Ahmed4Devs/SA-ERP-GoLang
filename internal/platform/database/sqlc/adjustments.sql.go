@@ -21,23 +21,25 @@ INSERT INTO inventory.stock_adjustments (
     status,
     adjustment_date,
     notes,
-    created_by
+    created_by, inventory_account_id, offset_account_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
-RETURNING id, legal_entity_id, adjustment_number, warehouse_id, adjustment_type, reason_code, status, adjustment_date, posted_at, posted_by, notes, created_by, created_at, updated_at
+RETURNING id, legal_entity_id, adjustment_number, warehouse_id, adjustment_type, reason_code, status, adjustment_date, posted_at, posted_by, notes, created_by, created_at, updated_at, inventory_account_id, offset_account_id, journal_entry_id
 `
 
 type CreateStockAdjustmentParams struct {
-	LegalEntityID    pgtype.UUID `json:"legal_entity_id"`
-	AdjustmentNumber string      `json:"adjustment_number"`
-	WarehouseID      pgtype.UUID `json:"warehouse_id"`
-	AdjustmentType   string      `json:"adjustment_type"`
-	ReasonCode       string      `json:"reason_code"`
-	Status           string      `json:"status"`
-	AdjustmentDate   pgtype.Date `json:"adjustment_date"`
-	Notes            pgtype.Text `json:"notes"`
-	CreatedBy        pgtype.UUID `json:"created_by"`
+	LegalEntityID      pgtype.UUID `json:"legal_entity_id"`
+	AdjustmentNumber   string      `json:"adjustment_number"`
+	WarehouseID        pgtype.UUID `json:"warehouse_id"`
+	AdjustmentType     string      `json:"adjustment_type"`
+	ReasonCode         string      `json:"reason_code"`
+	Status             string      `json:"status"`
+	AdjustmentDate     pgtype.Date `json:"adjustment_date"`
+	Notes              pgtype.Text `json:"notes"`
+	CreatedBy          pgtype.UUID `json:"created_by"`
+	InventoryAccountID pgtype.UUID `json:"inventory_account_id"`
+	OffsetAccountID    pgtype.UUID `json:"offset_account_id"`
 }
 
 func (q *Queries) CreateStockAdjustment(ctx context.Context, arg CreateStockAdjustmentParams) (InventoryStockAdjustments, error) {
@@ -51,6 +53,8 @@ func (q *Queries) CreateStockAdjustment(ctx context.Context, arg CreateStockAdju
 		arg.AdjustmentDate,
 		arg.Notes,
 		arg.CreatedBy,
+		arg.InventoryAccountID,
+		arg.OffsetAccountID,
 	)
 	var i InventoryStockAdjustments
 	err := row.Scan(
@@ -68,6 +72,9 @@ func (q *Queries) CreateStockAdjustment(ctx context.Context, arg CreateStockAdju
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.InventoryAccountID,
+		&i.OffsetAccountID,
+		&i.JournalEntryID,
 	)
 	return i, err
 }
@@ -133,7 +140,7 @@ const getStockAdjustmentByID = `-- name: GetStockAdjustmentByID :one
 SELECT
     a.id,
     a.legal_entity_id,
-    a.adjustment_number,
+    a.adjustment_number, a.inventory_account_id, a.offset_account_id, a.journal_entry_id,
     a.warehouse_id,
     a.adjustment_type,
     a.reason_code,
@@ -153,22 +160,25 @@ WHERE a.id = $1
 `
 
 type GetStockAdjustmentByIDRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
-	AdjustmentNumber string             `json:"adjustment_number"`
-	WarehouseID      pgtype.UUID        `json:"warehouse_id"`
-	AdjustmentType   string             `json:"adjustment_type"`
-	ReasonCode       string             `json:"reason_code"`
-	Status           string             `json:"status"`
-	AdjustmentDate   pgtype.Date        `json:"adjustment_date"`
-	PostedAt         pgtype.Timestamptz `json:"posted_at"`
-	PostedBy         pgtype.UUID        `json:"posted_by"`
-	Notes            pgtype.Text        `json:"notes"`
-	CreatedBy        pgtype.UUID        `json:"created_by"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	WarehouseCode    string             `json:"warehouse_code"`
-	WarehouseNameAr  string             `json:"warehouse_name_ar"`
+	ID                 pgtype.UUID        `json:"id"`
+	LegalEntityID      pgtype.UUID        `json:"legal_entity_id"`
+	AdjustmentNumber   string             `json:"adjustment_number"`
+	InventoryAccountID pgtype.UUID        `json:"inventory_account_id"`
+	OffsetAccountID    pgtype.UUID        `json:"offset_account_id"`
+	JournalEntryID     pgtype.UUID        `json:"journal_entry_id"`
+	WarehouseID        pgtype.UUID        `json:"warehouse_id"`
+	AdjustmentType     string             `json:"adjustment_type"`
+	ReasonCode         string             `json:"reason_code"`
+	Status             string             `json:"status"`
+	AdjustmentDate     pgtype.Date        `json:"adjustment_date"`
+	PostedAt           pgtype.Timestamptz `json:"posted_at"`
+	PostedBy           pgtype.UUID        `json:"posted_by"`
+	Notes              pgtype.Text        `json:"notes"`
+	CreatedBy          pgtype.UUID        `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	WarehouseCode      string             `json:"warehouse_code"`
+	WarehouseNameAr    string             `json:"warehouse_name_ar"`
 }
 
 func (q *Queries) GetStockAdjustmentByID(ctx context.Context, id pgtype.UUID) (GetStockAdjustmentByIDRow, error) {
@@ -178,6 +188,9 @@ func (q *Queries) GetStockAdjustmentByID(ctx context.Context, id pgtype.UUID) (G
 		&i.ID,
 		&i.LegalEntityID,
 		&i.AdjustmentNumber,
+		&i.InventoryAccountID,
+		&i.OffsetAccountID,
+		&i.JournalEntryID,
 		&i.WarehouseID,
 		&i.AdjustmentType,
 		&i.ReasonCode,
@@ -277,7 +290,7 @@ const listStockAdjustmentsByEntity = `-- name: ListStockAdjustmentsByEntity :man
 SELECT
     a.id,
     a.legal_entity_id,
-    a.adjustment_number,
+    a.adjustment_number, a.inventory_account_id, a.offset_account_id, a.journal_entry_id,
     a.warehouse_id,
     a.adjustment_type,
     a.reason_code,
@@ -307,20 +320,23 @@ type ListStockAdjustmentsByEntityParams struct {
 }
 
 type ListStockAdjustmentsByEntityRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
-	AdjustmentNumber string             `json:"adjustment_number"`
-	WarehouseID      pgtype.UUID        `json:"warehouse_id"`
-	AdjustmentType   string             `json:"adjustment_type"`
-	ReasonCode       string             `json:"reason_code"`
-	Status           string             `json:"status"`
-	AdjustmentDate   pgtype.Date        `json:"adjustment_date"`
-	PostedAt         pgtype.Timestamptz `json:"posted_at"`
-	PostedBy         pgtype.UUID        `json:"posted_by"`
-	Notes            pgtype.Text        `json:"notes"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	WarehouseCode    string             `json:"warehouse_code"`
-	WarehouseNameAr  string             `json:"warehouse_name_ar"`
+	ID                 pgtype.UUID        `json:"id"`
+	LegalEntityID      pgtype.UUID        `json:"legal_entity_id"`
+	AdjustmentNumber   string             `json:"adjustment_number"`
+	InventoryAccountID pgtype.UUID        `json:"inventory_account_id"`
+	OffsetAccountID    pgtype.UUID        `json:"offset_account_id"`
+	JournalEntryID     pgtype.UUID        `json:"journal_entry_id"`
+	WarehouseID        pgtype.UUID        `json:"warehouse_id"`
+	AdjustmentType     string             `json:"adjustment_type"`
+	ReasonCode         string             `json:"reason_code"`
+	Status             string             `json:"status"`
+	AdjustmentDate     pgtype.Date        `json:"adjustment_date"`
+	PostedAt           pgtype.Timestamptz `json:"posted_at"`
+	PostedBy           pgtype.UUID        `json:"posted_by"`
+	Notes              pgtype.Text        `json:"notes"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	WarehouseCode      string             `json:"warehouse_code"`
+	WarehouseNameAr    string             `json:"warehouse_name_ar"`
 }
 
 func (q *Queries) ListStockAdjustmentsByEntity(ctx context.Context, arg ListStockAdjustmentsByEntityParams) ([]ListStockAdjustmentsByEntityRow, error) {
@@ -342,6 +358,9 @@ func (q *Queries) ListStockAdjustmentsByEntity(ctx context.Context, arg ListStoc
 			&i.ID,
 			&i.LegalEntityID,
 			&i.AdjustmentNumber,
+			&i.InventoryAccountID,
+			&i.OffsetAccountID,
+			&i.JournalEntryID,
 			&i.WarehouseID,
 			&i.AdjustmentType,
 			&i.ReasonCode,
@@ -372,7 +391,7 @@ SET
     posted_by = CASE WHEN $2 = 'POSTED' THEN $3 ELSE posted_by END,
     updated_at = now()
 WHERE id = $1
-RETURNING id, legal_entity_id, adjustment_number, warehouse_id, adjustment_type, reason_code, status, adjustment_date, posted_at, posted_by, notes, created_by, created_at, updated_at
+RETURNING id, legal_entity_id, adjustment_number, warehouse_id, adjustment_type, reason_code, status, adjustment_date, posted_at, posted_by, notes, created_by, created_at, updated_at, inventory_account_id, offset_account_id, journal_entry_id
 `
 
 type UpdateStockAdjustmentStatusParams struct {
@@ -399,6 +418,9 @@ func (q *Queries) UpdateStockAdjustmentStatus(ctx context.Context, arg UpdateSto
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.InventoryAccountID,
+		&i.OffsetAccountID,
+		&i.JournalEntryID,
 	)
 	return i, err
 }

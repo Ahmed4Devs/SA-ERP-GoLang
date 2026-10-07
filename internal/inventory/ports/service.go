@@ -65,16 +65,19 @@ type CreateAdjustmentLineRequest struct {
 }
 
 type CreateAdjustmentRequest struct {
-	LegalEntityID  uuid.UUID                     `json:"legal_entity_id"`
-	WarehouseID    uuid.UUID                     `json:"warehouse_id"`
-	AdjustmentType domain.AdjustmentType         `json:"adjustment_type"`
-	ReasonCode     string                        `json:"reason_code"`
-	Notes          string                        `json:"notes,omitempty"`
-	CreatedBy      uuid.UUID                     `json:"created_by"`
-	Lines          []CreateAdjustmentLineRequest `json:"lines"`
+	InventoryAccountID *uuid.UUID                    `json:"inventory_account_id"`
+	OffsetAccountID    *uuid.UUID                    `json:"offset_account_id"`
+	LegalEntityID      uuid.UUID                     `json:"legal_entity_id"`
+	WarehouseID        uuid.UUID                     `json:"warehouse_id"`
+	AdjustmentType     domain.AdjustmentType         `json:"adjustment_type"`
+	ReasonCode         string                        `json:"reason_code"`
+	Notes              string                        `json:"notes,omitempty"`
+	CreatedBy          uuid.UUID                     `json:"created_by"`
+	Lines              []CreateAdjustmentLineRequest `json:"lines"`
 }
 
 type CreateCountLineRequest struct {
+	UnitCost        decimal.Decimal `json:"unit_cost"`
 	ItemID          uuid.UUID       `json:"item_id"`
 	BinID           *uuid.UUID      `json:"bin_id,omitempty"`
 	CountedQuantity decimal.Decimal `json:"counted_quantity"`
@@ -82,10 +85,13 @@ type CreateCountLineRequest struct {
 }
 
 type CreateCountRequest struct {
-	LegalEntityID uuid.UUID                `json:"legal_entity_id"`
-	WarehouseID   uuid.UUID                `json:"warehouse_id"`
-	CountType     domain.CountType         `json:"count_type"`
-	Lines         []CreateCountLineRequest `json:"lines"`
+	CreatedBy          uuid.UUID                `json:"created_by"`
+	InventoryAccountID *uuid.UUID               `json:"inventory_account_id"`
+	OffsetAccountID    *uuid.UUID               `json:"offset_account_id"`
+	LegalEntityID      uuid.UUID                `json:"legal_entity_id"`
+	WarehouseID        uuid.UUID                `json:"warehouse_id"`
+	CountType          domain.CountType         `json:"count_type"`
+	Lines              []CreateCountLineRequest `json:"lines"`
 }
 
 type InventoryService interface {
@@ -134,11 +140,13 @@ type InventoryService interface {
 }
 
 type ExecuteRevaluationRequest struct {
-	LegalEntityID  uuid.UUID       `json:"legal_entity_id"`
-	WarehouseID    uuid.UUID       `json:"warehouse_id"`
-	ItemID         uuid.UUID       `json:"item_id"`
-	NewUnitCost    decimal.Decimal `json:"new_unit_cost"`
-	Reason         string          `json:"reason"`
-	JournalEntryID *uuid.UUID      `json:"journal_entry_id,omitempty"`
-	CreatedBy      uuid.UUID       `json:"created_by"`
+	InventoryAccountID *uuid.UUID      `json:"inventory_account_id"`
+	OffsetAccountID    *uuid.UUID      `json:"offset_account_id"`
+	LegalEntityID      uuid.UUID       `json:"legal_entity_id"`
+	WarehouseID        uuid.UUID       `json:"warehouse_id"`
+	ItemID             uuid.UUID       `json:"item_id"`
+	NewUnitCost        decimal.Decimal `json:"new_unit_cost"`
+	Reason             string          `json:"reason"`
+	JournalEntryID     *uuid.UUID      `json:"journal_entry_id,omitempty"`
+	CreatedBy          uuid.UUID       `json:"created_by"`
 }

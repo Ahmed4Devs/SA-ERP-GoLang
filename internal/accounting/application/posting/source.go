@@ -2,11 +2,13 @@ package posting
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"erp/internal/accounting/domain"
 	"erp/internal/accounting/ports"
+	auditports "erp/internal/audit/ports"
 	"erp/internal/platform/database"
 	"erp/internal/platform/transaction"
 	"github.com/google/uuid"
@@ -20,6 +22,20 @@ type SourceService struct {
 	engine ports.PostingEngine
 	audit  ports.PostingAuditRecorder
 	tx     transaction.Manager
+}
+
+// RecordSource records non-journal source transitions in the same transaction,
+// including inventory counts whose net financial variance is zero.
+func (s *SourceService) RecordSource(ctx context.Context, entity, actor, id uuid.UUID, action string, snapshot any) error {
+	if _, ok := transaction.TxFromContext(ctx); !ok || actor == uuid.Nil {
+		return fmt.Errorf("source audit requires a transaction and actor")
+	}
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+	_, err = s.audit.RecordEvent(ctx, auditports.RecordEventCommand{UserID: &actor, LegalEntityID: &entity, Action: action, ResourceType: action, ResourceID: id.String(), Payload: payload})
+	return err
 }
 
 func NewSourceService(db *database.DB, engine ports.PostingEngine, audit ports.PostingAuditRecorder) *SourceService {

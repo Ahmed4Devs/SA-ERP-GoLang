@@ -2,6 +2,7 @@ package inventory_test
 
 import (
 	"context"
+	"erp/internal/accounting"
 	"errors"
 	"strings"
 	"testing"
@@ -50,6 +51,9 @@ func setupInventoryTest(t *testing.T) (*inventory.Module, *products.Module, *dat
 		t.Fatalf("failed to seed organization: %v", err)
 	}
 
+	if err := accounting.NewModule(cfg, db).SeedDefaultCOA(ctx, le.ID); err != nil {
+		t.Fatal(err)
+	}
 	// Seed tax, products, and inventory defaults
 	_ = taxMod.SeedDefaultTaxData(ctx, le.ID)
 	_ = prodMod.SeedDefaultProductsData(ctx, le.ID)
@@ -521,7 +525,7 @@ func TestInventory_TransferOrderWorkflow(t *testing.T) {
 
 // 6. Stock Adjustments
 func TestInventory_StockAdjustment(t *testing.T) {
-	invMod, prodMod, _, leID, userID, ctx := setupInventoryTest(t)
+	invMod, prodMod, db, leID, userID, ctx := setupInventoryTest(t)
 
 	uoms, _ := prodMod.ProductService.ListUOMs(ctx)
 	pcsUOM := uoms[0]
@@ -544,6 +548,7 @@ func TestInventory_StockAdjustment(t *testing.T) {
 
 	// Create Stock Adjustment: Found 5 extra helmets
 	adj, err := invMod.InventoryService.CreateAdjustment(ctx, ports.CreateAdjustmentRequest{
+		InventoryAccountID: inventoryAccount(t, db, ctx, leID, "113000"), OffsetAccountID: inventoryAccount(t, db, ctx, leID, "510000"),
 		LegalEntityID:  leID,
 		WarehouseID:    mainWH.ID,
 		AdjustmentType: domain.AdjustmentTypeFound,
@@ -564,7 +569,7 @@ func TestInventory_StockAdjustment(t *testing.T) {
 	}
 
 	// Post Adjustment
-	postedAdj, err := invMod.InventoryService.PostAdjustment(ctx, adj.ID, userID)
+	postedAdj, err := invMod.InventoryService.PostAdjustment(ctx, adj.ID, inventoryChecker(t, db, ctx))
 	if err != nil {
 		t.Fatalf("failed to post adjustment: %v", err)
 	}
@@ -922,4 +927,25 @@ func TestInventory_TransferDispatchRollsBackAllLines(t *testing.T) {
 	if movements != 0 {
 		t.Fatalf("expected all transfer movements rolled back, found %d", movements)
 	}
+}
+
+func inventoryAccount(t *testing.T, db *database.DB, ctx context.Context, entity uuid.UUID, code string) *uuid.UUID {
+	t.Helper()
+	var id uuid.UUID
+	if err := db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id=$1 AND code=$2", entity, code).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return &id
+}
+func inventoryChecker(t *testing.T, db *database.DB, ctx context.Context) uuid.UUID {
+	t.Helper()
+	var id uuid.UUID
+	err := db.Pool.QueryRow(ctx, "INSERT INTO iam.users(username,email,display_name) VALUES ('inventory-checker','inventory-checker@example.test','Inventory Checker') ON CONFLICT DO NOTHING RETURNING id").Scan(&id)
+	if err != nil {
+		err = db.Pool.QueryRow(ctx, "SELECT id FROM iam.users WHERE username='inventory-checker'").Scan(&id)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

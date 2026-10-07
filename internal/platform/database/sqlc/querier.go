@@ -719,7 +719,7 @@ type Querier interface {
 	UpdateSessionLastActive(ctx context.Context, tokenHash string) error
 	UpdateStatementLineReconciledStatus(ctx context.Context, arg UpdateStatementLineReconciledStatusParams) (BankingStatementLines, error)
 	UpdateStockAdjustmentStatus(ctx context.Context, arg UpdateStockAdjustmentStatusParams) (InventoryStockAdjustments, error)
-	UpdateStockBalanceCostAndValue(ctx context.Context, arg UpdateStockBalanceCostAndValueParams) (InventoryStockBalances, error)
+	UpdateStockBalanceCostAndValue(ctx context.Context, arg UpdateStockBalanceCostAndValueParams) error
 	UpdateStockCountLine(ctx context.Context, arg UpdateStockCountLineParams) (InventoryStockCountLines, error)
 	UpdateStockCountStatus(ctx context.Context, arg UpdateStockCountStatusParams) (InventoryStockCounts, error)
 	UpdateSupplier(ctx context.Context, arg UpdateSupplierParams) (PayablesSuppliers, error)

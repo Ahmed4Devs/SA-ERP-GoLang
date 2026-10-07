@@ -8,9 +8,9 @@ INSERT INTO inventory.stock_adjustments (
     status,
     adjustment_date,
     notes,
-    created_by
+    created_by, inventory_account_id, offset_account_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 RETURNING *;
 
@@ -28,7 +28,7 @@ RETURNING *;
 SELECT
     a.id,
     a.legal_entity_id,
-    a.adjustment_number,
+    a.adjustment_number, a.inventory_account_id, a.offset_account_id, a.journal_entry_id,
     a.warehouse_id,
     a.adjustment_type,
     a.reason_code,
@@ -50,7 +50,7 @@ WHERE a.id = $1;
 SELECT
     a.id,
     a.legal_entity_id,
-    a.adjustment_number,
+    a.adjustment_number, a.inventory_account_id, a.offset_account_id, a.journal_entry_id,
     a.warehouse_id,
     a.adjustment_type,
     a.reason_code,

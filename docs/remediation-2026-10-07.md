@@ -84,9 +84,25 @@ Disposing an already disposed asset is rejected. HTTP actors come from sessions.
 Fixed-assets race integration tests and vet pass, including closed-period
 rollback, independent actor checks and duplicate-calculation history protection.
 
+## Inventory adjustments, counts and valuation
+
+Migration 390 snapshots inventory/variance account selections and journal links
+on adjustments/counts, plus count creators and optional found-stock unit costs.
+Adjustments and counts use independent authenticated posting actors, actual
+movement costs, central journals and atomic source audits. Counts reject stale
+stock snapshots. Posting validates item/warehouse/bin entity consistency.
+
+Weighted-average revaluation now totals all bins and updates each bin using its
+own quantity; previously each bin could receive the same warehouse total.
+Its variance posts to GL atomically. FIFO/standard revaluation requires its own
+cost-layer treatment and is rejected explicitly. Inventory race integration
+tests and vet pass, including multiple bins, closed-period rollback, count
+maker-checker and duplicate reconciliation. Internal/cmd tests pass on rerun;
+the first aggregate run reported a failure without retained diagnostic output.
+
 ## Pending
 
-Transactional posting across inventory; FX snapshots and complete
+FX snapshots and complete
 configurable approval policies; business UI;
 canonical accounting/inventory tables and precision; expenses/projects;
 compliance adapters; attachment backup and release checks. This document tracks

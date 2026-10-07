@@ -1165,20 +1165,23 @@ type InventoryStockAdjustmentLines struct {
 }
 
 type InventoryStockAdjustments struct {
-	ID               pgtype.UUID        `json:"id"`
-	LegalEntityID    pgtype.UUID        `json:"legal_entity_id"`
-	AdjustmentNumber string             `json:"adjustment_number"`
-	WarehouseID      pgtype.UUID        `json:"warehouse_id"`
-	AdjustmentType   string             `json:"adjustment_type"`
-	ReasonCode       string             `json:"reason_code"`
-	Status           string             `json:"status"`
-	AdjustmentDate   pgtype.Date        `json:"adjustment_date"`
-	PostedAt         pgtype.Timestamptz `json:"posted_at"`
-	PostedBy         pgtype.UUID        `json:"posted_by"`
-	Notes            pgtype.Text        `json:"notes"`
-	CreatedBy        pgtype.UUID        `json:"created_by"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	LegalEntityID      pgtype.UUID        `json:"legal_entity_id"`
+	AdjustmentNumber   string             `json:"adjustment_number"`
+	WarehouseID        pgtype.UUID        `json:"warehouse_id"`
+	AdjustmentType     string             `json:"adjustment_type"`
+	ReasonCode         string             `json:"reason_code"`
+	Status             string             `json:"status"`
+	AdjustmentDate     pgtype.Date        `json:"adjustment_date"`
+	PostedAt           pgtype.Timestamptz `json:"posted_at"`
+	PostedBy           pgtype.UUID        `json:"posted_by"`
+	Notes              pgtype.Text        `json:"notes"`
+	CreatedBy          pgtype.UUID        `json:"created_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	InventoryAccountID pgtype.UUID        `json:"inventory_account_id"`
+	OffsetAccountID    pgtype.UUID        `json:"offset_account_id"`
+	JournalEntryID     pgtype.UUID        `json:"journal_entry_id"`
 }
 
 type InventoryStockBalances struct {
@@ -1205,20 +1208,25 @@ type InventoryStockCountLines struct {
 	CountedQuantity pgtype.Numeric `json:"counted_quantity"`
 	Variance        pgtype.Numeric `json:"variance"`
 	Notes           pgtype.Text    `json:"notes"`
+	UnitCost        pgtype.Numeric `json:"unit_cost"`
 }
 
 type InventoryStockCounts struct {
-	ID            pgtype.UUID        `json:"id"`
-	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
-	CountNumber   string             `json:"count_number"`
-	WarehouseID   pgtype.UUID        `json:"warehouse_id"`
-	CountType     string             `json:"count_type"`
-	Status        string             `json:"status"`
-	CountDate     pgtype.Date        `json:"count_date"`
-	ReconciledAt  pgtype.Timestamptz `json:"reconciled_at"`
-	ReconciledBy  pgtype.UUID        `json:"reconciled_by"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	ID                 pgtype.UUID        `json:"id"`
+	LegalEntityID      pgtype.UUID        `json:"legal_entity_id"`
+	CountNumber        string             `json:"count_number"`
+	WarehouseID        pgtype.UUID        `json:"warehouse_id"`
+	CountType          string             `json:"count_type"`
+	Status             string             `json:"status"`
+	CountDate          pgtype.Date        `json:"count_date"`
+	ReconciledAt       pgtype.Timestamptz `json:"reconciled_at"`
+	ReconciledBy       pgtype.UUID        `json:"reconciled_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	InventoryAccountID pgtype.UUID        `json:"inventory_account_id"`
+	OffsetAccountID    pgtype.UUID        `json:"offset_account_id"`
+	JournalEntryID     pgtype.UUID        `json:"journal_entry_id"`
+	CreatedBy          pgtype.UUID        `json:"created_by"`
 }
 
 type InventoryStockMovements struct {

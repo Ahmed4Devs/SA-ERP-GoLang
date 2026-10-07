@@ -214,23 +214,26 @@ const (
 )
 
 type StockAdjustment struct {
-	ID               uuid.UUID             `json:"id"`
-	LegalEntityID    uuid.UUID             `json:"legal_entity_id"`
-	AdjustmentNumber string                `json:"adjustment_number"`
-	WarehouseID      uuid.UUID             `json:"warehouse_id"`
-	AdjustmentType   AdjustmentType        `json:"adjustment_type"`
-	ReasonCode       string                `json:"reason_code"`
-	Status           AdjustmentStatus      `json:"status"`
-	AdjustmentDate   time.Time             `json:"adjustment_date"`
-	PostedAt         *time.Time            `json:"posted_at,omitempty"`
-	PostedBy         *uuid.UUID            `json:"posted_by,omitempty"`
-	Notes            string                `json:"notes,omitempty"`
-	CreatedBy        uuid.UUID             `json:"created_by"`
-	CreatedAt        time.Time             `json:"created_at"`
-	UpdatedAt        time.Time             `json:"updated_at"`
-	WarehouseCode    string                `json:"warehouse_code,omitempty"`
-	WarehouseNameAr  string                `json:"warehouse_name_ar,omitempty"`
-	Lines            []StockAdjustmentLine `json:"lines,omitempty"`
+	InventoryAccountID *uuid.UUID            `json:"inventory_account_id"`
+	OffsetAccountID    *uuid.UUID            `json:"offset_account_id"`
+	JournalEntryID     *uuid.UUID            `json:"journal_entry_id"`
+	ID                 uuid.UUID             `json:"id"`
+	LegalEntityID      uuid.UUID             `json:"legal_entity_id"`
+	AdjustmentNumber   string                `json:"adjustment_number"`
+	WarehouseID        uuid.UUID             `json:"warehouse_id"`
+	AdjustmentType     AdjustmentType        `json:"adjustment_type"`
+	ReasonCode         string                `json:"reason_code"`
+	Status             AdjustmentStatus      `json:"status"`
+	AdjustmentDate     time.Time             `json:"adjustment_date"`
+	PostedAt           *time.Time            `json:"posted_at,omitempty"`
+	PostedBy           *uuid.UUID            `json:"posted_by,omitempty"`
+	Notes              string                `json:"notes,omitempty"`
+	CreatedBy          uuid.UUID             `json:"created_by"`
+	CreatedAt          time.Time             `json:"created_at"`
+	UpdatedAt          time.Time             `json:"updated_at"`
+	WarehouseCode      string                `json:"warehouse_code,omitempty"`
+	WarehouseNameAr    string                `json:"warehouse_name_ar,omitempty"`
+	Lines              []StockAdjustmentLine `json:"lines,omitempty"`
 }
 
 type StockAdjustmentLine struct {
@@ -270,23 +273,28 @@ const (
 )
 
 type StockCount struct {
-	ID              uuid.UUID        `json:"id"`
-	LegalEntityID   uuid.UUID        `json:"legal_entity_id"`
-	CountNumber     string           `json:"count_number"`
-	WarehouseID     uuid.UUID        `json:"warehouse_id"`
-	CountType       CountType        `json:"count_type"`
-	Status          CountStatus      `json:"status"`
-	CountDate       time.Time        `json:"count_date"`
-	ReconciledAt    *time.Time       `json:"reconciled_at,omitempty"`
-	ReconciledBy    *uuid.UUID       `json:"reconciled_by,omitempty"`
-	CreatedAt       time.Time        `json:"created_at"`
-	UpdatedAt       time.Time        `json:"updated_at"`
-	WarehouseCode   string           `json:"warehouse_code,omitempty"`
-	WarehouseNameAr string           `json:"warehouse_name_ar,omitempty"`
-	Lines           []StockCountLine `json:"lines,omitempty"`
+	CreatedBy          *uuid.UUID       `json:"created_by"`
+	InventoryAccountID *uuid.UUID       `json:"inventory_account_id"`
+	OffsetAccountID    *uuid.UUID       `json:"offset_account_id"`
+	JournalEntryID     *uuid.UUID       `json:"journal_entry_id"`
+	ID                 uuid.UUID        `json:"id"`
+	LegalEntityID      uuid.UUID        `json:"legal_entity_id"`
+	CountNumber        string           `json:"count_number"`
+	WarehouseID        uuid.UUID        `json:"warehouse_id"`
+	CountType          CountType        `json:"count_type"`
+	Status             CountStatus      `json:"status"`
+	CountDate          time.Time        `json:"count_date"`
+	ReconciledAt       *time.Time       `json:"reconciled_at,omitempty"`
+	ReconciledBy       *uuid.UUID       `json:"reconciled_by,omitempty"`
+	CreatedAt          time.Time        `json:"created_at"`
+	UpdatedAt          time.Time        `json:"updated_at"`
+	WarehouseCode      string           `json:"warehouse_code,omitempty"`
+	WarehouseNameAr    string           `json:"warehouse_name_ar,omitempty"`
+	Lines              []StockCountLine `json:"lines,omitempty"`
 }
 
 type StockCountLine struct {
+	UnitCost        decimal.Decimal `json:"unit_cost"`
 	ID              uuid.UUID       `json:"id"`
 	CountID         uuid.UUID       `json:"count_id"`
 	ItemID          uuid.UUID       `json:"item_id"`

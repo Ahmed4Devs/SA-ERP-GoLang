@@ -160,17 +160,17 @@ WHERE b.legal_entity_id = sqlc.arg('legal_entity_id')
   AND (sqlc.narg('item_id')::UUID IS NULL OR b.item_id = sqlc.narg('item_id'))
 ORDER BY i.code ASC, wh.code ASC;
 
--- name: UpdateStockBalanceCostAndValue :one
+-- name: UpdateStockBalanceCostAndValue :exec
 UPDATE inventory.stock_balances
 SET
     average_cost = $4,
-    total_value = $5,
+    total_value = round(quantity_on_hand * $4, 4),
     version = version + 1,
     updated_at = now()
 WHERE legal_entity_id = $1
   AND item_id = $2
   AND warehouse_id = $3
-RETURNING *;
+;
 
 -- name: GetItemCostingDetails :one
 SELECT

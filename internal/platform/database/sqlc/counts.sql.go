@@ -18,20 +18,23 @@ INSERT INTO inventory.stock_counts (
     warehouse_id,
     count_type,
     status,
-    count_date
+    count_date, created_by, inventory_account_id, offset_account_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
-RETURNING id, legal_entity_id, count_number, warehouse_id, count_type, status, count_date, reconciled_at, reconciled_by, created_at, updated_at
+RETURNING id, legal_entity_id, count_number, warehouse_id, count_type, status, count_date, reconciled_at, reconciled_by, created_at, updated_at, inventory_account_id, offset_account_id, journal_entry_id, created_by
 `
 
 type CreateStockCountParams struct {
-	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
-	CountNumber   string      `json:"count_number"`
-	WarehouseID   pgtype.UUID `json:"warehouse_id"`
-	CountType     string      `json:"count_type"`
-	Status        string      `json:"status"`
-	CountDate     pgtype.Date `json:"count_date"`
+	LegalEntityID      pgtype.UUID `json:"legal_entity_id"`
+	CountNumber        string      `json:"count_number"`
+	WarehouseID        pgtype.UUID `json:"warehouse_id"`
+	CountType          string      `json:"count_type"`
+	Status             string      `json:"status"`
+	CountDate          pgtype.Date `json:"count_date"`
+	CreatedBy          pgtype.UUID `json:"created_by"`
+	InventoryAccountID pgtype.UUID `json:"inventory_account_id"`
+	OffsetAccountID    pgtype.UUID `json:"offset_account_id"`
 }
 
 func (q *Queries) CreateStockCount(ctx context.Context, arg CreateStockCountParams) (InventoryStockCounts, error) {
@@ -42,6 +45,9 @@ func (q *Queries) CreateStockCount(ctx context.Context, arg CreateStockCountPara
 		arg.CountType,
 		arg.Status,
 		arg.CountDate,
+		arg.CreatedBy,
+		arg.InventoryAccountID,
+		arg.OffsetAccountID,
 	)
 	var i InventoryStockCounts
 	err := row.Scan(
@@ -56,6 +62,10 @@ func (q *Queries) CreateStockCount(ctx context.Context, arg CreateStockCountPara
 		&i.ReconciledBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.InventoryAccountID,
+		&i.OffsetAccountID,
+		&i.JournalEntryID,
+		&i.CreatedBy,
 	)
 	return i, err
 }
@@ -66,12 +76,12 @@ INSERT INTO inventory.stock_count_lines (
     item_id,
     bin_id,
     system_quantity,
-    counted_quantity,
+    counted_quantity, unit_cost,
     notes
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $7, $6
 )
-RETURNING id, count_id, item_id, bin_id, system_quantity, counted_quantity, variance, notes
+RETURNING id, count_id, item_id, bin_id, system_quantity, counted_quantity, variance, notes, unit_cost
 `
 
 type CreateStockCountLineParams struct {
@@ -81,6 +91,7 @@ type CreateStockCountLineParams struct {
 	SystemQuantity  pgtype.Numeric `json:"system_quantity"`
 	CountedQuantity pgtype.Numeric `json:"counted_quantity"`
 	Notes           pgtype.Text    `json:"notes"`
+	UnitCost        pgtype.Numeric `json:"unit_cost"`
 }
 
 func (q *Queries) CreateStockCountLine(ctx context.Context, arg CreateStockCountLineParams) (InventoryStockCountLines, error) {
@@ -91,6 +102,7 @@ func (q *Queries) CreateStockCountLine(ctx context.Context, arg CreateStockCount
 		arg.SystemQuantity,
 		arg.CountedQuantity,
 		arg.Notes,
+		arg.UnitCost,
 	)
 	var i InventoryStockCountLines
 	err := row.Scan(
@@ -102,6 +114,7 @@ func (q *Queries) CreateStockCountLine(ctx context.Context, arg CreateStockCount
 		&i.CountedQuantity,
 		&i.Variance,
 		&i.Notes,
+		&i.UnitCost,
 	)
 	return i, err
 }
@@ -110,7 +123,7 @@ const getStockCountByID = `-- name: GetStockCountByID :one
 SELECT
     c.id,
     c.legal_entity_id,
-    c.count_number,
+    c.count_number, c.created_by, c.inventory_account_id, c.offset_account_id, c.journal_entry_id,
     c.warehouse_id,
     c.count_type,
     c.status,
@@ -127,19 +140,23 @@ WHERE c.id = $1
 `
 
 type GetStockCountByIDRow struct {
-	ID              pgtype.UUID        `json:"id"`
-	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
-	CountNumber     string             `json:"count_number"`
-	WarehouseID     pgtype.UUID        `json:"warehouse_id"`
-	CountType       string             `json:"count_type"`
-	Status          string             `json:"status"`
-	CountDate       pgtype.Date        `json:"count_date"`
-	ReconciledAt    pgtype.Timestamptz `json:"reconciled_at"`
-	ReconciledBy    pgtype.UUID        `json:"reconciled_by"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	WarehouseCode   string             `json:"warehouse_code"`
-	WarehouseNameAr string             `json:"warehouse_name_ar"`
+	ID                 pgtype.UUID        `json:"id"`
+	LegalEntityID      pgtype.UUID        `json:"legal_entity_id"`
+	CountNumber        string             `json:"count_number"`
+	CreatedBy          pgtype.UUID        `json:"created_by"`
+	InventoryAccountID pgtype.UUID        `json:"inventory_account_id"`
+	OffsetAccountID    pgtype.UUID        `json:"offset_account_id"`
+	JournalEntryID     pgtype.UUID        `json:"journal_entry_id"`
+	WarehouseID        pgtype.UUID        `json:"warehouse_id"`
+	CountType          string             `json:"count_type"`
+	Status             string             `json:"status"`
+	CountDate          pgtype.Date        `json:"count_date"`
+	ReconciledAt       pgtype.Timestamptz `json:"reconciled_at"`
+	ReconciledBy       pgtype.UUID        `json:"reconciled_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	WarehouseCode      string             `json:"warehouse_code"`
+	WarehouseNameAr    string             `json:"warehouse_name_ar"`
 }
 
 func (q *Queries) GetStockCountByID(ctx context.Context, id pgtype.UUID) (GetStockCountByIDRow, error) {
@@ -149,6 +166,10 @@ func (q *Queries) GetStockCountByID(ctx context.Context, id pgtype.UUID) (GetSto
 		&i.ID,
 		&i.LegalEntityID,
 		&i.CountNumber,
+		&i.CreatedBy,
+		&i.InventoryAccountID,
+		&i.OffsetAccountID,
+		&i.JournalEntryID,
 		&i.WarehouseID,
 		&i.CountType,
 		&i.Status,
@@ -170,7 +191,7 @@ SELECT
     cl.item_id,
     cl.bin_id,
     cl.system_quantity,
-    cl.counted_quantity,
+    cl.counted_quantity, cl.unit_cost,
     cl.variance,
     cl.notes,
     i.base_uom_id AS uom_id,
@@ -192,6 +213,7 @@ type ListStockCountLinesRow struct {
 	BinID           pgtype.UUID    `json:"bin_id"`
 	SystemQuantity  pgtype.Numeric `json:"system_quantity"`
 	CountedQuantity pgtype.Numeric `json:"counted_quantity"`
+	UnitCost        pgtype.Numeric `json:"unit_cost"`
 	Variance        pgtype.Numeric `json:"variance"`
 	Notes           pgtype.Text    `json:"notes"`
 	UomID           pgtype.UUID    `json:"uom_id"`
@@ -217,6 +239,7 @@ func (q *Queries) ListStockCountLines(ctx context.Context, countID pgtype.UUID) 
 			&i.BinID,
 			&i.SystemQuantity,
 			&i.CountedQuantity,
+			&i.UnitCost,
 			&i.Variance,
 			&i.Notes,
 			&i.UomID,
@@ -239,7 +262,7 @@ const listStockCountsByEntity = `-- name: ListStockCountsByEntity :many
 SELECT
     c.id,
     c.legal_entity_id,
-    c.count_number,
+    c.count_number, c.created_by, c.inventory_account_id, c.offset_account_id, c.journal_entry_id,
     c.warehouse_id,
     c.count_type,
     c.status,
@@ -267,18 +290,22 @@ type ListStockCountsByEntityParams struct {
 }
 
 type ListStockCountsByEntityRow struct {
-	ID              pgtype.UUID        `json:"id"`
-	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
-	CountNumber     string             `json:"count_number"`
-	WarehouseID     pgtype.UUID        `json:"warehouse_id"`
-	CountType       string             `json:"count_type"`
-	Status          string             `json:"status"`
-	CountDate       pgtype.Date        `json:"count_date"`
-	ReconciledAt    pgtype.Timestamptz `json:"reconciled_at"`
-	ReconciledBy    pgtype.UUID        `json:"reconciled_by"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	WarehouseCode   string             `json:"warehouse_code"`
-	WarehouseNameAr string             `json:"warehouse_name_ar"`
+	ID                 pgtype.UUID        `json:"id"`
+	LegalEntityID      pgtype.UUID        `json:"legal_entity_id"`
+	CountNumber        string             `json:"count_number"`
+	CreatedBy          pgtype.UUID        `json:"created_by"`
+	InventoryAccountID pgtype.UUID        `json:"inventory_account_id"`
+	OffsetAccountID    pgtype.UUID        `json:"offset_account_id"`
+	JournalEntryID     pgtype.UUID        `json:"journal_entry_id"`
+	WarehouseID        pgtype.UUID        `json:"warehouse_id"`
+	CountType          string             `json:"count_type"`
+	Status             string             `json:"status"`
+	CountDate          pgtype.Date        `json:"count_date"`
+	ReconciledAt       pgtype.Timestamptz `json:"reconciled_at"`
+	ReconciledBy       pgtype.UUID        `json:"reconciled_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	WarehouseCode      string             `json:"warehouse_code"`
+	WarehouseNameAr    string             `json:"warehouse_name_ar"`
 }
 
 func (q *Queries) ListStockCountsByEntity(ctx context.Context, arg ListStockCountsByEntityParams) ([]ListStockCountsByEntityRow, error) {
@@ -300,6 +327,10 @@ func (q *Queries) ListStockCountsByEntity(ctx context.Context, arg ListStockCoun
 			&i.ID,
 			&i.LegalEntityID,
 			&i.CountNumber,
+			&i.CreatedBy,
+			&i.InventoryAccountID,
+			&i.OffsetAccountID,
+			&i.JournalEntryID,
 			&i.WarehouseID,
 			&i.CountType,
 			&i.Status,
@@ -326,7 +357,7 @@ SET
     counted_quantity = $2,
     notes = $3
 WHERE id = $1
-RETURNING id, count_id, item_id, bin_id, system_quantity, counted_quantity, variance, notes
+RETURNING id, count_id, item_id, bin_id, system_quantity, counted_quantity, variance, notes, unit_cost
 `
 
 type UpdateStockCountLineParams struct {
@@ -347,6 +378,7 @@ func (q *Queries) UpdateStockCountLine(ctx context.Context, arg UpdateStockCount
 		&i.CountedQuantity,
 		&i.Variance,
 		&i.Notes,
+		&i.UnitCost,
 	)
 	return i, err
 }
@@ -359,7 +391,7 @@ SET
     reconciled_by = CASE WHEN $2 = 'POSTED' THEN $3 ELSE reconciled_by END,
     updated_at = now()
 WHERE id = $1
-RETURNING id, legal_entity_id, count_number, warehouse_id, count_type, status, count_date, reconciled_at, reconciled_by, created_at, updated_at
+RETURNING id, legal_entity_id, count_number, warehouse_id, count_type, status, count_date, reconciled_at, reconciled_by, created_at, updated_at, inventory_account_id, offset_account_id, journal_entry_id, created_by
 `
 
 type UpdateStockCountStatusParams struct {
@@ -383,6 +415,10 @@ func (q *Queries) UpdateStockCountStatus(ctx context.Context, arg UpdateStockCou
 		&i.ReconciledBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.InventoryAccountID,
+		&i.OffsetAccountID,
+		&i.JournalEntryID,
+		&i.CreatedBy,
 	)
 	return i, err
 }

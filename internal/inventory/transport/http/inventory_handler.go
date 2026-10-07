@@ -631,6 +631,7 @@ func (h *InventoryHandler) CreateAdjustment(w http.ResponseWriter, r *http.Reque
 	}
 
 	req := ports.CreateAdjustmentRequest{
+		InventoryAccountID: dto.InventoryAccountID, OffsetAccountID: dto.OffsetAccountID,
 		LegalEntityID:  leID,
 		WarehouseID:    dto.WarehouseID,
 		AdjustmentType: domain.AdjustmentType(dto.AdjustmentType),
@@ -699,6 +700,11 @@ func (h *InventoryHandler) ListStockCounts(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *InventoryHandler) CreateStockCount(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required")
+		return
+	}
 	leID, err := h.resolveLegalEntityID(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_SCOPE", err.Error())
@@ -716,12 +722,13 @@ func (h *InventoryHandler) CreateStockCount(w http.ResponseWriter, r *http.Reque
 		lines = append(lines, ports.CreateCountLineRequest{
 			ItemID:          l.ItemID,
 			BinID:           l.BinID,
-			CountedQuantity: l.CountedQuantity,
-			Notes:           l.Notes,
+			CountedQuantity: l.CountedQuantity, UnitCost: l.UnitCost,
+			Notes: l.Notes,
 		})
 	}
 
 	req := ports.CreateCountRequest{
+		CreatedBy: actor.ID, InventoryAccountID: dto.InventoryAccountID, OffsetAccountID: dto.OffsetAccountID,
 		LegalEntityID: leID,
 		WarehouseID:   dto.WarehouseID,
 		CountType:     domain.CountType(dto.CountType),
@@ -853,6 +860,7 @@ func (h *InventoryHandler) ExecuteRevaluation(w http.ResponseWriter, r *http.Req
 	}
 
 	rev, err := h.inventoryService.ExecuteRevaluation(r.Context(), ports.ExecuteRevaluationRequest{
+		InventoryAccountID: req.InventoryAccountID, OffsetAccountID: req.OffsetAccountID,
 		LegalEntityID:  leID,
 		WarehouseID:    req.WarehouseID,
 		ItemID:         req.ItemID,
