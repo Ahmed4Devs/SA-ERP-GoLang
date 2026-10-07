@@ -264,14 +264,14 @@ INSERT INTO payables.supplier_invoice_lines (
     invoice_id, line_number, item_id, expense_account_id,
     description, quantity, unit_price,
     discount_percent, discount_amount,
-    tax_rate, tax_amount, subtotal, total_amount
+    tax_rate, tax_amount, subtotal, total_amount, tax_code_id
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7,
     $8, $9,
-    $10, $11, $12, $13
+    $10, $11, $12, $13, $14
 )
-RETURNING id, invoice_id, line_number, item_id, expense_account_id, description, quantity, unit_price, discount_percent, discount_amount, tax_rate, tax_amount, subtotal, total_amount, created_at
+RETURNING id, invoice_id, line_number, item_id, expense_account_id, description, quantity, unit_price, discount_percent, discount_amount, tax_rate, tax_amount, subtotal, total_amount, created_at, tax_code_id
 `
 
 type CreateSupplierInvoiceLineParams struct {
@@ -288,6 +288,7 @@ type CreateSupplierInvoiceLineParams struct {
 	TaxAmount        pgtype.Numeric `json:"tax_amount"`
 	Subtotal         pgtype.Numeric `json:"subtotal"`
 	TotalAmount      pgtype.Numeric `json:"total_amount"`
+	TaxCodeID        pgtype.UUID    `json:"tax_code_id"`
 }
 
 func (q *Queries) CreateSupplierInvoiceLine(ctx context.Context, arg CreateSupplierInvoiceLineParams) (PayablesSupplierInvoiceLines, error) {
@@ -305,6 +306,7 @@ func (q *Queries) CreateSupplierInvoiceLine(ctx context.Context, arg CreateSuppl
 		arg.TaxAmount,
 		arg.Subtotal,
 		arg.TotalAmount,
+		arg.TaxCodeID,
 	)
 	var i PayablesSupplierInvoiceLines
 	err := row.Scan(
@@ -323,6 +325,7 @@ func (q *Queries) CreateSupplierInvoiceLine(ctx context.Context, arg CreateSuppl
 		&i.Subtotal,
 		&i.TotalAmount,
 		&i.CreatedAt,
+		&i.TaxCodeID,
 	)
 	return i, err
 }
@@ -621,7 +624,7 @@ func (q *Queries) ListSupplierCreditNotes(ctx context.Context, arg ListSupplierC
 
 const listSupplierInvoiceLines = `-- name: ListSupplierInvoiceLines :many
 SELECT 
-    sil.id, sil.invoice_id, sil.line_number, sil.item_id, sil.expense_account_id, sil.description, sil.quantity, sil.unit_price, sil.discount_percent, sil.discount_amount, sil.tax_rate, sil.tax_amount, sil.subtotal, sil.total_amount, sil.created_at,
+    sil.id, sil.invoice_id, sil.line_number, sil.item_id, sil.expense_account_id, sil.description, sil.quantity, sil.unit_price, sil.discount_percent, sil.discount_amount, sil.tax_rate, sil.tax_amount, sil.subtotal, sil.total_amount, sil.created_at, sil.tax_code_id,
     p.code AS item_code,
     p.name_en AS item_name_en,
     p.name_ar AS item_name_ar,
@@ -650,6 +653,7 @@ type ListSupplierInvoiceLinesRow struct {
 	Subtotal             pgtype.Numeric     `json:"subtotal"`
 	TotalAmount          pgtype.Numeric     `json:"total_amount"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	TaxCodeID            pgtype.UUID        `json:"tax_code_id"`
 	ItemCode             pgtype.Text        `json:"item_code"`
 	ItemNameEn           pgtype.Text        `json:"item_name_en"`
 	ItemNameAr           pgtype.Text        `json:"item_name_ar"`
@@ -682,6 +686,7 @@ func (q *Queries) ListSupplierInvoiceLines(ctx context.Context, invoiceID pgtype
 			&i.Subtotal,
 			&i.TotalAmount,
 			&i.CreatedAt,
+			&i.TaxCodeID,
 			&i.ItemCode,
 			&i.ItemNameEn,
 			&i.ItemNameAr,

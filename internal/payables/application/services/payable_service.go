@@ -7,6 +7,8 @@ import (
 	"sort"
 	"time"
 
+	postingapp "erp/internal/accounting/application/posting"
+	accountingdomain "erp/internal/accounting/domain"
 	"erp/internal/payables/domain"
 	"erp/internal/payables/ports"
 	"erp/internal/platform/database"
@@ -17,6 +19,7 @@ import (
 )
 
 type payableService struct {
+	ledger       *postingapp.SourceService
 	supplierRepo ports.SupplierRepository
 	payableRepo  ports.PayableRepository
 	db           *database.DB
@@ -27,8 +30,10 @@ func NewPayableService(
 	supplierRepo ports.SupplierRepository,
 	payableRepo ports.PayableRepository,
 	db *database.DB,
+	ledger *postingapp.SourceService,
 ) ports.PayableService {
 	return &payableService{
+		ledger:       ledger,
 		supplierRepo: supplierRepo,
 		payableRepo:  payableRepo,
 		db:           db,
@@ -57,21 +62,26 @@ func (s *payableService) createSupplierInvoice(ctx context.Context, cmd ports.Cr
 	if err != nil {
 		return nil, err
 	}
+	if supp.LegalEntityID != cmd.LegalEntityID {
+		return nil, errors.New("supplier legal entity mismatch")
+	}
 	if supp.Status == domain.SupplierStatusBlocked {
 		return nil, domain.ErrSupplierBlocked
 	}
 
 	invDate := time.Now()
 	if cmd.InvoiceDate != "" {
-		if parsed, err := time.Parse("2006-01-02", cmd.InvoiceDate); err == nil {
-			invDate = parsed
+		invDate, err = time.Parse("2006-01-02", cmd.InvoiceDate)
+		if err != nil {
+			return nil, errors.New("invalid invoice date")
 		}
 	}
 
 	dueDate := invDate.AddDate(0, 0, 30)
 	if cmd.DueDate != "" {
-		if parsed, err := time.Parse("2006-01-02", cmd.DueDate); err == nil {
-			dueDate = parsed
+		dueDate, err = time.Parse("2006-01-02", cmd.DueDate)
+		if err != nil {
+			return nil, errors.New("invalid due date")
 		}
 	}
 
@@ -90,7 +100,17 @@ func (s *payableService) createSupplierInvoice(ctx context.Context, cmd ports.Cr
 
 	rate := cmd.ExchangeRate
 	if rate.IsZero() {
+		var base string
+		if err := s.db.DBTX(ctx).QueryRow(ctx, "SELECT base_currency FROM organization.legal_entities WHERE id=$1", cmd.LegalEntityID).Scan(&base); err != nil {
+			return nil, err
+		}
+		if curr != base {
+			return nil, errors.New("foreign-currency invoice requires an exchange rate")
+		}
 		rate = decimal.NewFromInt(1)
+	}
+	if !rate.IsPositive() {
+		return nil, errors.New("exchange rate must be positive")
 	}
 
 	var subtotal, totalDiscount, taxableAmt, taxAmt, grandTotal decimal.Decimal
@@ -103,7 +123,16 @@ func (s *payableService) createSupplierInvoice(ctx context.Context, cmd ports.Cr
 		if l.UnitPrice.LessThan(decimal.Zero) {
 			return nil, errors.New("line unit price cannot be negative")
 		}
+		if l.DiscountPercent.IsNegative() || l.DiscountPercent.GreaterThan(decimal.NewFromInt(100)) {
+			return nil, errors.New("discount percent must be between zero and 100")
+		}
 
+		taxCode, taxRate, err := s.resolveInputTax(ctx, cmd.LegalEntityID, l.TaxCodeID, invDate, l.TaxRate)
+		if err != nil {
+			return nil, err
+		}
+		l.TaxCodeID = &taxCode
+		l.TaxRate = taxRate
 		lSub, lDisc, lTax, lTot := domain.CalculateLineAmounts(l.Quantity, l.UnitPrice, l.DiscountPercent, l.TaxRate)
 
 		subtotal = subtotal.Add(lSub)
@@ -127,6 +156,7 @@ func (s *payableService) createSupplierInvoice(ctx context.Context, cmd ports.Cr
 			DiscountPercent:  l.DiscountPercent,
 			DiscountAmount:   lDisc,
 			TaxRate:          l.TaxRate,
+			TaxCodeID:        l.TaxCodeID,
 			TaxAmount:        lTax,
 			Subtotal:         lSub,
 			TotalAmount:      lTot,
@@ -166,8 +196,11 @@ func (s *payableService) ListSupplierInvoices(ctx context.Context, filter ports.
 }
 
 func (s *payableService) PostSupplierInvoice(ctx context.Context, id uuid.UUID, userID *uuid.UUID) (*domain.SupplierInvoice, error) {
+	if userID == nil || *userID == uuid.Nil {
+		return nil, errors.New("posting actor is required")
+	}
 	var invoice *domain.SupplierInvoice
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+	err := s.ledger.WithinTx(ctx, func(txCtx context.Context) error {
 		var err error
 		invoice, err = s.postSupplierInvoice(txCtx, id, userID)
 		return err
@@ -186,6 +219,9 @@ func (s *payableService) postSupplierInvoice(ctx context.Context, id uuid.UUID, 
 	}
 	if inv.Status == domain.InvoiceStatusPosted {
 		return nil, domain.ErrInvoiceAlreadyPosted
+	}
+	if inv.Status != domain.InvoiceStatusDraft {
+		return nil, errors.New("only draft supplier invoices can be posted")
 	}
 
 	// 1. Create AP Open Item in payables.open_items
@@ -209,114 +245,36 @@ func (s *payableService) postSupplierInvoice(ctx context.Context, id uuid.UUID, 
 		return nil, fmt.Errorf("failed to create AP open item: %w", err)
 	}
 
-	// 2. Post GL Entry (Double-Entry Bookkeeping):
-	// Debits: Expense Accounts (line.ExpenseAccountID) for line subtotals
-	// Debit: Input VAT (114000) for tax amount
-	// Credit: Trade Payables AP (211000) for total amount
-	var jeIDPtr *uuid.UUID
-	var journalID, periodID, apAccountID, vatAccountID uuid.UUID
-
-	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.journals WHERE legal_entity_id = $1 ORDER BY (code = 'PURCHASE') DESC LIMIT 1", inv.LegalEntityID).Scan(&journalID); err != nil {
-		return nil, fmt.Errorf("purchase journal is not configured: %w", err)
+	apID, err := s.ledger.Account(ctx, inv.LegalEntityID, inv.SupplierLiabilityAccID, "211000")
+	if err != nil {
+		return nil, err
 	}
-	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.fiscal_periods WHERE legal_entity_id = $1 AND status = 'OPEN' LIMIT 1", inv.LegalEntityID).Scan(&periodID); err != nil {
-		return nil, fmt.Errorf("open fiscal period is not configured: %w", err)
-	}
-
-	// Liability account: check supplier default or 211000
-	if inv.SupplierLiabilityAccID != nil {
-		apAccountID = *inv.SupplierLiabilityAccID
-	} else {
-		if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '211000' LIMIT 1", inv.LegalEntityID).Scan(&apAccountID); err != nil {
-			return nil, fmt.Errorf("trade payables account 211000 is not configured: %w", err)
-		}
-	}
-	if inv.TaxAmount.GreaterThan(decimal.Zero) {
-		if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '114000' LIMIT 1", inv.LegalEntityID).Scan(&vatAccountID); err != nil {
-			return nil, fmt.Errorf("input VAT account 114000 is not configured: %w", err)
-		}
-	}
-
-	creator := userID
-	if creator == nil {
-		creator = inv.CreatedByUserID
-	}
-	if creator == nil {
-		var adminID uuid.UUID
-		if err := dbtx.QueryRow(ctx, "SELECT id FROM iam.users LIMIT 1").Scan(&adminID); err != nil {
-			return nil, fmt.Errorf("failed to resolve invoice creator: %w", err)
-		}
-		creator = &adminID
-	}
-
-	if journalID != uuid.Nil && periodID != uuid.Nil && apAccountID != uuid.Nil {
-		journalEntryID := uuid.New()
-		entryNumber := identifiers.NewDocumentNumber("JE-PINV", time.Now())
-
-		_, err = dbtx.Exec(ctx, `
-			INSERT INTO accounting.journal_entries (
-				id, legal_entity_id, journal_id, fiscal_period_id, entry_number,
-				accounting_date, status, source_module, source_type, source_id,
-				reference, description, currency_code, exchange_rate,
-				total_debit, total_credit, created_by, posted_by, posted_at
-			) VALUES (
-				$1, $2, $3, $4, $5, $6, 'DRAFT', 'PAYABLES', 'SUPPLIER_INVOICE', $7,
-				$8, $9, $10, 1.0, $11, $11, $12, $12, now()
-			)
-		`, journalEntryID, inv.LegalEntityID, journalID, periodID, entryNumber, inv.InvoiceDate, inv.ID,
-			inv.InvoiceNumber, "إثبات فاتورة مشتريات مورد - "+inv.SupplierInvoiceNumber, inv.CurrencyCode, inv.TotalAmount, creator)
-
+	lines := make([]accountingdomain.PostingLine, 0, len(inv.Lines)+2)
+	for _, line := range inv.Lines {
+		account, err := s.ledger.Account(ctx, inv.LegalEntityID, &line.ExpenseAccountID, "523000")
 		if err != nil {
-			return nil, fmt.Errorf("failed to create supplier-invoice journal entry: %w", err)
+			return nil, err
 		}
-		jeIDPtr = &journalEntryID
-		lineNum := 1
-
-		// Line 1..N: Debit Expense/Asset accounts
-		for _, line := range inv.Lines {
-			expAcc := line.ExpenseAccountID
-			if expAcc == uuid.Nil {
-				if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '523000' AND is_active AND allow_posting LIMIT 1", inv.LegalEntityID).Scan(&expAcc); err != nil {
-					return nil, fmt.Errorf("posting expense account 523000 is not configured: %w", err)
-				}
-			}
-			if _, err = dbtx.Exec(ctx, `
-					INSERT INTO accounting.journal_lines (
-						journal_entry_id, legal_entity_id, line_number, account_id,
-						description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
-					) VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $7, 0)
-				`, journalEntryID, inv.LegalEntityID, lineNum, expAcc, line.Description, inv.CurrencyCode, line.Subtotal); err != nil {
-				return nil, fmt.Errorf("failed to create expense journal line: %w", err)
-			}
-			lineNum++
-		}
-
-		// Tax Line: Debit Input VAT (114000) if > 0
-		if inv.TaxAmount.GreaterThan(decimal.Zero) && vatAccountID != uuid.Nil {
-			if _, err = dbtx.Exec(ctx, `
-					INSERT INTO accounting.journal_lines (
-						journal_entry_id, legal_entity_id, line_number, account_id,
-						description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
-					) VALUES ($1, $2, $3, $4, 'ضريبة القيمة المضافة على المدخلات', $5, $6, 0, $6, 0)
-				`, journalEntryID, inv.LegalEntityID, lineNum, vatAccountID, inv.CurrencyCode, inv.TaxAmount); err != nil {
-				return nil, fmt.Errorf("failed to create input VAT journal line: %w", err)
-			}
-			lineNum++
-		}
-
-		// AP Line: Credit Trade Payables (211000)
-		if _, err = dbtx.Exec(ctx, `
-				INSERT INTO accounting.journal_lines (
-					journal_entry_id, legal_entity_id, line_number, account_id,
-					description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
-				) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, 0, $7)
-			`, journalEntryID, inv.LegalEntityID, lineNum, apAccountID, "الموردون والدائنون التجاريون - "+inv.SupplierNameAr, inv.CurrencyCode, inv.TotalAmount); err != nil {
-			return nil, fmt.Errorf("failed to create trade-payables journal line: %w", err)
-		}
-		if _, err = dbtx.Exec(ctx, "UPDATE accounting.journal_entries SET status = 'POSTED', posted_by = $1, posted_at = now() WHERE id = $2", creator, journalEntryID); err != nil {
-			return nil, fmt.Errorf("failed to post supplier-invoice journal entry: %w", err)
+		if line.Subtotal.IsPositive() {
+			lines = append(lines, accountingdomain.PostingLine{AccountID: account, TransactionDebit: line.Subtotal, Description: line.Description})
 		}
 	}
+	if inv.TaxAmount.IsPositive() {
+		vat, err := s.ledger.Account(ctx, inv.LegalEntityID, nil, "114000")
+		if err != nil {
+			return nil, err
+		}
+		lines = append(lines, accountingdomain.PostingLine{AccountID: vat, TransactionDebit: inv.TaxAmount})
+	}
+	lines = append(lines, accountingdomain.PostingLine{AccountID: apID, TransactionCredit: inv.TotalAmount})
+	journalID, err := s.ledger.Post(ctx, "PURCHASE", accountingdomain.PostingRequest{LegalEntityID: inv.LegalEntityID, SourceModule: "PAYABLES", SourceType: "SUPPLIER_INVOICE", SourceID: inv.ID, AccountingDate: inv.InvoiceDate, CurrencyCode: inv.CurrencyCode, ExchangeRate: inv.ExchangeRate, Reference: inv.InvoiceNumber, ActorID: *userID, Lines: lines})
+	if err != nil {
+		return nil, err
+	}
+	if err := s.postInputTax(ctx, inv, journalID, *userID); err != nil {
+		return nil, err
+	}
+	jeIDPtr := &journalID
 
 	err = s.payableRepo.UpdateSupplierInvoiceStatus(ctx, id, domain.InvoiceStatusPosted, jeIDPtr)
 	if err != nil {
@@ -456,8 +414,11 @@ func (s *payableService) ListSupplierPayments(ctx context.Context, filter ports.
 }
 
 func (s *payableService) PostSupplierPayment(ctx context.Context, id uuid.UUID, userID *uuid.UUID) (*domain.SupplierPayment, error) {
+	if userID == nil || *userID == uuid.Nil {
+		return nil, errors.New("posting actor is required")
+	}
 	var payment *domain.SupplierPayment
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+	err := s.ledger.WithinTx(ctx, func(txCtx context.Context) error {
 		var err error
 		payment, err = s.postSupplierPayment(txCtx, id, userID)
 		return err
@@ -525,79 +486,17 @@ func (s *payableService) postSupplierPayment(ctx context.Context, id uuid.UUID, 
 		}
 	}
 
-	// 2. Double-Entry GL Journal Entry:
-	// Debit: Trade Payables AP (211000) for payment amount
-	// Credit: Disbursement Bank/Cash Account (payment.DisbursementAccountID) for payment amount
-	var jeIDPtr *uuid.UUID
-	var journalID, periodID, apAccountID uuid.UUID
-
-	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.journals WHERE legal_entity_id = $1 ORDER BY (code = 'PAYMENT') DESC LIMIT 1", payment.LegalEntityID).Scan(&journalID); err != nil {
-		return nil, fmt.Errorf("payment journal is not configured: %w", err)
-	}
-	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.fiscal_periods WHERE legal_entity_id = $1 AND status = 'OPEN' LIMIT 1", payment.LegalEntityID).Scan(&periodID); err != nil {
-		return nil, fmt.Errorf("open fiscal period is not configured: %w", err)
-	}
-
-	if supp.DefaultLiabilityAccountID != nil {
-		apAccountID = *supp.DefaultLiabilityAccountID
-	} else {
-		if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '211000' LIMIT 1", payment.LegalEntityID).Scan(&apAccountID); err != nil {
-			return nil, fmt.Errorf("trade payables account 211000 is not configured: %w", err)
-		}
-	}
-
-	creator := userID
-	if creator == nil {
-		creator = payment.CreatedByUserID
-	}
-	if creator == nil {
-		var adminID uuid.UUID
-		if err := dbtx.QueryRow(ctx, "SELECT id FROM iam.users LIMIT 1").Scan(&adminID); err != nil {
-			return nil, fmt.Errorf("failed to resolve payment creator: %w", err)
-		}
-		creator = &adminID
-	}
-
-	journalEntryID := uuid.New()
-	entryNumber := identifiers.NewDocumentNumber("JE-PAY", time.Now())
-
-	_, err = dbtx.Exec(ctx, `
-			INSERT INTO accounting.journal_entries (
-				id, legal_entity_id, journal_id, fiscal_period_id, entry_number,
-				accounting_date, status, source_module, source_type, source_id,
-				reference, description, currency_code, exchange_rate,
-				total_debit, total_credit, created_by, posted_by, posted_at
-			) VALUES (
-				$1, $2, $3, $4, $5, $6, 'DRAFT', 'PAYABLES', 'PAYMENT', $7,
-				$8, $9, $10, 1.0, $11, $11, $12, $12, now()
-			)
-	`, journalEntryID, payment.LegalEntityID, journalID, periodID, entryNumber, payment.PaymentDate, payment.ID,
-		payment.PaymentNumber, "سند صرف مورد - "+payment.PaymentNumber, payment.CurrencyCode, payment.Amount, creator)
+	apID, err := s.ledger.Account(ctx, payment.LegalEntityID, supp.DefaultLiabilityAccountID, "211000")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create supplier-payment journal entry: %w", err)
+		return nil, err
 	}
-
-	jeIDPtr = &journalEntryID
-	if _, err = dbtx.Exec(ctx, `
-				INSERT INTO accounting.journal_lines (
-					journal_entry_id, legal_entity_id, line_number, account_id,
-					description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
-				) VALUES ($1, $2, 1, $3, $4, $5, $6, 0, $6, 0)
-	`, journalEntryID, payment.LegalEntityID, apAccountID, "سداد للمورد - "+supp.NameAr, payment.CurrencyCode, payment.Amount); err != nil {
-		return nil, fmt.Errorf("failed to create payables journal line: %w", err)
+	journalID, err := s.ledger.Post(ctx, "BANK", accountingdomain.PostingRequest{LegalEntityID: payment.LegalEntityID, SourceModule: "PAYABLES", SourceType: "PAYMENT", SourceID: payment.ID, AccountingDate: payment.PaymentDate, CurrencyCode: payment.CurrencyCode, Reference: payment.PaymentNumber, ActorID: *userID, Lines: []accountingdomain.PostingLine{
+		{AccountID: apID, TransactionDebit: payment.Amount}, {AccountID: payment.DisbursementAccountID, TransactionCredit: payment.Amount},
+	}})
+	if err != nil {
+		return nil, err
 	}
-
-	if _, err = dbtx.Exec(ctx, `
-				INSERT INTO accounting.journal_lines (
-					journal_entry_id, legal_entity_id, line_number, account_id,
-					description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
-				) VALUES ($1, $2, 2, $3, 'حساب الصرف / البنك', $4, 0, $5, 0, $5)
-	`, journalEntryID, payment.LegalEntityID, payment.DisbursementAccountID, payment.CurrencyCode, payment.Amount); err != nil {
-		return nil, fmt.Errorf("failed to create disbursement journal line: %w", err)
-	}
-	if _, err = dbtx.Exec(ctx, "UPDATE accounting.journal_entries SET status = 'POSTED', posted_by = $1, posted_at = now() WHERE id = $2", creator, journalEntryID); err != nil {
-		return nil, fmt.Errorf("failed to post supplier-payment journal entry: %w", err)
-	}
+	jeIDPtr := &journalID
 
 	err = s.payableRepo.UpdateSupplierPaymentStatus(ctx, id, "POSTED", payment.AllocatedAmount, payment.UnallocatedAmount, jeIDPtr)
 	if err != nil {

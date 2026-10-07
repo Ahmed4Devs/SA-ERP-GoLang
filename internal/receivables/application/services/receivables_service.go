@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	postingapp "erp/internal/accounting/application/posting"
+	accountingdomain "erp/internal/accounting/domain"
 	"fmt"
 	"sort"
 	"time"
@@ -17,6 +19,7 @@ import (
 )
 
 type receivablesService struct {
+	ledger          *postingapp.SourceService
 	customerRepo    ports.CustomerRepository
 	receivablesRepo ports.ReceivablesRepository
 	db              *database.DB
@@ -27,8 +30,10 @@ func NewReceivablesService(
 	customerRepo ports.CustomerRepository,
 	receivablesRepo ports.ReceivablesRepository,
 	db *database.DB,
+	ledger *postingapp.SourceService,
 ) ports.ReceivablesService {
 	return &receivablesService{
+		ledger:          ledger,
 		customerRepo:    customerRepo,
 		receivablesRepo: receivablesRepo,
 		db:              db,
@@ -38,7 +43,7 @@ func NewReceivablesService(
 
 func (s *receivablesService) CreateReceipt(ctx context.Context, cmd ports.CreateReceiptCommand) (*domain.Receipt, error) {
 	var receipt *domain.Receipt
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+	err := s.ledger.WithinTx(ctx, func(txCtx context.Context) error {
 		var err error
 		receipt, err = s.createReceipt(txCtx, cmd)
 		return err
@@ -47,6 +52,9 @@ func (s *receivablesService) CreateReceipt(ctx context.Context, cmd ports.Create
 }
 
 func (s *receivablesService) createReceipt(ctx context.Context, cmd ports.CreateReceiptCommand) (*domain.Receipt, error) {
+	if cmd.CreatedByUserID == nil || *cmd.CreatedByUserID == uuid.Nil {
+		return nil, fmt.Errorf("receipt actor is required")
+	}
 	if cmd.Amount.LessThanOrEqual(decimal.Zero) {
 		return nil, fmt.Errorf("receipt amount must be greater than zero")
 	}
@@ -172,6 +180,19 @@ func (s *receivablesService) createReceipt(ctx context.Context, cmd ports.Create
 		}
 	}
 
+	arID, err := s.ledger.Account(ctx, cmd.LegalEntityID, customer.DefaultAccountID, "112000")
+	if err != nil {
+		return nil, err
+	}
+	journalID, err := s.ledger.Post(ctx, "BANK", accountingdomain.PostingRequest{LegalEntityID: cmd.LegalEntityID, SourceModule: "RECEIVABLES", SourceType: "RECEIPT", SourceID: createdReceipt.ID, AccountingDate: receiptDate, CurrencyCode: currencyCode, Reference: receiptNumber, ActorID: *cmd.CreatedByUserID, Lines: []accountingdomain.PostingLine{
+		{AccountID: cmd.DepositAccountID, TransactionDebit: cmd.Amount}, {AccountID: arID, TransactionCredit: cmd.Amount},
+	}})
+	if err != nil {
+		return nil, err
+	}
+	if _, err = s.db.DBTX(ctx).Exec(ctx, "UPDATE receivables.receipts SET journal_entry_id=$1 WHERE id=$2", journalID, createdReceipt.ID); err != nil {
+		return nil, err
+	}
 	return s.receivablesRepo.GetReceiptByID(ctx, createdReceipt.ID)
 }
 

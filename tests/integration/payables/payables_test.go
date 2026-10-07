@@ -16,6 +16,7 @@ import (
 	"erp/internal/platform/config"
 	"erp/internal/platform/database"
 	"erp/internal/platform/transaction"
+	"erp/internal/tax"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -50,6 +51,9 @@ func setupPayablesTest(t *testing.T) (*payables.Module, *database.DB, uuid.UUID,
 	// 2. Seed accounting defaults (Chart of accounts)
 	_ = accMod.SeedDefaultCOA(ctx, le.ID)
 
+	if err := tax.NewModule(cfg, db).SeedDefaultTaxData(ctx, le.ID); err != nil {
+		t.Fatal(err)
+	}
 	// 3. Seed payables defaults
 	_ = payMod.SeedDefaultPayablesData(ctx, le.ID)
 

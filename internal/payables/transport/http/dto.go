@@ -89,6 +89,7 @@ type CreateSupplierInvoiceRequest struct {
 }
 
 type CreateSupplierInvoiceLineRequest struct {
+	TaxCodeID        *uuid.UUID      `json:"tax_code_id,omitempty"`
 	ItemID           *uuid.UUID      `json:"item_id,omitempty"`
 	ExpenseAccountID uuid.UUID       `json:"expense_account_id"`
 	Description      string          `json:"description"`

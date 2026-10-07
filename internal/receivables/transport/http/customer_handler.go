@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	iamhttp "erp/internal/iam/transport/http"
 	"errors"
 	"net/http"
 	"strconv"
@@ -324,6 +325,11 @@ func (h *CustomerHandler) ListPaymentTerms(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *CustomerHandler) CreateReceipt(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
 	var req CreateReceiptRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body: " + err.Error()})
@@ -349,6 +355,7 @@ func (h *CustomerHandler) CreateReceipt(w http.ResponseWriter, r *http.Request) 
 		ReferenceNumber:  req.ReferenceNumber,
 		Notes:            req.Notes,
 		Allocations:      allocations,
+		CreatedByUserID:  &actor.ID,
 	}
 
 	receipt, err := h.receivablesService.CreateReceipt(r.Context(), cmd)
@@ -420,6 +427,11 @@ func (h *CustomerHandler) ListReceipts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CustomerHandler) AllocateReceipt(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid receipt id"})
@@ -440,7 +452,7 @@ func (h *CustomerHandler) AllocateReceipt(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	if err := h.receivablesService.AllocateReceipt(r.Context(), id, allocations, nil); err != nil {
+	if err := h.receivablesService.AllocateReceipt(r.Context(), id, allocations, &actor.ID); err != nil {
 		respondJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}

@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	iamhttp "erp/internal/iam/transport/http"
 	"errors"
 	"net/http"
 	"strconv"
@@ -334,6 +335,11 @@ func (h *PayableHandler) CreatePaymentTerm(w http.ResponseWriter, r *http.Reques
 // Supplier Invoices
 
 func (h *PayableHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
 	var req CreateSupplierInvoiceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body: " + err.Error()})
@@ -350,10 +356,12 @@ func (h *PayableHandler) CreateInvoice(w http.ResponseWriter, r *http.Request) {
 			UnitPrice:        l.UnitPrice,
 			DiscountPercent:  l.DiscountPercent,
 			TaxRate:          l.TaxRate,
+			TaxCodeID:        l.TaxCodeID,
 		})
 	}
 
 	cmd := ports.CreateSupplierInvoiceCmd{
+		CreatedByUserID:       &actor.ID,
 		LegalEntityID:         req.LegalEntityID,
 		InvoiceNumber:         req.InvoiceNumber,
 		SupplierInvoiceNumber: req.SupplierInvoiceNumber,
@@ -440,6 +448,11 @@ func (h *PayableHandler) ListInvoices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PayableHandler) PostInvoice(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -447,7 +460,7 @@ func (h *PayableHandler) PostInvoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	posted, err := h.payableService.PostSupplierInvoice(r.Context(), id, nil)
+	posted, err := h.payableService.PostSupplierInvoice(r.Context(), id, &actor.ID)
 	if err != nil {
 		respondJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
@@ -459,6 +472,11 @@ func (h *PayableHandler) PostInvoice(w http.ResponseWriter, r *http.Request) {
 // Supplier Payments
 
 func (h *PayableHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
 	var req CreateSupplierPaymentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body: " + err.Error()})
@@ -485,6 +503,7 @@ func (h *PayableHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 		ReferenceNumber:       req.ReferenceNumber,
 		Notes:                 req.Notes,
 		Allocations:           allocs,
+		CreatedByUserID:       &actor.ID,
 	}
 
 	created, err := h.payableService.CreateSupplierPayment(r.Context(), cmd)
@@ -559,6 +578,11 @@ func (h *PayableHandler) ListPayments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PayableHandler) PostPayment(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -566,7 +590,7 @@ func (h *PayableHandler) PostPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	posted, err := h.payableService.PostSupplierPayment(r.Context(), id, nil)
+	posted, err := h.payableService.PostSupplierPayment(r.Context(), id, &actor.ID)
 	if err != nil {
 		respondJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return

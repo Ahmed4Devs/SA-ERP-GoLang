@@ -220,6 +220,7 @@ type SupplierInvoice struct {
 }
 
 type SupplierInvoiceLine struct {
+	TaxCodeID            *uuid.UUID      `json:"tax_code_id,omitempty"`
 	ID                   uuid.UUID       `json:"id"`
 	InvoiceID            uuid.UUID       `json:"invoice_id"`
 	LineNumber           int32           `json:"line_number"`

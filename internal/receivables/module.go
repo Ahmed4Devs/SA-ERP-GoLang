@@ -2,6 +2,9 @@ package receivables
 
 import (
 	"context"
+	"erp/internal/accounting"
+	postingapp "erp/internal/accounting/application/posting"
+	"erp/internal/audit"
 	"net/http"
 
 	"erp/internal/platform/config"
@@ -28,7 +31,7 @@ func NewModule(cfg *config.Config, db *database.DB) *Module {
 	receivablesRepo := postgres.NewReceivablesRepository(db)
 
 	customerSvc := services.NewCustomerService(customerRepo, db)
-	receivablesSvc := services.NewReceivablesService(customerRepo, receivablesRepo, db)
+	receivablesSvc := services.NewReceivablesService(customerRepo, receivablesRepo, db, postingapp.NewSourceService(db, accounting.NewModule(cfg, db).PostingEngine, audit.NewModule(cfg, db).Service))
 
 	handler := receivableshttp.NewCustomerHandler(customerSvc, receivablesSvc)
 

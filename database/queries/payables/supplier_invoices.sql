@@ -87,12 +87,12 @@ INSERT INTO payables.supplier_invoice_lines (
     invoice_id, line_number, item_id, expense_account_id,
     description, quantity, unit_price,
     discount_percent, discount_amount,
-    tax_rate, tax_amount, subtotal, total_amount
+    tax_rate, tax_amount, subtotal, total_amount, tax_code_id
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, $7,
     $8, $9,
-    $10, $11, $12, $13
+    $10, $11, $12, $13, $14
 )
 RETURNING *;
 

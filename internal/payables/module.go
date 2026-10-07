@@ -2,6 +2,9 @@ package payables
 
 import (
 	"context"
+	"erp/internal/accounting"
+	postingapp "erp/internal/accounting/application/posting"
+	"erp/internal/audit"
 	"net/http"
 
 	"erp/internal/payables/application/services"
@@ -28,7 +31,7 @@ func NewModule(cfg *config.Config, db *database.DB) *Module {
 	payableRepo := postgres.NewPayableRepository(db)
 
 	supplierSvc := services.NewSupplierService(supplierRepo)
-	payableSvc := services.NewPayableService(supplierRepo, payableRepo, db)
+	payableSvc := services.NewPayableService(supplierRepo, payableRepo, db, postingapp.NewSourceService(db, accounting.NewModule(cfg, db).PostingEngine, audit.NewModule(cfg, db).Service))
 
 	handler := payableshttp.NewPayableHandler(supplierSvc, payableSvc)
 

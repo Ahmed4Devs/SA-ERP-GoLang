@@ -45,6 +45,7 @@ type CreateSupplierInvoiceCmd struct {
 }
 
 type CreateSupplierInvoiceLineCmd struct {
+	TaxCodeID        *uuid.UUID
 	ItemID           *uuid.UUID
 	ExpenseAccountID uuid.UUID
 	Description      string

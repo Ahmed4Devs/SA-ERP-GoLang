@@ -1639,6 +1639,7 @@ type PayablesSupplierInvoiceLines struct {
 	Subtotal         pgtype.Numeric     `json:"subtotal"`
 	TotalAmount      pgtype.Numeric     `json:"total_amount"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	TaxCodeID        pgtype.UUID        `json:"tax_code_id"`
 }
 
 type PayablesSupplierInvoices struct {
