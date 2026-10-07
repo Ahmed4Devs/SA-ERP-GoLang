@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"erp/internal/payables/domain"
@@ -346,6 +347,9 @@ func (s *payableService) createSupplierPayment(ctx context.Context, cmd ports.Cr
 	if err != nil {
 		return nil, err
 	}
+	if supp.LegalEntityID != cmd.LegalEntityID {
+		return nil, errors.New("supplier does not belong to payment legal entity")
+	}
 	if supp.Status == domain.SupplierStatusBlocked {
 		return nil, domain.ErrSupplierBlocked
 	}
@@ -371,9 +375,31 @@ func (s *payableService) createSupplierPayment(ctx context.Context, cmd ports.Cr
 	}
 
 	totalAlloc := decimal.Zero
-	for _, a := range cmd.Allocations {
-		if a.Amount.GreaterThan(decimal.Zero) {
-			totalAlloc = totalAlloc.Add(a.Amount)
+	cmd.Allocations = append([]ports.PaymentAllocationCmd(nil), cmd.Allocations...)
+	seen := make(map[uuid.UUID]bool)
+	for _, allocation := range cmd.Allocations {
+		if allocation.OpenItemID == uuid.Nil || !allocation.Amount.IsPositive() {
+			return nil, errors.New("allocation requires an invoice and a positive amount")
+		}
+		if seen[allocation.OpenItemID] {
+			return nil, errors.New("duplicate invoice allocation")
+		}
+		seen[allocation.OpenItemID] = true
+		totalAlloc = totalAlloc.Add(allocation.Amount)
+	}
+	sort.Slice(cmd.Allocations, func(i, j int) bool {
+		return cmd.Allocations[i].OpenItemID.String() < cmd.Allocations[j].OpenItemID.String()
+	})
+	for _, allocation := range cmd.Allocations {
+		oi, err := s.payableRepo.LockOpenItem(ctx, allocation.OpenItemID)
+		if err != nil {
+			return nil, err
+		}
+		if oi.LegalEntityID != cmd.LegalEntityID || oi.SupplierID != cmd.SupplierID || oi.CurrencyCode != curr {
+			return nil, errors.New("allocation must match payment legal entity, supplier and currency")
+		}
+		if allocation.Amount.GreaterThan(oi.RemainingAmount) {
+			return nil, domain.ErrOverAllocation
 		}
 	}
 
@@ -457,6 +483,9 @@ func (s *payableService) postSupplierPayment(ctx context.Context, id uuid.UUID, 
 		return nil, err
 	}
 
+	sort.Slice(payment.Allocations, func(i, j int) bool {
+		return payment.Allocations[i].OpenItemID.String() < payment.Allocations[j].OpenItemID.String()
+	})
 	// 1. Process allocations on open items
 	for _, alloc := range payment.Allocations {
 		oi, err := s.payableRepo.LockOpenItem(ctx, alloc.OpenItemID)
@@ -464,6 +493,9 @@ func (s *payableService) postSupplierPayment(ctx context.Context, id uuid.UUID, 
 			return nil, err
 		}
 
+		if !alloc.AllocatedAmount.IsPositive() || oi.LegalEntityID != payment.LegalEntityID || oi.SupplierID != payment.SupplierID || oi.CurrencyCode != payment.CurrencyCode {
+			return nil, errors.New("allocation must be positive and match payment legal entity, supplier and currency")
+		}
 		if alloc.AllocatedAmount.GreaterThan(oi.RemainingAmount) {
 			return nil, domain.ErrOverAllocation
 		}

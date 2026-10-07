@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"erp/internal/platform/database"
@@ -54,6 +55,9 @@ func (s *receivablesService) createReceipt(ctx context.Context, cmd ports.Create
 	if err != nil {
 		return nil, err
 	}
+	if customer.LegalEntityID != cmd.LegalEntityID {
+		return nil, fmt.Errorf("customer does not belong to receipt legal entity")
+	}
 	if customer.Status == domain.CustomerStatusBlocked {
 		return nil, fmt.Errorf("cannot issue receipt for blocked customer: %s", customer.CustomerNumber)
 	}
@@ -74,13 +78,11 @@ func (s *receivablesService) createReceipt(ctx context.Context, cmd ports.Create
 
 	receiptNumber := identifiers.NewDocumentNumber("REC", time.Now())
 
-	totalAllocated := decimal.Zero
-	for _, alloc := range cmd.Allocations {
-		if alloc.AllocatedAmount.LessThanOrEqual(decimal.Zero) {
-			continue
-		}
-		totalAllocated = totalAllocated.Add(alloc.AllocatedAmount)
+	ordered, totalAllocated, err := validateAllocations(cmd.Allocations)
+	if err != nil {
+		return nil, err
 	}
+	cmd.Allocations = ordered
 
 	if totalAllocated.GreaterThan(cmd.Amount) {
 		return nil, domain.ErrOverAllocation
@@ -129,6 +131,12 @@ func (s *receivablesService) createReceipt(ctx context.Context, cmd ports.Create
 			return nil, fmt.Errorf("failed to lock open item %s: %w", alloc.OpenItemID, err)
 		}
 
+		if openItem.LegalEntityID != cmd.LegalEntityID || openItem.CustomerID != cmd.CustomerID || openItem.CurrencyCode != currencyCode {
+			return nil, fmt.Errorf("allocation must match receipt legal entity, customer and currency")
+		}
+		if openItem.Status != domain.OpenItemStatusOpen && openItem.Status != domain.OpenItemStatusPartiallyPaid {
+			return nil, fmt.Errorf("allocation requires an open invoice")
+		}
 		if alloc.AllocatedAmount.GreaterThan(openItem.RemainingAmount) {
 			return nil, fmt.Errorf("allocation amount %s exceeds remaining balance %s for invoice %s: %w",
 				alloc.AllocatedAmount, openItem.RemainingAmount, openItem.DocumentNumber, domain.ErrOverAllocation)
@@ -199,10 +207,14 @@ func (s *receivablesService) allocateReceipt(ctx context.Context, receiptID uuid
 		return err
 	}
 
-	totalToAllocate := decimal.Zero
-	for _, a := range allocations {
-		totalToAllocate = totalToAllocate.Add(a.AllocatedAmount)
+	if receipt.Status != domain.ReceiptStatusPosted {
+		return fmt.Errorf("only posted receipts may be allocated")
 	}
+	ordered, totalToAllocate, err := validateAllocations(allocations)
+	if err != nil {
+		return err
+	}
+	allocations = ordered
 
 	if totalToAllocate.GreaterThan(receipt.UnallocatedAmount) {
 		return fmt.Errorf("allocation exceeds receipt unallocated amount %s: %w", receipt.UnallocatedAmount, domain.ErrOverAllocation)
@@ -218,6 +230,12 @@ func (s *receivablesService) allocateReceipt(ctx context.Context, receiptID uuid
 			return err
 		}
 
+		if openItem.LegalEntityID != receipt.LegalEntityID || openItem.CustomerID != receipt.CustomerID || openItem.CurrencyCode != receipt.CurrencyCode {
+			return fmt.Errorf("allocation must match receipt legal entity, customer and currency")
+		}
+		if openItem.Status != domain.OpenItemStatusOpen && openItem.Status != domain.OpenItemStatusPartiallyPaid {
+			return fmt.Errorf("allocation requires an open invoice")
+		}
 		if alloc.AllocatedAmount.GreaterThan(openItem.RemainingAmount) {
 			return domain.ErrOverAllocation
 		}
@@ -295,4 +313,23 @@ func (s *receivablesService) ListOpenItems(ctx context.Context, customerID uuid.
 
 func (s *receivablesService) GetCustomerAging(ctx context.Context, customerID uuid.UUID) (*domain.CustomerAgingSummary, error) {
 	return s.receivablesRepo.GetCustomerAgingSummary(ctx, customerID)
+}
+
+// Validate once so header totals and applied lines describe the same allocation.
+func validateAllocations(input []ports.AllocationCommand) ([]ports.AllocationCommand, decimal.Decimal, error) {
+	result := append([]ports.AllocationCommand(nil), input...)
+	total := decimal.Zero
+	seen := make(map[uuid.UUID]bool, len(result))
+	for _, item := range result {
+		if item.OpenItemID == uuid.Nil || !item.AllocatedAmount.IsPositive() {
+			return nil, total, fmt.Errorf("allocation requires an invoice and a positive amount")
+		}
+		if seen[item.OpenItemID] {
+			return nil, total, fmt.Errorf("duplicate invoice allocation")
+		}
+		seen[item.OpenItemID] = true
+		total = total.Add(item.AllocatedAmount)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].OpenItemID.String() < result[j].OpenItemID.String() })
+	return result, total, nil
 }

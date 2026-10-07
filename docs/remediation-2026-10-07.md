@@ -19,9 +19,18 @@ compares present and historical trial balance, balance sheet, income statement,
 general ledger and SQL reporting views before and after reversal, including an
 unposted draft that must not contribute.
 
+## Allocation integrity
+
+Receipt and supplier-payment allocations reject zero/negative amounts,
+duplicate invoice IDs, and mismatched legal entities, counterparties or
+currencies. Receipt header totals use exactly the validated set of allocations.
+Invoice rows are locked in a stable order. Integration regressions verify
+rollback and two competing receipts cannot over-settle the same available
+amount. AR and AP integration suites passed with the race detector.
+
 ## Pending
 
-Allocation validation; transactional posting across AR/AP, treasury, payroll,
+Transactional posting across AR/AP, treasury, payroll,
 assets and inventory; authenticated actors and approval policies; business UI;
 canonical accounting/inventory tables and precision; expenses/projects;
 compliance adapters; attachment backup and release checks. This document tracks
