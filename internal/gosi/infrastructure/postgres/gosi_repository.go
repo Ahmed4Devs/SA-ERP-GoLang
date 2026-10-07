@@ -699,7 +699,7 @@ func (r *Repository) LockCalculationsByPeriod(ctx context.Context, legalEntityID
 }
 
 func (r *Repository) ListCalculationLines(ctx context.Context, calcID uuid.UUID) ([]domain.CalculationLine, error) {
-	rows, err := r.q.ListGosiCalculationLines(ctx, toPgUUID(calcID))
+	rows, err := r.queries(ctx).ListGosiCalculationLines(ctx, toPgUUID(calcID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list calculation lines: %w", err)
 	}

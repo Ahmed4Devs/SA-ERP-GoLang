@@ -31,6 +31,7 @@ type Config struct {
 	Bootstrap   BootstrapConfig
 	Mail        MailConfig
 	ZATCA       ZATCAConfig
+	GOSI        GOSIConfig
 	Telemetry   TelemetryConfig
 	LogLevel    string
 }
@@ -76,6 +77,10 @@ type MailConfig struct {
 	Username string
 	Password string
 	From     string
+}
+
+type GOSIConfig struct {
+	IntegrationMode string
 }
 
 type ZATCAConfig struct {
@@ -154,6 +159,7 @@ func Load() (*Config, error) {
 			Password: getEnv("SMTP_PASSWORD", ""),
 			From:     getEnv("SMTP_FROM", ""),
 		},
+		GOSI: GOSIConfig{IntegrationMode: strings.ToLower(strings.TrimSpace(getEnv("GOSI_INTEGRATION_MODE", "file")))},
 		ZATCA: ZATCAConfig{
 			Enabled:                getBoolEnv("ZATCA_ENABLED", env != EnvProduction),
 			Environment:            strings.ToLower(getEnv("ZATCA_ENVIRONMENT", "simulation")),
@@ -177,6 +183,18 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) Validate() error {
+	switch c.GOSI.IntegrationMode {
+	case "", "manual", "file":
+	case "simulation":
+		if c.Environment == EnvProduction {
+			return errors.New("GOSI simulation is forbidden in production; use file or manual mode")
+		}
+	case "official":
+		return errors.New("official GOSI integration is unavailable until a verified API contract, credentials, and acceptance tests are implemented")
+	default:
+		return fmt.Errorf("unsupported GOSI_INTEGRATION_MODE: %q", c.GOSI.IntegrationMode)
+	}
+
 	if c.AppName == "" {
 		return errors.New("app name cannot be empty")
 	}

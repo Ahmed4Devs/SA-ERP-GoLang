@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"strings"
@@ -166,10 +167,10 @@ func (s *GosiService) RunMonthlyCalculation(ctx context.Context, legalEntityID u
 		calculations = make([]domain.ContributionCalculation, 0, len(profiles))
 
 		for _, profile := range profiles {
-			basis := decimal.NewFromInt(10000)
-			if profile.ContributionBasisOverride != nil && profile.ContributionBasisOverride.GreaterThan(decimal.Zero) {
-				basis = *profile.ContributionBasisOverride
+			if profile.ContributionBasisOverride == nil || !profile.ContributionBasisOverride.IsPositive() {
+				return fmt.Errorf("employee %s requires an explicit approved contribution basis before monthly calculation", profile.EmployeeID)
 			}
+			basis := *profile.ContributionBasisOverride
 
 			natCode := profile.NationalityCode
 			if natCode == "" {
@@ -316,12 +317,30 @@ func (s *GosiService) CreateExportBatch(ctx context.Context, legalEntityID uuid.
 		totalAmount := totalEmp.Add(totalEr)
 		generatedAt := time.Now().UTC()
 		batchNumber := identifiers.NewDocumentNumber(fmt.Sprintf("GOSI-%d%02d", year, month), generatedAt)
-		xmlContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<GOSIContributionReport xmlns="urn:sa:gosi:v1" year="%d" month="%02d">
-  <LegalEntity id="%s"/>
-  <Summary subscriberCount="%d" employeeTotal="%s" employerTotal="%s" grandTotal="%s"/>
-  <GeneratedAt>%s</GeneratedAt>
-</GOSIContributionReport>`, year, month, legalEntityID.String(), len(calcs), totalEmp.StringFixed(2), totalEr.StringFixed(2), totalAmount.StringFixed(2), generatedAt.Format(time.RFC3339))
+		report := contributionReport{
+			Year: year, Month: month, LegalEntity: reportEntity{ID: legalEntityID.String()},
+			Summary:     reportSummary{SubscriberCount: len(calcs), EmployeeTotal: totalEmp.String(), EmployerTotal: totalEr.String(), GrandTotal: totalAmount.String()},
+			GeneratedAt: generatedAt.Format(time.RFC3339),
+		}
+		for _, calc := range calcs {
+			lines, err := s.repo.ListCalculationLines(txCtx, calc.ID)
+			if err != nil {
+				return fmt.Errorf("load contribution rule snapshots: %w", err)
+			}
+			report.Employees = append(report.Employees, employeeReport(calc, lines))
+		}
+		reportXML, err := xml.MarshalIndent(report, "", "  ")
+		if err != nil {
+			return fmt.Errorf("encode local contribution report: %w", err)
+		}
+		xmlContent := xml.Header + string(reportXML)
+		validation, err := NewDefaultGOSIAdapter(s.repo).Validate(txCtx, []byte(xmlContent))
+		if err != nil {
+			return err
+		}
+		if !validation.Valid {
+			return fmt.Errorf("invalid contribution export: %s", strings.Join(validation.Errors, "; "))
+		}
 
 		batch := domain.ExportBatch{
 			ID:                  uuid.New(),
@@ -365,9 +384,11 @@ func (s *GosiService) CreateExportBatch(ctx context.Context, legalEntityID uuid.
 				"subscribers":  len(calcs),
 			},
 			ResponsePayload: map[string]any{
-				"status":   "SUCCESS",
-				"format":   "XML",
-				"filesize": len(xmlContent),
+				"status":              "LOCAL_EXPORT_CREATED",
+				"external_submission": false,
+				"schema":              "urn:erp:gosi:export:v1",
+				"format":              "XML",
+				"filesize":            len(xmlContent),
 			},
 			Status:    "SUCCESS",
 			StartedAt: generatedAt,

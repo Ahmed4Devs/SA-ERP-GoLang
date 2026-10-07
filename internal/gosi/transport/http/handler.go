@@ -8,6 +8,7 @@ import (
 
 	"erp/internal/gosi/domain"
 	"erp/internal/gosi/ports"
+	iamhttp "erp/internal/iam/transport/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -327,7 +328,12 @@ func (h *GosiHandler) CreateExportBatch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	batch, err := h.svc.CreateExportBatch(r.Context(), leID, req.Year, req.Month, nil)
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil {
+		writeError(w, http.StatusUnauthorized, "authenticated user required")
+		return
+	}
+	batch, err := h.svc.CreateExportBatch(r.Context(), leID, req.Year, req.Month, &actor.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

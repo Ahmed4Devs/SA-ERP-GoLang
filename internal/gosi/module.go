@@ -27,7 +27,7 @@ type Module struct {
 func NewModule(cfg *config.Config, db *database.DB) *Module {
 	repo := postgres.NewRepository(db)
 	svc := services.NewGosiService(repo, db)
-	adapter := services.NewDefaultGOSIAdapter(repo)
+	adapter := services.NewGOSIAdapter(repo, cfg.GOSI.IntegrationMode)
 	handler := gosihttp.NewGosiHandler(svc)
 
 	return &Module{

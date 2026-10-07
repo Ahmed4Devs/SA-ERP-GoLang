@@ -168,3 +168,29 @@ func TestProductionZATCAPolicy(t *testing.T) {
 		}
 	})
 }
+
+func TestGOSIIntegrationModePolicy(t *testing.T) {
+	t.Setenv("APP_ENV", "testing")
+	t.Setenv("GOSI_INTEGRATION_MODE", "file")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GOSI.IntegrationMode != "file" {
+		t.Fatal("default local mode not loaded")
+	}
+	for _, mode := range []string{"official", "typo"} {
+		cfg.GOSI.IntegrationMode = mode
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("unsupported mode %s accepted", mode)
+		}
+	}
+	cfg.GOSI.IntegrationMode = "simulation"
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Environment = EnvProduction
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("production simulation accepted")
+	}
+}

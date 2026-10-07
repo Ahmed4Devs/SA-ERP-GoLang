@@ -2,6 +2,7 @@ package gosi_test
 
 import (
 	"context"
+	"erp/internal/gosi/application/services"
 	"errors"
 	"strings"
 	"testing"
@@ -439,21 +440,64 @@ func TestGOSI_AdapterInterfaceValidation(t *testing.T) {
 		t.Errorf("expected valid XML file, errors: %+v", valRes.Errors)
 	}
 
-	// Test Submit
-	subRes, err := adapter.Submit(ctx, batch.ID)
-	if err != nil {
-		t.Fatalf("adapter.Submit failed: %v", err)
+	// Local export never implies portal submission or acceptance.
+	if _, err := adapter.Submit(ctx, batch.ID); !errors.Is(err, services.ErrManualSubmissionRequired) {
+		t.Fatalf("expected manual submission required, got %v", err)
 	}
-	if subRes.Status != "SUBMITTED" {
-		t.Errorf("expected SUBMITTED status, got %s", subRes.Status)
+	if _, err := adapter.Status(ctx, "invented-receipt"); !errors.Is(err, services.ErrStatusUnavailable) {
+		t.Fatalf("expected unknown external status, got %v", err)
 	}
+	simulation := services.NewGOSIAdapter(gosiMod.Repo, services.ModeSimulation)
+	result, err := simulation.Submit(ctx, batch.ID)
+	if err != nil || result.Status != "SIMULATED_SUBMITTED" || result.ExternalSubmission {
+		t.Fatalf("simulation result: %+v, %v", result, err)
+	}
+	status, err := simulation.Status(ctx, result.SubmissionID)
+	if err != nil || status.Status != "SIMULATED_SUBMITTED" || status.Mode != "simulation" {
+		t.Fatalf("simulation status: %+v, %v", status, err)
+	}
+	if _, err := simulation.Status(ctx, "SIMULATED:"+uuid.NewString()); err == nil {
+		t.Fatal("unknown batch accepted")
+	}
+	stored, err := gosiMod.Repo.GetExportBatchByID(ctx, batch.ID)
+	if err != nil || stored.Status != "GENERATED" || stored.SubmittedAt != nil || stored.ConfirmedAt != nil {
+		t.Fatalf("simulation changed actual state: %+v, %v", stored, err)
+	}
+	official := services.NewGOSIAdapter(gosiMod.Repo, services.ModeOfficial)
+	if _, err := official.Submit(ctx, batch.ID); !errors.Is(err, services.ErrOfficialIntegrationUnavailable) {
+		t.Fatalf("official mode did not fail closed: %v", err)
+	}
+	for _, invalid := range [][]byte{
+		[]byte("GOSIContributionReport LegalEntity"),
+		[]byte("<GOSIContributionReport>"),
+		append(append([]byte{}, fileBytes...), []byte("<Other/>")...),
+		[]byte(strings.Replace(string(fileBytes), `grandTotal="`, `grandTotal="9`, 1)),
+		[]byte(strings.Replace(string(fileBytes), `month="`, `month="99`, 1)),
+		[]byte(strings.Replace(string(fileBytes), `urn:erp:gosi:export:v1`, `urn:sa:gosi:official`, 1)),
+		append([]byte("<!DOCTYPE report>"), fileBytes...),
+	} {
+		result, err := adapter.Validate(ctx, invalid)
+		if err != nil || result.Valid {
+			t.Fatalf("invalid report accepted: %+v, %v", result, err)
+		}
+	}
+}
 
-	// Test Status
-	stat, err := adapter.Status(ctx, subRes.SubmissionID)
+func TestGOSI_MissingContributionBasisDoesNotInventSalary(t *testing.T) {
+	mod, _, _, leID, saudiID, _, ctx := setupGOSITest(t)
+	profile, err := mod.Repo.GetInsuranceProfileByEmployee(ctx, leID, saudiID)
 	if err != nil {
-		t.Fatalf("adapter.Status failed: %v", err)
+		t.Fatal(err)
 	}
-	if stat.Status != "CONFIRMED" {
-		t.Errorf("expected CONFIRMED status, got %s", stat.Status)
+	profile.ContributionBasisOverride = nil
+	if _, err := mod.Repo.UpdateInsuranceProfile(ctx, *profile); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mod.GosiService.RunMonthlyCalculation(ctx, leID, time.Now().Year(), int(time.Now().Month())); err == nil {
+		t.Fatal("missing contribution basis was replaced with fabricated salary")
+	}
+	calcs, err := mod.GosiService.ListCalculationsByPeriod(ctx, leID, time.Now().Year(), int(time.Now().Month()))
+	if err != nil || len(calcs) != 0 {
+		t.Fatalf("failed monthly calculation must roll back: %d, %v", len(calcs), err)
 	}
 }
