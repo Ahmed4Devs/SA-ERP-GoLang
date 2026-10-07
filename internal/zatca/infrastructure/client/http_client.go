@@ -79,6 +79,9 @@ func (c *HTTPClient) Clearance(ctx context.Context, req domain.ClearanceRequest,
 		return domain.ClearanceResponse{}, fmt.Errorf("clearance request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return domain.ClearanceResponse{}, fmt.Errorf("ZATCA HTTP request rejected with status %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -118,6 +121,9 @@ func (c *HTTPClient) Report(ctx context.Context, req domain.ReportingRequest, cs
 		return domain.ReportingResponse{}, fmt.Errorf("reporting request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return domain.ReportingResponse{}, fmt.Errorf("ZATCA HTTP request rejected with status %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -157,6 +163,9 @@ func (c *HTTPClient) RequestComplianceCSID(ctx context.Context, req domain.Compl
 		return domain.ComplianceCSIDResponse{}, fmt.Errorf("compliance CSID request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return domain.ComplianceCSIDResponse{}, fmt.Errorf("ZATCA HTTP request rejected with status %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -190,6 +199,9 @@ func (c *HTTPClient) RunComplianceChecks(ctx context.Context, req domain.Complia
 		return domain.ComplianceCheckResponse{}, fmt.Errorf("compliance check request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return domain.ComplianceCheckResponse{}, fmt.Errorf("ZATCA HTTP request rejected with status %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -224,6 +236,9 @@ func (c *HTTPClient) RequestProductionCSID(ctx context.Context, req domain.Produ
 		return domain.ProductionCSIDResponse{}, fmt.Errorf("production CSID request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return domain.ProductionCSIDResponse{}, fmt.Errorf("ZATCA HTTP request rejected with status %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -258,6 +273,9 @@ func (c *HTTPClient) RenewProductionCSID(ctx context.Context, req domain.Renewal
 		return domain.RenewalResponse{}, fmt.Errorf("renewal request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return domain.RenewalResponse{}, fmt.Errorf("ZATCA HTTP request rejected with status %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

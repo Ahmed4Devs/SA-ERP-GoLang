@@ -55,7 +55,7 @@ func (s *OnboardingService) StartOnboarding(ctx context.Context, legalEntityID, 
 		return nil, fmt.Errorf("failed to retrieve EGS unit: %w", err)
 	}
 
-	// 2. Generate the NIST P-256 ECDSA key pair required by ZATCA.
+	// 2. Generate a simulator key. This curve and sample flow are not live conformance evidence.
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate key pair: %w", err)
@@ -184,7 +184,7 @@ func (s *OnboardingService) StartOnboarding(ctx context.Context, legalEntityID, 
 		ComplianceRequestID: compResp.RequestID,
 		ProductionCSIDID:    savedProdCSID.ID,
 		Status:              "COMPLETED",
-		Message:             "EGS unit onboarded successfully and Production CSID issued",
+		Message:             "Simulation completed; no official CSID was issued and no live onboarding was performed",
 	}, nil
 }
 
@@ -219,6 +219,9 @@ func (s *OnboardingService) GetOnboardingStatus(ctx context.Context, legalEntity
 	}
 
 	for _, c := range csids {
+		if err := domain.ValidateLiveCSID(c, s.environment); err != nil {
+			continue
+		}
 		if c.CSIDType == domain.CSIDTypeCompliance && c.Status == "ACTIVE" {
 			status.HasComplianceCSID = true
 			status.ComplianceChecksPassed = true

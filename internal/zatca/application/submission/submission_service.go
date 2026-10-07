@@ -50,6 +50,10 @@ func (s *SubmissionService) SubmitClearance(ctx context.Context, documentID, leg
 		return nil, fmt.Errorf("active CSID certificate not found for EGS unit: %w", err)
 	}
 
+	if err := domain.ValidateLiveCSID(csid, s.environment); err != nil {
+		return nil, err
+	}
+
 	// 3. Mark Submitting & Create Submission Record
 	if _, err := s.repo.UpdateDocumentStatus(ctx, doc.ID, legalEntityID, domain.DocumentStatusSubmitting); err != nil {
 		return nil, fmt.Errorf("failed to mark document as submitting: %w", err)
@@ -143,6 +147,10 @@ func (s *SubmissionService) SubmitReporting(ctx context.Context, documentID, leg
 		return nil, fmt.Errorf("active CSID certificate not found for EGS unit: %w", err)
 	}
 
+	if err := domain.ValidateLiveCSID(csid, s.environment); err != nil {
+		return nil, err
+	}
+
 	// 3. Mark Submitting & Create Submission Record
 	if _, err := s.repo.UpdateDocumentStatus(ctx, doc.ID, legalEntityID, domain.DocumentStatusSubmitting); err != nil {
 		return nil, fmt.Errorf("failed to mark document as submitting: %w", err)
@@ -233,6 +241,13 @@ func (s *SubmissionService) RetrySubmission(ctx context.Context, submissionID, l
 	csid, err := s.repo.GetActiveCSID(ctx, doc.EGSUnitID)
 	if err != nil || csid == nil {
 		return fmt.Errorf("active CSID certificate not found for retry: %w", err)
+	}
+
+	if sub.Environment != s.environment {
+		return fmt.Errorf("submission environment does not match the configured adapter")
+	}
+	if err := domain.ValidateLiveCSID(csid, s.environment); err != nil {
+		return err
 	}
 
 	attempts, err := s.subRepo.ListAttempts(ctx, sub.ID)
