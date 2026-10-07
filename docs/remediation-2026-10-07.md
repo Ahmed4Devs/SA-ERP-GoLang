@@ -69,9 +69,24 @@ Payroll integration tests pass with the race detector, including approval
 bypass attempts, creator rejection, persisted approver, closed-period rollback,
 balanced ledger amounts and mandatory posting audit. Targeted vet passes.
 
+## Fixed asset posting
+
+Depreciation and disposal now create central GL entries atomically with asset
+carrying values. Depreciation requires an independent actor, locks the run and
+assets, verifies calculation snapshots and posts on the month's final date.
+Calculating the same period cannot overwrite an existing run. Assets entering
+service after the period are excluded. Financial posting uses the primary book;
+separate tax-book carrying balances are not yet implemented.
+
+Disposal requires explicit proceeds, gain/loss and (when applicable) impairment
+account selections. Account selections are retained on the immutable journal.
+Disposing an already disposed asset is rejected. HTTP actors come from sessions.
+Fixed-assets race integration tests and vet pass, including closed-period
+rollback, independent actor checks and duplicate-calculation history protection.
+
 ## Pending
 
-Transactional posting across assets and inventory; FX snapshots and complete
+Transactional posting across inventory; FX snapshots and complete
 configurable approval policies; business UI;
 canonical accounting/inventory tables and precision; expenses/projects;
 compliance adapters; attachment backup and release checks. This document tracks

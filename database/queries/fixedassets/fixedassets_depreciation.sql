@@ -29,12 +29,6 @@ INSERT INTO fixedassets.depreciation_runs (
     run_date, total_assets_processed, total_depreciation_amount, status,
     journal_entry_id, created_by
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-ON CONFLICT (legal_entity_id, book_id, period_year, period_month)
-DO UPDATE SET
-    total_assets_processed = EXCLUDED.total_assets_processed,
-    total_depreciation_amount = EXCLUDED.total_depreciation_amount,
-    status = EXCLUDED.status,
-    updated_at = CURRENT_TIMESTAMP
 RETURNING *;
 
 -- name: GetDepreciationRunByID :one

@@ -198,7 +198,8 @@ func TestFixedAssets_StraightLineCalculation(t *testing.T) {
 
 // Test 3: Monthly Depreciation Run and Posting to Ledger
 func TestFixedAssets_MonthlyDepreciationRunAndPosting(t *testing.T) {
-	faMod, _, _, leID, adminID, _, ctx := setupFixedAssetsTest(t)
+	faMod, _, db, leID, adminID, _, ctx := setupFixedAssetsTest(t)
+	defer db.Close()
 
 	books, err := faMod.Service.ListDepreciationBooks(ctx, leID)
 	if err != nil || len(books) == 0 {
@@ -226,7 +227,7 @@ func TestFixedAssets_MonthlyDepreciationRunAndPosting(t *testing.T) {
 	}
 
 	// 2. Post Depreciation Run
-	postedRun, err := faMod.Service.PostDepreciationRun(ctx, run.ID, &adminID)
+	postedRun, err := faMod.Service.PostDepreciationRun(ctx, run.ID, assetChecker(t, db, ctx))
 	if err != nil {
 		t.Fatalf("PostDepreciationRun failed: %v", err)
 	}
@@ -250,7 +251,8 @@ func TestFixedAssets_MonthlyDepreciationRunAndPosting(t *testing.T) {
 
 // Test 4: Floor at Salvage Value and Auto-Transition to FULLY_DEPRECIATED
 func TestFixedAssets_DepreciationFloorAtSalvage(t *testing.T) {
-	faMod, _, _, leID, adminID, _, ctx := setupFixedAssetsTest(t)
+	faMod, _, db, leID, adminID, _, ctx := setupFixedAssetsTest(t)
+	defer db.Close()
 
 	cats, _ := faMod.Service.ListAssetCategories(ctx, leID)
 	books, _ := faMod.Service.ListDepreciationBooks(ctx, leID)
@@ -307,7 +309,7 @@ func TestFixedAssets_DepreciationFloorAtSalvage(t *testing.T) {
 	}
 
 	// Post the run and check transition to FULLY_DEPRECIATED
-	_, err = faMod.Service.PostDepreciationRun(ctx, run.ID, &adminID)
+	_, err = faMod.Service.PostDepreciationRun(ctx, run.ID, assetChecker(t, db, ctx))
 	if err != nil {
 		t.Fatalf("post run failed: %v", err)
 	}
@@ -378,7 +380,8 @@ func TestFixedAssets_AssetTransfer(t *testing.T) {
 
 // Test 6: Asset Disposal with Gain/Loss Calculation
 func TestFixedAssets_AssetDisposal(t *testing.T) {
-	faMod, _, _, leID, adminID, _, ctx := setupFixedAssetsTest(t)
+	faMod, _, db, leID, adminID, _, ctx := setupFixedAssetsTest(t)
+	defer db.Close()
 
 	cats, _ := faMod.Service.ListAssetCategories(ctx, leID)
 
@@ -410,12 +413,13 @@ func TestFixedAssets_AssetDisposal(t *testing.T) {
 	// Case: Sold for 85,000 SAR -> Gain = 85,000 - 70,000 = 15,000 SAR
 	proceeds := decimal.NewFromInt(85000)
 	disposal := domain.Disposal{
-		LegalEntityID:  leID,
-		AssetID:        created.ID,
-		DisposalType:   "SALE",
-		ProceedsAmount: proceeds,
-		Reason:         "Fleet modernization",
-		CreatedBy:      &adminID,
+		LegalEntityID:     leID,
+		AssetID:           created.ID,
+		DisposalType:      "SALE",
+		ProceedsAmount:    proceeds,
+		ProceedsAccountID: assetAccount(t, db, ctx, leID, "111002"), GainLossAccountID: assetAccount(t, db, ctx, leID, "420000"),
+		Reason:    "Fleet modernization",
+		CreatedBy: &adminID,
 	}
 
 	savedDisposal, err := faMod.Service.DisposeAsset(ctx, disposal)
@@ -510,4 +514,25 @@ func TestFixedAssets_RegisterRollsBackWhenScheduleFails(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("expected asset header rollback, found %d rows", count)
 	}
+}
+
+func assetChecker(t *testing.T, db *database.DB, ctx context.Context) *uuid.UUID {
+	t.Helper()
+	var id uuid.UUID
+	err := db.Pool.QueryRow(ctx, "INSERT INTO iam.users(username,email,display_name) VALUES ('asset-checker','asset-checker@example.test','Asset Checker') ON CONFLICT DO NOTHING RETURNING id").Scan(&id)
+	if err != nil {
+		err = db.Pool.QueryRow(ctx, "SELECT id FROM iam.users WHERE username='asset-checker'").Scan(&id)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &id
+}
+func assetAccount(t *testing.T, db *database.DB, ctx context.Context, entity uuid.UUID, code string) *uuid.UUID {
+	t.Helper()
+	var id uuid.UUID
+	if err := db.Pool.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id=$1 AND code=$2", entity, code).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return &id
 }

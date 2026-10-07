@@ -2,6 +2,9 @@ package fixedassets
 
 import (
 	"context"
+	"erp/internal/accounting"
+	postingapp "erp/internal/accounting/application/posting"
+	"erp/internal/audit"
 	"net/http"
 
 	"erp/internal/fixedassets/application/services"
@@ -25,7 +28,7 @@ type Module struct {
 
 func NewModule(cfg *config.Config, db *database.DB) *Module {
 	repo := postgres.NewRepository(db)
-	svc := services.NewFixedAssetsService(repo, db)
+	svc := services.NewFixedAssetsService(repo, db, postingapp.NewSourceService(db, accounting.NewModule(cfg, db).PostingEngine, audit.NewModule(cfg, db).Service))
 	handler := fahttp.NewFixedAssetsHandler(svc)
 
 	return &Module{

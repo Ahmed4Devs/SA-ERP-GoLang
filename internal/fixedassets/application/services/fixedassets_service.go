@@ -2,7 +2,10 @@ package services
 
 import (
 	"context"
+	postingapp "erp/internal/accounting/application/posting"
+	accountingdomain "erp/internal/accounting/domain"
 	"fmt"
+	"sort"
 	"time"
 
 	"erp/internal/fixedassets/domain"
@@ -16,16 +19,18 @@ import (
 )
 
 type FixedAssetsService struct {
-	repo ports.Repository
-	db   *database.DB
-	tx   transaction.Manager
+	ledger *postingapp.SourceService
+	repo   ports.Repository
+	db     *database.DB
+	tx     transaction.Manager
 }
 
-func NewFixedAssetsService(repo ports.Repository, db *database.DB) ports.Service {
+func NewFixedAssetsService(repo ports.Repository, db *database.DB, ledger *postingapp.SourceService) ports.Service {
 	return &FixedAssetsService{
-		repo: repo,
-		db:   db,
-		tx:   transaction.NewManager(db.Pool),
+		repo:   repo,
+		ledger: ledger,
+		db:     db,
+		tx:     transaction.NewManager(db.Pool),
 	}
 }
 
@@ -161,18 +166,34 @@ func (s *FixedAssetsService) RunMonthlyDepreciation(
 	year, month int,
 	runBy *uuid.UUID,
 ) (*domain.DepreciationRun, []domain.DepreciationLine, error) {
+	if runBy == nil || *runBy == uuid.Nil {
+		return nil, nil, fmt.Errorf("depreciation creator is required")
+	}
+	if month < 1 || month > 12 || year < 1900 {
+		return nil, nil, fmt.Errorf("invalid depreciation period")
+	}
+	var primary bool
+	if err := s.db.DBTX(ctx).QueryRow(ctx, "SELECT is_primary FROM fixedassets.depreciation_books WHERE id=$1 AND legal_entity_id=$2", bookID, legalEntityID).Scan(&primary); err != nil {
+		return nil, nil, err
+	}
+	if !primary {
+		return nil, nil, fmt.Errorf("only the primary financial book updates asset carrying values")
+	}
 	activeAssets, err := s.repo.ListActiveFixedAssets(ctx, legalEntityID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to list active assets: %w", err)
 	}
 
-	runDate := time.Date(year, time.Month(month), 28, 0, 0, 0, 0, time.UTC)
+	runDate := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC)
 	runNumber := identifiers.NewDocumentNumber(fmt.Sprintf("DEP-%d%02d", year, month), time.Now())
 
 	var linesToCreate []domain.DepreciationLine
 	totalDepr := decimal.Zero
 
 	for _, asset := range activeAssets {
+		if asset.InServiceDate.After(runDate) {
+			continue
+		}
 		// Calculate straight-line depreciation for this month
 		monthlyDepr := domain.CalculateStraightLineDepreciation(
 			asset.AcquisitionCost,
@@ -184,7 +205,7 @@ func (s *FixedAssetsService) RunMonthlyDepreciation(
 		if monthlyDepr.GreaterThan(decimal.Zero) {
 			accumBefore := asset.AccumulatedDepreciation
 			accumAfter := accumBefore.Add(monthlyDepr)
-			nbvAfter := asset.AcquisitionCost.Sub(accumAfter)
+			nbvAfter := asset.CurrentNetBookValue.Sub(monthlyDepr)
 
 			linesToCreate = append(linesToCreate, domain.DepreciationLine{
 				ID:                   uuid.New(),
@@ -246,37 +267,75 @@ func (s *FixedAssetsService) RunMonthlyDepreciation(
 }
 
 func (s *FixedAssetsService) PostDepreciationRun(ctx context.Context, runID uuid.UUID, approvedBy *uuid.UUID) (*domain.DepreciationRun, error) {
-	var postedRun *domain.DepreciationRun
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
-		run, err := s.repo.GetDepreciationRunByID(txCtx, runID)
+	if approvedBy == nil || *approvedBy == uuid.Nil {
+		return nil, fmt.Errorf("depreciation posting actor is required")
+	}
+	var posted *domain.DepreciationRun
+	err := s.ledger.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.db.DBTX(ctx).QueryRow(ctx, "SELECT id FROM fixedassets.depreciation_runs WHERE id=$1 FOR UPDATE", runID).Scan(&runID); err != nil {
+			return err
+		}
+		run, err := s.repo.GetDepreciationRunByID(ctx, runID)
 		if err != nil {
-			return fmt.Errorf("failed to fetch depreciation run: %w", err)
+			return err
 		}
 		if run.Status == "POSTED" {
-			postedRun = run
+			posted = run
 			return nil
 		}
-
-		lines, err := s.repo.ListDepreciationLinesByRun(txCtx, runID)
-		if err != nil {
-			return fmt.Errorf("failed to fetch depreciation lines: %w", err)
+		if run.Status != "CALCULATED" || run.CreatedBy == nil || *run.CreatedBy == *approvedBy {
+			return fmt.Errorf("calculated depreciation requires an independent posting actor")
 		}
+		lines, err := s.repo.ListDepreciationLinesByRun(ctx, runID)
+		if err != nil {
+			return err
+		}
+		sort.Slice(lines, func(i, j int) bool { return lines[i].AssetID.String() < lines[j].AssetID.String() })
+		var total decimal.Decimal
+		entries := []accountingdomain.PostingLine{}
 		for _, line := range lines {
-			if _, err := s.repo.UpdateFixedAssetBookValue(txCtx, line.AssetID, line.NetBookValueAfter, line.AccumulatedAfter); err != nil {
-				return fmt.Errorf("failed updating asset %s book value: %w", line.AssetID, err)
+			var assetID uuid.UUID
+			if err := s.db.DBTX(ctx).QueryRow(ctx, "SELECT id FROM fixedassets.assets WHERE id=$1 AND legal_entity_id=$2 FOR UPDATE", line.AssetID, run.LegalEntityID).Scan(&assetID); err != nil {
+				return err
 			}
-			if err := s.repo.MarkSchedulePosted(txCtx, line.AssetID, run.BookID, run.ID, run.PeriodYear, run.PeriodMonth); err != nil {
-				return fmt.Errorf("failed marking asset %s schedule as posted: %w", line.AssetID, err)
+			asset, err := s.repo.GetFixedAssetByID(ctx, assetID)
+			if err != nil {
+				return err
+			}
+			if asset.Status != "ACTIVE" || !asset.AccumulatedDepreciation.Equal(line.AccumulatedBefore) || !asset.CurrentNetBookValue.Sub(line.DepreciationAmount).Equal(line.NetBookValueAfter) {
+				return fmt.Errorf("asset changed after depreciation calculation")
+			}
+			if line.ExpenseAccountID == nil || line.AccumulatedAccountID == nil {
+				return fmt.Errorf("depreciation accounts must be configured")
+			}
+			expense, err := s.ledger.Account(ctx, run.LegalEntityID, line.ExpenseAccountID, "")
+			if err != nil {
+				return err
+			}
+			accumulated, err := s.ledger.Account(ctx, run.LegalEntityID, line.AccumulatedAccountID, "")
+			if err != nil {
+				return err
+			}
+			entries = append(entries, accountingdomain.PostingLine{AccountID: expense, TransactionDebit: line.DepreciationAmount}, accountingdomain.PostingLine{AccountID: accumulated, TransactionCredit: line.DepreciationAmount})
+			total = total.Add(line.DepreciationAmount)
+			if _, err := s.repo.UpdateFixedAssetBookValue(ctx, assetID, line.NetBookValueAfter, line.AccumulatedAfter); err != nil {
+				return err
+			}
+			if err := s.repo.MarkSchedulePosted(ctx, assetID, run.BookID, run.ID, run.PeriodYear, run.PeriodMonth); err != nil {
+				return err
 			}
 		}
-
-		postedRun, err = s.repo.UpdateDepreciationRunStatus(txCtx, runID, "POSTED", nil, approvedBy)
+		if !total.Equal(run.TotalDepreciationAmount) {
+			return fmt.Errorf("depreciation totals mismatch")
+		}
+		journal, err := s.ledger.Post(ctx, "GENERAL", accountingdomain.PostingRequest{LegalEntityID: run.LegalEntityID, SourceModule: "FIXEDASSETS", SourceType: "DEPRECIATION", SourceID: run.ID, AccountingDate: run.RunDate, Reference: run.RunNumber, ActorID: *approvedBy, Lines: entries})
 		if err != nil {
-			return fmt.Errorf("failed updating depreciation run status to POSTED: %w", err)
+			return err
 		}
-		return nil
+		posted, err = s.repo.UpdateDepreciationRunStatus(ctx, runID, "POSTED", &journal, approvedBy)
+		return err
 	})
-	return postedRun, err
+	return posted, err
 }
 
 func (s *FixedAssetsService) GetDepreciationRun(ctx context.Context, runID uuid.UUID) (*domain.DepreciationRun, []domain.DepreciationLine, error) {
@@ -349,13 +408,25 @@ func (s *FixedAssetsService) ListTransfers(ctx context.Context, legalEntityID uu
 }
 
 func (s *FixedAssetsService) DisposeAsset(ctx context.Context, disposal domain.Disposal) (*domain.Disposal, error) {
+	if disposal.CreatedBy == nil || *disposal.CreatedBy == uuid.Nil {
+		return nil, fmt.Errorf("disposal actor is required")
+	}
+	if disposal.ProceedsAmount.IsNegative() {
+		return nil, fmt.Errorf("disposal proceeds cannot be negative")
+	}
 	var saved *domain.Disposal
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+	err := s.ledger.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.db.DBTX(txCtx).QueryRow(txCtx, "SELECT id FROM fixedassets.assets WHERE id=$1 AND legal_entity_id=$2 FOR UPDATE", disposal.AssetID, disposal.LegalEntityID).Scan(&disposal.AssetID); err != nil {
+			return err
+		}
 		asset, err := s.repo.GetFixedAssetByID(txCtx, disposal.AssetID)
 		if err != nil {
 			return fmt.Errorf("failed to fetch asset for disposal: %w", err)
 		}
 
+		if asset.Status != "ACTIVE" && asset.Status != "FULLY_DEPRECIATED" {
+			return fmt.Errorf("asset cannot be disposed in its current state")
+		}
 		if disposal.DisposalNumber == "" {
 			disposal.DisposalNumber = identifiers.NewDocumentNumber("DISP", time.Now())
 		}
@@ -367,6 +438,46 @@ func (s *FixedAssetsService) DisposeAsset(ctx context.Context, disposal domain.D
 		disposal.NetBookValueAtDisposal = asset.CurrentNetBookValue
 		disposal.GainOrLossAmount = disposal.ProceedsAmount.Sub(asset.CurrentNetBookValue)
 		disposal.Status = "POSTED"
+		disposal.ID = uuid.New()
+		lines := []accountingdomain.PostingLine{}
+		add := func(account *uuid.UUID, debit, credit decimal.Decimal) error {
+			if debit.IsZero() && credit.IsZero() {
+				return nil
+			}
+			if account == nil {
+				return fmt.Errorf("disposal GL accounts must be configured")
+			}
+			id, err := s.ledger.Account(txCtx, asset.LegalEntityID, account, "")
+			if err != nil {
+				return err
+			}
+			lines = append(lines, accountingdomain.PostingLine{AccountID: id, TransactionDebit: debit, TransactionCredit: credit})
+			return nil
+		}
+		if err := add(asset.AssetAccountID, decimal.Zero, asset.AcquisitionCost); err != nil {
+			return err
+		}
+		if err := add(asset.AccumulatedDepreciationAccountID, asset.AccumulatedDepreciation, decimal.Zero); err != nil {
+			return err
+		}
+		if err := add(disposal.ImpairmentAccountID, asset.ImpairmentTotal, decimal.Zero); err != nil {
+			return err
+		}
+		if err := add(disposal.ProceedsAccountID, disposal.ProceedsAmount, decimal.Zero); err != nil {
+			return err
+		}
+		if disposal.GainOrLossAmount.IsNegative() {
+			if err := add(disposal.GainLossAccountID, disposal.GainOrLossAmount.Abs(), decimal.Zero); err != nil {
+				return err
+			}
+		} else if err := add(disposal.GainLossAccountID, decimal.Zero, disposal.GainOrLossAmount); err != nil {
+			return err
+		}
+		journal, err := s.ledger.Post(txCtx, "GENERAL", accountingdomain.PostingRequest{LegalEntityID: asset.LegalEntityID, SourceModule: "FIXEDASSETS", SourceType: "DISPOSAL", SourceID: disposal.ID, AccountingDate: disposal.DisposalDate, Reference: disposal.DisposalNumber, ActorID: *disposal.CreatedBy, Lines: lines})
+		if err != nil {
+			return err
+		}
+		disposal.JournalEntryID = &journal
 
 		saved, err = s.repo.CreateAssetDisposal(txCtx, disposal)
 		if err != nil {

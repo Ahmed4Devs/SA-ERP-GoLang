@@ -216,6 +216,10 @@ type Impairment struct {
 
 // Disposal represents retirement, scrap, or sale of an asset.
 type Disposal struct {
+	ImpairmentAccountID *uuid.UUID
+	// Posting account selections are captured on the linked immutable journal.
+	ProceedsAccountID                 *uuid.UUID
+	GainLossAccountID                 *uuid.UUID
 	ID                                uuid.UUID
 	LegalEntityID                     uuid.UUID
 	AssetID                           uuid.UUID

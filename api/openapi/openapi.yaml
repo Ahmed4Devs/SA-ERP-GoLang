@@ -13828,6 +13828,15 @@ components:
         - proceeds_amount
         - reason
       properties:
+        impairment_account_id:
+          type: string
+          format: uuid
+        proceeds_account_id:
+          type: string
+          format: uuid
+        gain_loss_account_id:
+          type: string
+          format: uuid
         legal_entity_id:
           type: string
         disposal_type:

@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	iamhttp "erp/internal/iam/transport/http"
 	"net/http"
 	"time"
 
@@ -459,13 +460,21 @@ func (h *FixedAssetsHandler) TransferAsset(w http.ResponseWriter, r *http.Reques
 }
 
 type DisposeAssetRequest struct {
-	LegalEntityID  string          `json:"legal_entity_id"`
-	DisposalType   string          `json:"disposal_type"`
-	ProceedsAmount decimal.Decimal `json:"proceeds_amount"`
-	Reason         string          `json:"reason"`
+	ImpairmentAccountID *uuid.UUID      `json:"impairment_account_id"`
+	ProceedsAccountID   *uuid.UUID      `json:"proceeds_account_id"`
+	GainLossAccountID   *uuid.UUID      `json:"gain_loss_account_id"`
+	LegalEntityID       string          `json:"legal_entity_id"`
+	DisposalType        string          `json:"disposal_type"`
+	ProceedsAmount      decimal.Decimal `json:"proceeds_amount"`
+	Reason              string          `json:"reason"`
 }
 
 func (h *FixedAssetsHandler) DisposeAsset(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	assetID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid asset id")
@@ -481,11 +490,12 @@ func (h *FixedAssetsHandler) DisposeAsset(w http.ResponseWriter, r *http.Request
 	leID, _ := uuid.Parse(req.LegalEntityID)
 
 	disp, err := h.svc.DisposeAsset(r.Context(), domain.Disposal{
-		LegalEntityID:  leID,
-		AssetID:        assetID,
-		DisposalType:   req.DisposalType,
-		ProceedsAmount: req.ProceedsAmount,
-		Reason:         req.Reason,
+		LegalEntityID:       leID,
+		AssetID:             assetID,
+		DisposalType:        req.DisposalType,
+		ProceedsAmount:      req.ProceedsAmount,
+		ImpairmentAccountID: req.ImpairmentAccountID, ProceedsAccountID: req.ProceedsAccountID, GainLossAccountID: req.GainLossAccountID, CreatedBy: &actor.ID,
+		Reason: req.Reason,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -527,6 +537,11 @@ type RunMonthlyDepreciationRequest struct {
 }
 
 func (h *FixedAssetsHandler) RunMonthlyDepreciation(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	var req RunMonthlyDepreciationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -544,7 +559,7 @@ func (h *FixedAssetsHandler) RunMonthlyDepreciation(w http.ResponseWriter, r *ht
 		return
 	}
 
-	run, lines, err := h.svc.RunMonthlyDepreciation(r.Context(), leID, bookID, req.Year, req.Month, nil)
+	run, lines, err := h.svc.RunMonthlyDepreciation(r.Context(), leID, bookID, req.Year, req.Month, &actor.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -557,13 +572,18 @@ func (h *FixedAssetsHandler) RunMonthlyDepreciation(w http.ResponseWriter, r *ht
 }
 
 func (h *FixedAssetsHandler) PostDepreciationRun(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	runID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid run id")
 		return
 	}
 
-	posted, err := h.svc.PostDepreciationRun(r.Context(), runID, nil)
+	posted, err := h.svc.PostDepreciationRun(r.Context(), runID, &actor.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
