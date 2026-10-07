@@ -304,20 +304,20 @@ type ThreeWayMatchResult struct {
 
 // CalculateLineAmounts computes gross, discount, taxable, tax, and total
 func CalculateLineAmounts(qty, unitPrice, discountPercent, taxRatePercent decimal.Decimal) (gross, disc, taxable, tax, total decimal.Decimal) {
-	gross = qty.Mul(unitPrice).Round(4)
+	gross = qty.Mul(unitPrice).Round(6)
 	hundred := decimal.NewFromInt(100)
 	if discountPercent.GreaterThan(decimal.Zero) {
-		disc = gross.Mul(discountPercent).Div(hundred).Round(4)
+		disc = gross.Mul(discountPercent).Div(hundred).Round(6)
 	} else {
 		disc = decimal.Zero
 	}
-	taxable = gross.Sub(disc).Round(4)
+	taxable = gross.Sub(disc).Round(6)
 	if taxRatePercent.GreaterThan(decimal.Zero) {
-		tax = taxable.Mul(taxRatePercent).Div(hundred).Round(4)
+		tax = taxable.Mul(taxRatePercent).Div(hundred).Round(6)
 	} else {
 		tax = decimal.Zero
 	}
-	total = taxable.Add(tax).Round(4)
+	total = taxable.Add(tax).Round(6)
 	return
 }
 

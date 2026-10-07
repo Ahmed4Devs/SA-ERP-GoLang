@@ -43,7 +43,7 @@ func (c *FIFOCalculator) CalculateOutboundCost(
 		}
 
 		qtyFromLayer := decimal.Min(remainingToIssue, layer.RemainingQuantity)
-		layerCost := qtyFromLayer.Mul(layer.UnitCost).Round(4)
+		layerCost := qtyFromLayer.Mul(layer.UnitCost).Round(6)
 		totalCost = totalCost.Add(layerCost)
 
 		consumptions = append(consumptions, domain.CostLayerConsumption{
@@ -70,13 +70,13 @@ func (c *FIFOCalculator) CalculateOutboundCost(
 		if err == nil && itemInfo != nil {
 			fallbackUnitCost = itemInfo.CostPrice
 		}
-		fallbackCost := remainingToIssue.Mul(fallbackUnitCost).Round(4)
+		fallbackCost := remainingToIssue.Mul(fallbackUnitCost).Round(6)
 		totalCost = totalCost.Add(fallbackCost)
 	}
 
 	blendedUnitCost := decimal.Zero
 	if issueQty.IsPositive() {
-		blendedUnitCost = totalCost.DivRound(issueQty, 4)
+		blendedUnitCost = totalCost.DivRound(issueQty, 6)
 	}
 
 	return domain.CostCalculationResult{
@@ -100,7 +100,7 @@ func (c *FIFOCalculator) RecordInboundCost(
 		OriginalQuantity:  inboundQty,
 		RemainingQuantity: inboundQty,
 		UnitCost:          unitCost,
-		TotalCost:         inboundQty.Mul(unitCost).Round(4),
+		TotalCost:         inboundQty.Mul(unitCost).Round(6),
 	}
 	_, err := c.repo.InsertCostLayer(ctx, layer)
 	return err

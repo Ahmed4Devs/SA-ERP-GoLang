@@ -81,7 +81,7 @@ func convertSalesTaxSnapshot(lines []taxdomain.TaxTransactionLine, rate decimal.
 		line := &result.lines[i]
 		taxable = taxable.Add(line.TaxableAmount)
 		tax = tax.Add(line.TaxAmount)
-		baseTaxable, baseTax := taxable.Mul(rate).Round(4), tax.Mul(rate).Round(4)
+		baseTaxable, baseTax := taxable.Mul(rate).Round(6), tax.Mul(rate).Round(6)
 		line.TaxableAmount = baseTaxable.Sub(result.taxableAmount)
 		line.TaxAmount = baseTax.Sub(result.taxAmount)
 		result.taxableAmount, result.taxAmount = baseTaxable, baseTax

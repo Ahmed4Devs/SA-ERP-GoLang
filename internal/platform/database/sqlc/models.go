@@ -51,6 +51,40 @@ type AccountingChartOfAccounts struct {
 	Version       int64              `json:"version"`
 }
 
+type AccountingDimensionValues struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	DimensionID   pgtype.UUID        `json:"dimension_id"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type AccountingDimensions struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type AccountingExchangeRates struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	FromCurrency  string             `json:"from_currency"`
+	ToCurrency    string             `json:"to_currency"`
+	EffectiveDate pgtype.Date        `json:"effective_date"`
+	Rate          pgtype.Numeric     `json:"rate"`
+	VersionNumber int32              `json:"version_number"`
+	Source        string             `json:"source"`
+	CreatedBy     pgtype.UUID        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type AccountingFiscalPeriods struct {
 	ID            pgtype.UUID        `json:"id"`
 	FiscalYearID  pgtype.UUID        `json:"fiscal_year_id"`
@@ -109,6 +143,13 @@ type AccountingJournalEntries struct {
 	Version        int64              `json:"version"`
 }
 
+type AccountingJournalLineDimensions struct {
+	JournalLineID    pgtype.UUID `json:"journal_line_id"`
+	LegalEntityID    pgtype.UUID `json:"legal_entity_id"`
+	DimensionID      pgtype.UUID `json:"dimension_id"`
+	DimensionValueID pgtype.UUID `json:"dimension_value_id"`
+}
+
 type AccountingJournalLines struct {
 	ID                pgtype.UUID    `json:"id"`
 	JournalEntryID    pgtype.UUID    `json:"journal_entry_id"`
@@ -138,6 +179,64 @@ type AccountingJournals struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	Version       int64              `json:"version"`
+}
+
+type AccountingOpeningBalances struct {
+	ID             pgtype.UUID        `json:"id"`
+	LegalEntityID  pgtype.UUID        `json:"legal_entity_id"`
+	FiscalPeriodID pgtype.UUID        `json:"fiscal_period_id"`
+	AccountID      pgtype.UUID        `json:"account_id"`
+	CurrencyCode   string             `json:"currency_code"`
+	Debit          pgtype.Numeric     `json:"debit"`
+	Credit         pgtype.Numeric     `json:"credit"`
+	JournalEntryID pgtype.UUID        `json:"journal_entry_id"`
+	Status         string             `json:"status"`
+	CreatedBy      pgtype.UUID        `json:"created_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type AccountingPostingRuleVersions struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	PostingRuleID pgtype.UUID        `json:"posting_rule_id"`
+	VersionNumber int32              `json:"version_number"`
+	EffectiveFrom pgtype.Date        `json:"effective_from"`
+	AccountID     pgtype.UUID        `json:"account_id"`
+	JournalID     pgtype.UUID        `json:"journal_id"`
+	CreatedBy     pgtype.UUID        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type AccountingPostingRules struct {
+	ID            pgtype.UUID        `json:"id"`
+	LegalEntityID pgtype.UUID        `json:"legal_entity_id"`
+	SourceModule  string             `json:"source_module"`
+	Code          string             `json:"code"`
+	NameEn        string             `json:"name_en"`
+	NameAr        string             `json:"name_ar"`
+	IsActive      bool               `json:"is_active"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type AccountingReconciliationLines struct {
+	ID               pgtype.UUID `json:"id"`
+	LegalEntityID    pgtype.UUID `json:"legal_entity_id"`
+	ReconciliationID pgtype.UUID `json:"reconciliation_id"`
+	JournalLineID    pgtype.UUID `json:"journal_line_id"`
+}
+
+type AccountingReconciliations struct {
+	ID                 pgtype.UUID        `json:"id"`
+	LegalEntityID      pgtype.UUID        `json:"legal_entity_id"`
+	AccountID          pgtype.UUID        `json:"account_id"`
+	Reference          string             `json:"reference"`
+	ReconciliationDate pgtype.Date        `json:"reconciliation_date"`
+	CurrencyCode       string             `json:"currency_code"`
+	Status             string             `json:"status"`
+	CreatedBy          pgtype.UUID        `json:"created_by"`
+	CompletedBy        pgtype.UUID        `json:"completed_by"`
+	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
 type AttendanceAdjustments struct {
@@ -1128,6 +1227,18 @@ type InventoryInventoryRevaluations struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type InventoryItemCosts struct {
+	ID             pgtype.UUID        `json:"id"`
+	LegalEntityID  pgtype.UUID        `json:"legal_entity_id"`
+	ItemID         pgtype.UUID        `json:"item_id"`
+	WarehouseID    pgtype.UUID        `json:"warehouse_id"`
+	CostingMethod  string             `json:"costing_method"`
+	QuantityOnHand pgtype.Numeric     `json:"quantity_on_hand"`
+	UnitCost       pgtype.Numeric     `json:"unit_cost"`
+	TotalValue     pgtype.Numeric     `json:"total_value"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type InventoryLots struct {
 	ID              pgtype.UUID        `json:"id"`
 	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
@@ -1192,11 +1303,11 @@ type InventoryStockBalances struct {
 	BinID             pgtype.UUID        `json:"bin_id"`
 	QuantityOnHand    pgtype.Numeric     `json:"quantity_on_hand"`
 	QuantityReserved  pgtype.Numeric     `json:"quantity_reserved"`
-	QuantityAvailable pgtype.Numeric     `json:"quantity_available"`
 	AverageCost       pgtype.Numeric     `json:"average_cost"`
 	TotalValue        pgtype.Numeric     `json:"total_value"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	Version           int64              `json:"version"`
+	QuantityAvailable pgtype.Numeric     `json:"quantity_available"`
 }
 
 type InventoryStockCountLines struct {
@@ -1206,9 +1317,9 @@ type InventoryStockCountLines struct {
 	BinID           pgtype.UUID    `json:"bin_id"`
 	SystemQuantity  pgtype.Numeric `json:"system_quantity"`
 	CountedQuantity pgtype.Numeric `json:"counted_quantity"`
-	Variance        pgtype.Numeric `json:"variance"`
 	Notes           pgtype.Text    `json:"notes"`
 	UnitCost        pgtype.Numeric `json:"unit_cost"`
+	Variance        pgtype.Numeric `json:"variance"`
 }
 
 type InventoryStockCounts struct {
@@ -1293,6 +1404,20 @@ type InventoryTransferOrders struct {
 	CreatedBy            pgtype.UUID        `json:"created_by"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type InventoryValuationSnapshots struct {
+	ID              pgtype.UUID        `json:"id"`
+	LegalEntityID   pgtype.UUID        `json:"legal_entity_id"`
+	SnapshotBatchID pgtype.UUID        `json:"snapshot_batch_id"`
+	SnapshotAt      pgtype.Timestamptz `json:"snapshot_at"`
+	ItemID          pgtype.UUID        `json:"item_id"`
+	WarehouseID     pgtype.UUID        `json:"warehouse_id"`
+	CostingMethod   string             `json:"costing_method"`
+	QuantityOnHand  pgtype.Numeric     `json:"quantity_on_hand"`
+	UnitCost        pgtype.Numeric     `json:"unit_cost"`
+	TotalValue      pgtype.Numeric     `json:"total_value"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
 }
 
 type LeaveEmployeeBalances struct {
@@ -2600,6 +2725,9 @@ type SalesInvoices struct {
 	PostedAt            pgtype.Timestamptz `json:"posted_at"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	ApprovalInstanceID  pgtype.UUID        `json:"approval_instance_id"`
+	ApprovedBy          pgtype.UUID        `json:"approved_by"`
+	ApprovedAt          pgtype.Timestamptz `json:"approved_at"`
 }
 
 type SalesOrderLines struct {
@@ -2947,6 +3075,17 @@ type WorkflowApprovalDecisions struct {
 	Decision   string             `json:"decision"`
 	Notes      pgtype.Text        `json:"notes"`
 	DecidedAt  pgtype.Timestamptz `json:"decided_at"`
+}
+
+type WorkflowApprovalLimits struct {
+	ID                pgtype.UUID        `json:"id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	ResourceType      string             `json:"resource_type"`
+	MaximumBaseAmount pgtype.Numeric     `json:"maximum_base_amount"`
+	Version           int64              `json:"version"`
+	UpdatedBy         pgtype.UUID        `json:"updated_by"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 type WorkflowApprovalRequests struct {

@@ -55,6 +55,7 @@ func (h *SalesHandler) Routes(authMiddleware func(http.Handler) http.Handler) ch
 		r.Get("/invoices", h.ListInvoices)
 		r.Get("/invoices/{id}", h.GetInvoice)
 		r.Post("/invoices/{id}/post", h.PostInvoice)
+		r.Post("/invoices/{id}/submit", h.SubmitInvoice)
 
 		// Credit Notes
 		r.Post("/credit-notes", h.CreateCreditNote)

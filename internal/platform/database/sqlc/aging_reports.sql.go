@@ -18,13 +18,13 @@ SELECT
     customer_name_en,
     customer_name_ar,
     COUNT(open_item_id)::INT AS invoice_count,
-    SUM(remaining_amount)::NUMERIC(18, 4) AS total_outstanding,
-    SUM(current_amount)::NUMERIC(18, 4) AS current_amount,
-    SUM(aging_1_30)::NUMERIC(18, 4) AS aging_1_30,
-    SUM(aging_31_60)::NUMERIC(18, 4) AS aging_31_60,
-    SUM(aging_61_90)::NUMERIC(18, 4) AS aging_61_90,
-    SUM(aging_91_120)::NUMERIC(18, 4) AS aging_91_120,
-    SUM(aging_over_120)::NUMERIC(18, 4) AS aging_over_120
+    SUM(remaining_amount)::NUMERIC(24,6) AS total_outstanding,
+    SUM(current_amount)::NUMERIC(24,6) AS current_amount,
+    SUM(aging_1_30)::NUMERIC(24,6) AS aging_1_30,
+    SUM(aging_31_60)::NUMERIC(24,6) AS aging_31_60,
+    SUM(aging_61_90)::NUMERIC(24,6) AS aging_61_90,
+    SUM(aging_91_120)::NUMERIC(24,6) AS aging_91_120,
+    SUM(aging_over_120)::NUMERIC(24,6) AS aging_over_120
 FROM reporting.customer_aging
 WHERE legal_entity_id = $1
   AND ($2::UUID IS NULL OR customer_id = $2::UUID)
@@ -168,13 +168,13 @@ SELECT
     supplier_name_en,
     supplier_name_ar,
     COUNT(open_item_id)::INT AS bill_count,
-    SUM(remaining_amount)::NUMERIC(18, 4) AS total_outstanding,
-    SUM(current_amount)::NUMERIC(18, 4) AS current_amount,
-    SUM(aging_1_30)::NUMERIC(18, 4) AS aging_1_30,
-    SUM(aging_31_60)::NUMERIC(18, 4) AS aging_31_60,
-    SUM(aging_61_90)::NUMERIC(18, 4) AS aging_61_90,
-    SUM(aging_91_120)::NUMERIC(18, 4) AS aging_91_120,
-    SUM(aging_over_120)::NUMERIC(18, 4) AS aging_over_120
+    SUM(remaining_amount)::NUMERIC(24,6) AS total_outstanding,
+    SUM(current_amount)::NUMERIC(24,6) AS current_amount,
+    SUM(aging_1_30)::NUMERIC(24,6) AS aging_1_30,
+    SUM(aging_31_60)::NUMERIC(24,6) AS aging_31_60,
+    SUM(aging_61_90)::NUMERIC(24,6) AS aging_61_90,
+    SUM(aging_91_120)::NUMERIC(24,6) AS aging_91_120,
+    SUM(aging_over_120)::NUMERIC(24,6) AS aging_over_120
 FROM reporting.supplier_aging
 WHERE legal_entity_id = $1
   AND ($2::UUID IS NULL OR supplier_id = $2::UUID)

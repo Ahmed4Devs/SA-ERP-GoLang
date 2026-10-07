@@ -81,7 +81,7 @@ INSERT INTO inventory.stock_count_lines (
 ) VALUES (
     $1, $2, $3, $4, $5, $7, $6
 )
-RETURNING id, count_id, item_id, bin_id, system_quantity, counted_quantity, variance, notes, unit_cost
+RETURNING id, count_id, item_id, bin_id, system_quantity, counted_quantity, notes, unit_cost, variance
 `
 
 type CreateStockCountLineParams struct {
@@ -112,9 +112,9 @@ func (q *Queries) CreateStockCountLine(ctx context.Context, arg CreateStockCount
 		&i.BinID,
 		&i.SystemQuantity,
 		&i.CountedQuantity,
-		&i.Variance,
 		&i.Notes,
 		&i.UnitCost,
+		&i.Variance,
 	)
 	return i, err
 }
@@ -357,7 +357,7 @@ SET
     counted_quantity = $2,
     notes = $3
 WHERE id = $1
-RETURNING id, count_id, item_id, bin_id, system_quantity, counted_quantity, variance, notes, unit_cost
+RETURNING id, count_id, item_id, bin_id, system_quantity, counted_quantity, notes, unit_cost, variance
 `
 
 type UpdateStockCountLineParams struct {
@@ -376,9 +376,9 @@ func (q *Queries) UpdateStockCountLine(ctx context.Context, arg UpdateStockCount
 		&i.BinID,
 		&i.SystemQuantity,
 		&i.CountedQuantity,
-		&i.Variance,
 		&i.Notes,
 		&i.UnitCost,
+		&i.Variance,
 	)
 	return i, err
 }

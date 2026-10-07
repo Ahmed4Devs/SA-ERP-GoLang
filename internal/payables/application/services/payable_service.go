@@ -245,13 +245,13 @@ func (s *payableService) postSupplierInvoice(ctx context.Context, id uuid.UUID, 
 		return nil, fmt.Errorf("failed to create AP open item: %w", err)
 	}
 
-	apID, err := s.ledger.Account(ctx, inv.LegalEntityID, inv.SupplierLiabilityAccID, "211000")
+	apID, err := s.ledger.AccountForDate(ctx, inv.LegalEntityID, inv.SupplierLiabilityAccID, "PAYABLES", "AP_CONTROL", "211000", inv.InvoiceDate)
 	if err != nil {
 		return nil, err
 	}
 	lines := make([]accountingdomain.PostingLine, 0, len(inv.Lines)+2)
 	for _, line := range inv.Lines {
-		account, err := s.ledger.Account(ctx, inv.LegalEntityID, &line.ExpenseAccountID, "523000")
+		account, err := s.ledger.AccountForDate(ctx, inv.LegalEntityID, &line.ExpenseAccountID, "PAYABLES", "PURCHASE_EXPENSE", "523000", inv.InvoiceDate)
 		if err != nil {
 			return nil, err
 		}
@@ -260,7 +260,7 @@ func (s *payableService) postSupplierInvoice(ctx context.Context, id uuid.UUID, 
 		}
 	}
 	if inv.TaxAmount.IsPositive() {
-		vat, err := s.ledger.Account(ctx, inv.LegalEntityID, nil, "114000")
+		vat, err := s.ledger.AccountForDate(ctx, inv.LegalEntityID, nil, "PAYABLES", "INPUT_VAT", "114000", inv.InvoiceDate)
 		if err != nil {
 			return nil, err
 		}
@@ -486,7 +486,7 @@ func (s *payableService) postSupplierPayment(ctx context.Context, id uuid.UUID, 
 		}
 	}
 
-	apID, err := s.ledger.Account(ctx, payment.LegalEntityID, supp.DefaultLiabilityAccountID, "211000")
+	apID, err := s.ledger.AccountForDate(ctx, payment.LegalEntityID, supp.DefaultLiabilityAccountID, "PAYABLES", "AP_CONTROL", "211000", payment.PaymentDate)
 	if err != nil {
 		return nil, err
 	}
@@ -553,9 +553,9 @@ func (s *payableService) createSupplierCreditNote(ctx context.Context, cmd ports
 	var lines []domain.SupplierCreditNoteLine
 
 	for i, l := range cmd.Lines {
-		lSub := l.Quantity.Mul(l.UnitPrice).Round(4)
-		lTax := lSub.Mul(l.TaxRate).Div(decimal.NewFromInt(100)).Round(4)
-		lTot := lSub.Add(lTax).Round(4)
+		lSub := l.Quantity.Mul(l.UnitPrice).Round(6)
+		lTax := lSub.Mul(l.TaxRate).Div(decimal.NewFromInt(100)).Round(6)
+		lTot := lSub.Add(lTax).Round(6)
 
 		subtotal = subtotal.Add(lSub)
 		taxAmt = taxAmt.Add(lTax)

@@ -23,8 +23,8 @@ SELECT
     a.name_ar AS account_name_ar,
     a.account_type,
     bl.amount AS budgeted_amount,
-    COALESCE(act.actual_amount, 0)::NUMERIC(18, 4) AS actual_amount,
-    (bl.amount - COALESCE(act.actual_amount, 0))::NUMERIC(18, 4) AS variance_amount,
+    COALESCE(act.actual_amount, 0)::NUMERIC(24,6) AS actual_amount,
+    (bl.amount - COALESCE(act.actual_amount, 0))::NUMERIC(24,6) AS variance_amount,
     CASE
         WHEN bl.amount != 0 THEN
             ROUND(((bl.amount - COALESCE(act.actual_amount, 0)) / bl.amount) * 100, 2)::NUMERIC(18, 2)
@@ -498,14 +498,14 @@ func (q *Queries) GetSalesPeriodReport(ctx context.Context, arg GetSalesPeriodRe
 const getVATSummaryReport = `-- name: GetVATSummaryReport :one
 SELECT
     -- Output VAT (Sales)
-    COALESCE(SUM(CASE WHEN tt.transaction_type = 'OUTPUT' THEN tt.total_taxable_amount ELSE 0 END), 0)::NUMERIC(18, 4) AS standard_rated_sales,
-    COALESCE(SUM(CASE WHEN tt.transaction_type = 'OUTPUT' THEN tt.total_tax_amount ELSE 0 END), 0)::NUMERIC(18, 4) AS output_vat_amount,
+    COALESCE(SUM(CASE WHEN tt.transaction_type = 'OUTPUT' THEN tt.total_taxable_amount ELSE 0 END), 0)::NUMERIC(24,6) AS standard_rated_sales,
+    COALESCE(SUM(CASE WHEN tt.transaction_type = 'OUTPUT' THEN tt.total_tax_amount ELSE 0 END), 0)::NUMERIC(24,6) AS output_vat_amount,
     -- Input VAT (Purchases)
-    COALESCE(SUM(CASE WHEN tt.transaction_type = 'INPUT' THEN tt.total_taxable_amount ELSE 0 END), 0)::NUMERIC(18, 4) AS standard_rated_purchases,
-    COALESCE(SUM(CASE WHEN tt.transaction_type = 'INPUT' THEN tt.total_tax_amount ELSE 0 END), 0)::NUMERIC(18, 4) AS input_vat_amount,
+    COALESCE(SUM(CASE WHEN tt.transaction_type = 'INPUT' THEN tt.total_taxable_amount ELSE 0 END), 0)::NUMERIC(24,6) AS standard_rated_purchases,
+    COALESCE(SUM(CASE WHEN tt.transaction_type = 'INPUT' THEN tt.total_tax_amount ELSE 0 END), 0)::NUMERIC(24,6) AS input_vat_amount,
     -- Net VAT Payable / (Refundable)
     (COALESCE(SUM(CASE WHEN tt.transaction_type = 'OUTPUT' THEN tt.total_tax_amount ELSE 0 END), 0) -
-     COALESCE(SUM(CASE WHEN tt.transaction_type = 'INPUT' THEN tt.total_tax_amount ELSE 0 END), 0))::NUMERIC(18, 4) AS net_vat_payable
+     COALESCE(SUM(CASE WHEN tt.transaction_type = 'INPUT' THEN tt.total_tax_amount ELSE 0 END), 0))::NUMERIC(24,6) AS net_vat_payable
 FROM tax.tax_transactions tt
 WHERE tt.legal_entity_id = $1
   AND ($2::DATE IS NULL OR tt.transaction_date >= $2::DATE)

@@ -717,6 +717,13 @@ func (s *InventoryService) ListStockCounts(ctx context.Context, legalEntityID uu
 	return s.repo.ListStockCounts(ctx, legalEntityID, warehouseID, status, limit, offset)
 }
 
+func (s *InventoryService) GetAdjustment(ctx context.Context, id uuid.UUID) (*domain.StockAdjustment, error) {
+	return s.repo.GetStockAdjustment(ctx, id)
+}
+func (s *InventoryService) GetStockCount(ctx context.Context, id uuid.UUID) (*domain.StockCount, error) {
+	return s.repo.GetStockCount(ctx, id)
+}
+
 // 8. Costing & Valuation
 func (s *InventoryService) GetValuationReport(ctx context.Context, entityID uuid.UUID, warehouseID, itemID *uuid.UUID) ([]domain.ValuationSummaryItem, error) {
 	return s.costing.GetValuationReport(ctx, entityID, warehouseID, itemID)

@@ -232,14 +232,29 @@ type LockBalanceParams struct {
 	BinID         pgtype.UUID `json:"bin_id"`
 }
 
-func (q *Queries) LockBalance(ctx context.Context, arg LockBalanceParams) (InventoryStockBalances, error) {
+type LockBalanceRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	LegalEntityID     pgtype.UUID        `json:"legal_entity_id"`
+	ItemID            pgtype.UUID        `json:"item_id"`
+	WarehouseID       pgtype.UUID        `json:"warehouse_id"`
+	BinID             pgtype.UUID        `json:"bin_id"`
+	QuantityOnHand    pgtype.Numeric     `json:"quantity_on_hand"`
+	QuantityReserved  pgtype.Numeric     `json:"quantity_reserved"`
+	QuantityAvailable pgtype.Numeric     `json:"quantity_available"`
+	AverageCost       pgtype.Numeric     `json:"average_cost"`
+	TotalValue        pgtype.Numeric     `json:"total_value"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	Version           int64              `json:"version"`
+}
+
+func (q *Queries) LockBalance(ctx context.Context, arg LockBalanceParams) (LockBalanceRow, error) {
 	row := q.db.QueryRow(ctx, lockBalance,
 		arg.LegalEntityID,
 		arg.ItemID,
 		arg.WarehouseID,
 		arg.BinID,
 	)
-	var i InventoryStockBalances
+	var i LockBalanceRow
 	err := row.Scan(
 		&i.ID,
 		&i.LegalEntityID,
@@ -278,7 +293,7 @@ DO UPDATE SET
     total_value = EXCLUDED.total_value,
     updated_at = now(),
     version = inventory.stock_balances.version + 1
-RETURNING id, legal_entity_id, item_id, warehouse_id, bin_id, quantity_on_hand, quantity_reserved, quantity_available, average_cost, total_value, updated_at, version
+RETURNING id, legal_entity_id, item_id, warehouse_id, bin_id, quantity_on_hand, quantity_reserved, average_cost, total_value, updated_at, version, quantity_available
 `
 
 type UpsertBalanceParams struct {
@@ -312,11 +327,11 @@ func (q *Queries) UpsertBalance(ctx context.Context, arg UpsertBalanceParams) (I
 		&i.BinID,
 		&i.QuantityOnHand,
 		&i.QuantityReserved,
-		&i.QuantityAvailable,
 		&i.AverageCost,
 		&i.TotalValue,
 		&i.UpdatedAt,
 		&i.Version,
+		&i.QuantityAvailable,
 	)
 	return i, err
 }

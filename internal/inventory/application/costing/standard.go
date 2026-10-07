@@ -33,7 +33,7 @@ func (c *StandardCostCalculator) CalculateOutboundCost(
 		standardCost = itemInfo.CostPrice
 	}
 
-	totalCost := issueQty.Mul(standardCost).Round(4)
+	totalCost := issueQty.Mul(standardCost).Round(6)
 	return domain.CostCalculationResult{
 		UnitCost:     standardCost,
 		TotalCost:    totalCost,
@@ -57,7 +57,7 @@ func (c *StandardCostCalculator) RecordInboundCost(
 		OriginalQuantity:  inboundQty,
 		RemainingQuantity: inboundQty,
 		UnitCost:          unitCost,
-		TotalCost:         inboundQty.Mul(unitCost).Round(4),
+		TotalCost:         inboundQty.Mul(unitCost).Round(6),
 	}
 	_, err := c.repo.InsertCostLayer(ctx, layer)
 	return err

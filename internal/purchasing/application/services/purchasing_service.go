@@ -59,7 +59,7 @@ func (s *purchasingService) CreatePurchaseRequest(ctx context.Context, cmd ports
 	}
 
 	for i, l := range cmd.Lines {
-		total := l.Quantity.Mul(l.EstimatedUnitCost).Round(4)
+		total := l.Quantity.Mul(l.EstimatedUnitCost).Round(6)
 		pr.EstimatedTotal = pr.EstimatedTotal.Add(total)
 
 		uom := l.UOM
@@ -431,7 +431,7 @@ func (s *purchasingService) CreateGoodsReceipt(ctx context.Context, cmd ports.Cr
 	}
 
 	for i, l := range cmd.Lines {
-		totalCost := l.AcceptedQuantity.Mul(l.UnitCost).Round(4)
+		totalCost := l.AcceptedQuantity.Mul(l.UnitCost).Round(6)
 		gr.Lines = append(gr.Lines, domain.GoodsReceiptLine{
 			ID:               uuid.New(),
 			LineNumber:       i + 1,

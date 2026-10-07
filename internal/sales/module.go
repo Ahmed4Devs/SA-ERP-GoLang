@@ -13,6 +13,7 @@ import (
 	"erp/internal/sales/ports"
 	saleshttp "erp/internal/sales/transport/http"
 	taxpostgres "erp/internal/tax/infrastructure/postgres"
+	"erp/internal/workflow"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -27,7 +28,7 @@ type Module struct {
 
 func NewModule(cfg *config.Config, db *database.DB) *Module {
 	repo := postgres.NewSalesRepository(db)
-	svc := services.NewSalesService(repo, db, accounting.NewModule(cfg, db).PostingEngine, taxpostgres.NewTaxRepository(db.Pool), audit.NewModule(cfg, db).Service)
+	svc := services.NewSalesService(repo, db, accounting.NewModule(cfg, db).PostingEngine, taxpostgres.NewTaxRepository(db.Pool), audit.NewModule(cfg, db).Service, workflow.NewModule(cfg, db).Service)
 	handler := saleshttp.NewSalesHandler(svc)
 
 	return &Module{

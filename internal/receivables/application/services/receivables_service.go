@@ -180,7 +180,7 @@ func (s *receivablesService) createReceipt(ctx context.Context, cmd ports.Create
 		}
 	}
 
-	arID, err := s.ledger.Account(ctx, cmd.LegalEntityID, customer.DefaultAccountID, "112000")
+	arID, err := s.ledger.AccountForDate(ctx, cmd.LegalEntityID, customer.DefaultAccountID, "RECEIVABLES", "AR_CONTROL", "112000", receiptDate)
 	if err != nil {
 		return nil, err
 	}

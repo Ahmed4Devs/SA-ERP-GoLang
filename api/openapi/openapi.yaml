@@ -495,6 +495,50 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/accounting/journal-lines/{id}/dimensions:
+    post:
+      tags: [accounting]
+      operationId: accounting_post_api_v1_accounting_journal_lines_id_dimensions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericRequest'
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '201':
+          description: Resource created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/accounting/journals:
     get:
       tags: [accounting]
@@ -516,6 +560,94 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/accounting/opening-balances/{id}/post:
+    post:
+      tags: [accounting]
+      operationId: accounting_post_api_v1_accounting_opening_balances_id_post
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericRequest'
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '201':
+          description: Resource created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/accounting/reconciliations/{id}/complete:
+    post:
+      tags: [accounting]
+      operationId: accounting_post_api_v1_accounting_reconciliations_id_complete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericRequest'
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '201':
+          description: Resource created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -4650,6 +4782,39 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/inventory/adjustments/{id}:
+    get:
+      tags: [inventory]
+      operationId: inventory_get_api_v1_inventory_adjustments_id
+      summary: "Get Adjustment"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/inventory/adjustments/{id}/post:
     post:
       tags: [inventory]
@@ -4700,6 +4865,30 @@ paths:
       tags: [inventory]
       operationId: inventory_get_api_v1_inventory_balances
       summary: "List Balances"
+      parameters:
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/inventory/costing/item-costs:
+    get:
+      tags: [inventory]
+      operationId: inventory_get_api_v1_inventory_costing_item_costs
       parameters:
         - $ref: '#/components/parameters/LegalEntityQuery'
         - $ref: '#/components/parameters/LegalEntityHeader'
@@ -4806,6 +4995,66 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/inventory/costing/snapshots:
+    get:
+      tags: [inventory]
+      operationId: inventory_get_api_v1_inventory_costing_snapshots
+      parameters:
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [inventory]
+      operationId: inventory_post_api_v1_inventory_costing_snapshots
+      summary: "create Valuation Snapshot"
+      parameters:
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericRequest'
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '201':
+          description: Resource created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/inventory/costing/valuation:
     get:
       tags: [inventory]
@@ -4888,6 +5137,39 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/inventory/counts/{id}:
+    get:
+      tags: [inventory]
+      operationId: inventory_get_api_v1_inventory_counts_id
+      summary: "Get Stock Count"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -10604,6 +10886,51 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/sales/invoices/{id}/submit:
+    post:
+      tags: [sales]
+      operationId: sales_post_api_v1_sales_invoices_id_submit
+      summary: "Submit Invoice"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenericRequest'
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '201':
+          description: Resource created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/sales/orders:
     get:
       tags: [sales]
@@ -13102,6 +13429,9 @@ components:
         - transaction_debit
         - transaction_credit
       properties:
+        dimensions:
+          type: object
+          additionalProperties: true
         account_id:
           type: string
           format: uuid

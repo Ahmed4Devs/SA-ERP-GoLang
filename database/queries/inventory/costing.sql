@@ -164,7 +164,7 @@ ORDER BY i.code ASC, wh.code ASC;
 UPDATE inventory.stock_balances
 SET
     average_cost = $4,
-    total_value = round(quantity_on_hand * $4, 4),
+    total_value = round(quantity_on_hand * $4, 6),
     version = version + 1,
     updated_at = now()
 WHERE legal_entity_id = $1

@@ -100,10 +100,36 @@ tests and vet pass, including multiple bins, closed-period rollback, count
 maker-checker and duplicate reconciliation. Internal/cmd tests pass on rerun;
 the first aggregate run reported a failure without retained diagnostic output.
 
-## Pending
+## Canonical finance and invoice approvals
 
-FX snapshots and complete
-configurable approval policies; business UI;
-canonical accounting/inventory tables and precision; expenses/projects;
-compliance adapters; attachment backup and release checks. This document tracks
-work in progress and does not assert production readiness.
+Migrations 400/410 add the eleven missing canonical tables and widen financial
+storage without recomputing posted history. Audited APIs support dimensions,
+exchange rates, effective posting mappings, opening balances, reconciliations
+and inventory valuation snapshots. Source mappings connect to AP, AR and payroll.
+Journal custom dimensions survive reversal. Inventory costs aggregate all bins.
+
+Migration 420 adds optimistic, audited approval limits for sales, treasury and
+payroll. Workflow thresholds compare exact decimals. Migration 430 binds sales
+approval to server snapshots, preserves independent creators/approvers/posters,
+and freezes submitted/posted invoice amounts and lines. Employee GOSI deductions
+now use the configured insurance liability (seeded 215000), not output VAT.
+
+After sqlc regeneration, internal/cmd tests and all 29 PostgreSQL integration
+packages passed with the race detector. See `.tmp/remediation-integrated-current.log`.
+The schema upgrade rehearsal preserved historical journals and report grants.
+
+## Compliance and recovery
+
+GOSI no longer fabricates a portal confirmation or salary basis. File/manual,
+simulation and unavailable official behavior are distinct. ZATCA live paths
+reject simulator credentials, expired certificates and failed HTTP responses.
+Encrypted recovery bundles contain DB plus attachments, with verified paths,
+inventory and checksums. Native and non-root container restore drills passed.
+Scheduling, optional restic offsite delivery and monitoring templates are present.
+
+## Work still in progress
+
+Expense/project modules, remaining UI workflows and FX settlement snapshots with
+realized gains/losses. Actual regulatory acceptance, offsite credentials, deployed
+timers/alerts and PITR need customer infrastructure and external validation.
+This log does not assert production readiness.

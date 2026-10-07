@@ -616,7 +616,7 @@ type Querier interface {
 	ListZeroRateReasons(ctx context.Context) ([]TaxZeroRateReasons, error)
 	LockActiveInsuranceProfiles(ctx context.Context, legalEntityID pgtype.UUID) ([]LockActiveInsuranceProfilesRow, error)
 	LockApprovalRequestByID(ctx context.Context, id pgtype.UUID) (WorkflowApprovalRequests, error)
-	LockBalance(ctx context.Context, arg LockBalanceParams) (InventoryStockBalances, error)
+	LockBalance(ctx context.Context, arg LockBalanceParams) (LockBalanceRow, error)
 	LockBankReconciliationByID(ctx context.Context, arg LockBankReconciliationByIDParams) (BankingReconciliations, error)
 	LockCashAccountByID(ctx context.Context, arg LockCashAccountByIDParams) (TreasuryCashAccounts, error)
 	LockGosiCalculationsByPeriod(ctx context.Context, arg LockGosiCalculationsByPeriodParams) ([]GosiContributionCalculations, error)

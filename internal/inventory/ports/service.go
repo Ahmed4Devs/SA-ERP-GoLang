@@ -123,11 +123,13 @@ type InventoryService interface {
 	GetTransferOrder(ctx context.Context, id uuid.UUID) (*domain.TransferOrder, error)
 
 	// Adjustments
+	GetAdjustment(ctx context.Context, id uuid.UUID) (*domain.StockAdjustment, error)
 	CreateAdjustment(ctx context.Context, req CreateAdjustmentRequest) (*domain.StockAdjustment, error)
 	PostAdjustment(ctx context.Context, adjustmentID uuid.UUID, userID uuid.UUID) (*domain.StockAdjustment, error)
 	ListAdjustments(ctx context.Context, legalEntityID uuid.UUID, warehouseID *uuid.UUID, status *string, limit, offset int32) ([]domain.StockAdjustment, error)
 
 	// Counts
+	GetStockCount(ctx context.Context, id uuid.UUID) (*domain.StockCount, error)
 	CreateStockCount(ctx context.Context, req CreateCountRequest) (*domain.StockCount, error)
 	ReconcileStockCount(ctx context.Context, countID uuid.UUID, userID uuid.UUID) (*domain.StockCount, error)
 	ListStockCounts(ctx context.Context, legalEntityID uuid.UUID, warehouseID *uuid.UUID, status *string, limit, offset int32) ([]domain.StockCount, error)

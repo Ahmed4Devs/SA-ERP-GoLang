@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"erp/internal/accounting/application/services"
 	"erp/internal/accounting/domain"
 	"erp/internal/accounting/ports"
 	iamhttp "erp/internal/iam/transport/http"
@@ -16,6 +17,7 @@ import (
 )
 
 type AccountingHandler struct {
+	ReferenceService  *services.ReferenceService
 	accountingService ports.AccountingService
 	ledgerService     ports.LedgerService
 }
@@ -36,6 +38,7 @@ func (h *AccountingHandler) Routes(authMiddleware func(http.Handler) http.Handle
 		}
 
 		// Chart of Accounts & Accounts
+		h.registerReferenceRoutes(r)
 		r.Get("/chart-of-accounts", h.ListChartOfAccounts)
 		r.Get("/accounts", h.ListAccounts)
 		r.Post("/accounts", h.CreateAccount)
@@ -324,6 +327,7 @@ func (h *AccountingHandler) CreateJournalEntry(w http.ResponseWriter, r *http.Re
 			BranchID:          l.BranchID,
 			DepartmentID:      l.DepartmentID,
 			CostCenterID:      l.CostCenterID,
+			Dimensions:        l.Dimensions,
 		})
 	}
 

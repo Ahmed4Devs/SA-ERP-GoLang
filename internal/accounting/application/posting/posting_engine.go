@@ -127,13 +127,14 @@ func (e *postingEngine) post(ctx context.Context, request domain.PostingRequest)
 		baseDebit := line.BaseDebit
 		baseCredit := line.BaseCredit
 		if baseDebit.IsZero() && line.TransactionDebit.GreaterThan(decimal.Zero) {
-			baseDebit = line.TransactionDebit.Mul(request.ExchangeRate).Round(4)
+			baseDebit = line.TransactionDebit.Mul(request.ExchangeRate).Round(6)
 		}
 		if baseCredit.IsZero() && line.TransactionCredit.GreaterThan(decimal.Zero) {
-			baseCredit = line.TransactionCredit.Mul(request.ExchangeRate).Round(4)
+			baseCredit = line.TransactionCredit.Mul(request.ExchangeRate).Round(6)
 		}
 
 		journalLines = append(journalLines, domain.JournalLine{
+			Dimensions:        line.Dimensions,
 			LineNumber:        lineNum,
 			LegalEntityID:     request.LegalEntityID,
 			AccountID:         line.AccountID,
@@ -369,6 +370,7 @@ func (e *postingEngine) reverse(ctx context.Context, journalEntryID uuid.UUID, r
 	reversalLines := make([]domain.JournalLine, 0, len(original.Lines))
 	for _, l := range original.Lines {
 		reversalLines = append(reversalLines, domain.JournalLine{
+			Dimensions:        l.Dimensions,
 			LineNumber:        l.LineNumber,
 			LegalEntityID:     original.LegalEntityID,
 			AccountID:         l.AccountID,
@@ -430,6 +432,16 @@ func (e *postingEngine) reverse(ctx context.Context, journalEntryID uuid.UUID, r
 
 // validatePostingRequest ensures all required fields are present.
 func validatePostingRequest(r domain.PostingRequest) error {
+	if !r.ExchangeRate.Equal(r.ExchangeRate.Round(12)) {
+		return fmt.Errorf("%w: exchange_rate accepts at most 12 decimal places", domain.ErrInvalidPostingRequest)
+	}
+	for i, line := range r.Lines {
+		for _, amount := range []decimal.Decimal{line.TransactionDebit, line.TransactionCredit, line.BaseDebit, line.BaseCredit} {
+			if !amount.Equal(amount.Round(6)) {
+				return fmt.Errorf("%w: line %d amounts accept at most six decimal places", domain.ErrInvalidPostingRequest, i+1)
+			}
+		}
+	}
 	if r.ExchangeRate.IsNegative() {
 		return fmt.Errorf("%w: exchange_rate must be positive", domain.ErrInvalidPostingRequest)
 	}

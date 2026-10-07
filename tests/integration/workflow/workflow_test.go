@@ -133,7 +133,7 @@ func TestWorkflow_MakerCheckerEnforcement(t *testing.T) {
 	inst, err := wfMod.Service.StartWorkflow(ctx, ports.StartWorkflowCommand{
 		DefinitionCode: "SALES_INVOICE_APPROVAL",
 		LegalEntityID:  le.ID,
-		ResourceType:   "SALES_INVOICE",
+		ResourceType:   "TEST_SALES_DOCUMENT",
 		ResourceID:     "INV-2026-TEST01",
 		InitiatorID:    makerUser.ID,
 		ContextData: map[string]any{
@@ -222,7 +222,7 @@ func TestWorkflow_AdvancesConditionalStepAtomically(t *testing.T) {
 	inst, err := wfMod.Service.StartWorkflow(ctx, ports.StartWorkflowCommand{
 		DefinitionCode: "SALES_INVOICE_APPROVAL",
 		LegalEntityID:  le.ID,
-		ResourceType:   "SALES_INVOICE",
+		ResourceType:   "TEST_SALES_DOCUMENT",
 		ResourceID:     "INV-HIGH-" + uid,
 		InitiatorID:    maker.ID,
 		ContextData:    map[string]any{"amount": "75000.00"},
@@ -293,7 +293,7 @@ func TestWorkflow_ConcurrentAnyApprovalsCreateOneDecision(t *testing.T) {
 	inst, err := wfMod.Service.StartWorkflow(ctx, ports.StartWorkflowCommand{
 		DefinitionCode: "SALES_INVOICE_APPROVAL",
 		LegalEntityID:  le.ID,
-		ResourceType:   "SALES_INVOICE",
+		ResourceType:   "TEST_SALES_DOCUMENT",
 		ResourceID:     "INV-CONCURRENT-" + uid,
 		InitiatorID:    maker.ID,
 		ContextData:    map[string]any{"amount": "100.00"},

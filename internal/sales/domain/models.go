@@ -82,6 +82,7 @@ type InvoiceStatus string
 
 const (
 	InvoiceStatusDraft     InvoiceStatus = "DRAFT"
+	InvoiceStatusSubmitted InvoiceStatus = "SUBMITTED"
 	InvoiceStatusApproved  InvoiceStatus = "APPROVED"
 	InvoiceStatusPosted    InvoiceStatus = "POSTED"
 	InvoiceStatusCancelled InvoiceStatus = "CANCELLED"
@@ -341,18 +342,18 @@ func ValidateStandardInvoice(taxID *string) error {
 
 // CalculateLineAmounts computes line discounts, taxable base, and VAT
 func CalculateLineAmounts(qty, price, discountPercent, taxRate decimal.Decimal) (gross, discount, taxable, tax, total decimal.Decimal) {
-	gross = qty.Mul(price).Round(4)
+	gross = qty.Mul(price).Round(6)
 	if discountPercent.GreaterThan(decimal.Zero) {
-		discount = gross.Mul(discountPercent).Div(decimal.NewFromInt(100)).Round(4)
+		discount = gross.Mul(discountPercent).Div(decimal.NewFromInt(100)).Round(6)
 	} else {
 		discount = decimal.Zero
 	}
-	taxable = gross.Sub(discount).Round(4)
+	taxable = gross.Sub(discount).Round(6)
 	if taxRate.GreaterThan(decimal.Zero) {
-		tax = taxable.Mul(taxRate).Div(decimal.NewFromInt(100)).Round(4)
+		tax = taxable.Mul(taxRate).Div(decimal.NewFromInt(100)).Round(6)
 	} else {
 		tax = decimal.Zero
 	}
-	total = taxable.Add(tax).Round(4)
+	total = taxable.Add(tax).Round(6)
 	return
 }

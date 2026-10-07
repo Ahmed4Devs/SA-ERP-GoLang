@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	iamhttp "erp/internal/iam/transport/http"
+	"erp/internal/inventory/application/services"
 	"erp/internal/inventory/domain"
 	"erp/internal/inventory/ports"
 
@@ -15,6 +16,7 @@ import (
 )
 
 type InventoryHandler struct {
+	ValuationService *services.ValuationService
 	inventoryService ports.InventoryService
 }
 
@@ -60,15 +62,18 @@ func (h *InventoryHandler) Routes(authMiddleware func(http.Handler) http.Handler
 
 		// Adjustments
 		r.Get("/adjustments", h.ListAdjustments)
+		r.Get("/adjustments/{id}", h.GetAdjustment)
 		r.Post("/adjustments", h.CreateAdjustment)
 		r.Post("/adjustments/{id}/post", h.PostAdjustment)
 
 		// Counts
 		r.Get("/counts", h.ListStockCounts)
+		r.Get("/counts/{id}", h.GetStockCount)
 		r.Post("/counts", h.CreateStockCount)
 		r.Post("/counts/{id}/reconcile", h.ReconcileStockCount)
 
 		// Costing & Valuation
+		h.registerValuationRoutes(r)
 		r.Get("/costing/valuation", h.GetValuationReport)
 		r.Get("/costing/layers", h.ListCostLayers)
 		r.Post("/costing/revaluations", h.ExecuteRevaluation)
@@ -452,8 +457,7 @@ func (h *InventoryHandler) ListTransferOrders(w http.ResponseWriter, r *http.Req
 		status = &s
 	}
 
-	limit := int32(50)
-	offset := int32(0)
+	limit, offset := inventoryPagination(r)
 
 	orders, err := h.inventoryService.ListTransferOrders(r.Context(), leID, status, limit, offset)
 	if err != nil {
@@ -590,7 +594,8 @@ func (h *InventoryHandler) ListAdjustments(w http.ResponseWriter, r *http.Reques
 		status = &s
 	}
 
-	adjustments, err := h.inventoryService.ListAdjustments(r.Context(), leID, warehouseID, status, 50, 0)
+	limit, offset := inventoryPagination(r)
+	adjustments, err := h.inventoryService.ListAdjustments(r.Context(), leID, warehouseID, status, limit, offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
@@ -691,7 +696,8 @@ func (h *InventoryHandler) ListStockCounts(w http.ResponseWriter, r *http.Reques
 		status = &s
 	}
 
-	counts, err := h.inventoryService.ListStockCounts(r.Context(), leID, warehouseID, status, 50, 0)
+	limit, offset := inventoryPagination(r)
+	counts, err := h.inventoryService.ListStockCounts(r.Context(), leID, warehouseID, status, limit, offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
@@ -937,4 +943,16 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 			"message": message,
 		},
 	})
+}
+
+// inventoryPagination bounds client pagination before conversion to SQL integers.
+func inventoryPagination(r *http.Request) (int32, int32) {
+	limit, offset := int32(50), int32(0)
+	if value, err := strconv.ParseInt(r.URL.Query().Get("limit"), 10, 32); err == nil && value > 0 && value <= 200 {
+		limit = int32(value)
+	}
+	if value, err := strconv.ParseInt(r.URL.Query().Get("offset"), 10, 32); err == nil && value >= 0 {
+		offset = int32(value)
+	}
+	return limit, offset
 }

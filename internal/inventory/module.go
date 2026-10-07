@@ -22,6 +22,7 @@ import (
 type Module struct {
 	pool             *pgxpool.Pool
 	InventoryService ports.InventoryService
+	ValuationService *services.ValuationService
 	Handler          *inventoryhttp.InventoryHandler
 }
 
@@ -29,10 +30,13 @@ func NewModule(cfg *config.Config, db *database.DB) *Module {
 	repo := postgres.NewInventoryRepository(db)
 	invSvc := services.NewInventoryService(repo, db, postingapp.NewSourceService(db, accounting.NewModule(cfg, db).PostingEngine, audit.NewModule(cfg, db).Service))
 	handler := inventoryhttp.NewInventoryHandler(invSvc)
+	valuationSvc := services.NewValuationService(db, postingapp.NewSourceService(db, accounting.NewModule(cfg, db).PostingEngine, audit.NewModule(cfg, db).Service))
+	handler.ValuationService = valuationSvc
 
 	return &Module{
 		pool:             db.Pool,
 		InventoryService: invSvc,
+		ValuationService: valuationSvc,
 		Handler:          handler,
 	}
 }

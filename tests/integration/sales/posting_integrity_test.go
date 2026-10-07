@@ -34,7 +34,7 @@ func TestSales_ConfiguredTaxAndForeignCurrencyPosting(t *testing.T) {
 	if !invoice.TaxAmount.Equal(decimal.NewFromInt(15)) || !invoice.Lines[0].TaxRatePercent.Equal(decimal.NewFromInt(15)) {
 		t.Fatalf("client tax rate overrode configured rate: %+v", invoice)
 	}
-	posted, err := mod.SalesService.PostInvoice(ctx, invoice.ID, actorID)
+	posted, err := mod.SalesService.PostInvoice(ctx, invoice.ID, approveSalesInvoice(t, ctx, db, mod.SalesService, invoice.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestSales_ClosedPeriodsRollbackEntirePosting(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			_, err = mod.SalesService.PostInvoice(ctx, invoice.ID, actorID)
+			_, err = mod.SalesService.PostInvoice(ctx, invoice.ID, approveSalesInvoice(t, ctx, db, mod.SalesService, invoice.ID))
 			if err == nil {
 				t.Fatal("closed period accepted posting")
 			}
@@ -151,7 +151,7 @@ func TestSales_ClosedPeriodsRollbackEntirePosting(t *testing.T) {
 				}
 			}
 			stored, err := mod.SalesService.GetInvoice(ctx, invoice.ID)
-			if err != nil || stored.Status != domain.InvoiceStatusDraft {
+			if err != nil || stored.Status != domain.InvoiceStatusApproved {
 				t.Fatalf("failed posting altered invoice: %v %+v", err, stored)
 			}
 		})
@@ -208,6 +208,7 @@ func TestSales_PostingActorAndFractionalVATReconcile(t *testing.T) {
 	if _, err := mod.SalesService.PostInvoice(ctx, invoice.ID, uuid.Nil); err == nil {
 		t.Fatal("a posting command must require its authenticated actor")
 	}
+	approveSalesInvoice(t, ctx, db, mod.SalesService, invoice.ID)
 	posted, err := mod.SalesService.PostInvoice(ctx, invoice.ID, posterID)
 	if err != nil {
 		t.Fatal(err)
@@ -234,11 +235,11 @@ func TestSales_PostingActorAndFractionalVATReconcile(t *testing.T) {
 		if !vatTotal.Equal(decimal.RequireFromString(expectedTax)) || !vatTotal.Equal(ledgerTax) || !vatTotal.Equal(linesTax) {
 			t.Fatalf("VAT conversion does not reconcile: tax=%s GL=%s lines=%s", vatTotal, ledgerTax, linesTax)
 		}
-		if !glTotal.Equal(decimal.RequireFromString("0.0863")) || !glTotal.Equal(taxGross.Abs()) || (reversal != taxGross.IsNegative()) {
+		if !glTotal.Equal(decimal.RequireFromString("0.08625")) || !glTotal.Equal(taxGross.Abs()) || (reversal != taxGross.IsNegative()) {
 			t.Fatalf("GL and tax document totals disagree: GL=%s tax=%s", glTotal, taxGross)
 		}
 	}
-	checkPosting(invoice.ID, "0.0113", false)
+	checkPosting(invoice.ID, "0.01125", false)
 	creditLine := ports.CreateCreditNoteLineCommand{ItemID: itemID, Description: "Fractional return",
 		Quantity: line.Quantity, UnitPrice: line.UnitPrice, TaxCode: line.TaxCode}
 	creditNote, err := mod.SalesService.CreateCreditNote(ctx, ports.CreateCreditNoteCommand{
@@ -252,5 +253,5 @@ func TestSales_PostingActorAndFractionalVATReconcile(t *testing.T) {
 	if _, err := mod.SalesService.PostCreditNote(ctx, creditNote.ID, posterID); err != nil {
 		t.Fatal(err)
 	}
-	checkPosting(creditNote.ID, "-0.0113", true)
+	checkPosting(creditNote.ID, "-0.01125", true)
 }

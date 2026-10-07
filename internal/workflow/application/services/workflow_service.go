@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	auditports "erp/internal/audit/ports"
 	"fmt"
 	"strings"
 	"time"
@@ -17,18 +18,36 @@ import (
 )
 
 type workflowService struct {
-	repo ports.WorkflowRepository
-	tx   transaction.Manager
+	repo  ports.WorkflowRepository
+	tx    transaction.Manager
+	db    *database.DB
+	audit auditports.AuditService
 }
 
-func NewWorkflowService(repo ports.WorkflowRepository, db *database.DB) ports.WorkflowService {
+func NewWorkflowService(repo ports.WorkflowRepository, db *database.DB, audit auditports.AuditService) ports.WorkflowService {
 	return &workflowService{
 		repo: repo,
 		tx:   transaction.NewManager(db.Pool),
+		db:   db, audit: audit,
 	}
 }
 
 func (s *workflowService) StartWorkflow(ctx context.Context, cmd ports.StartWorkflowCommand) (*domain.WorkflowInstance, error) {
+	if _, ok := transaction.TxFromContext(ctx); !ok {
+		var result *domain.WorkflowInstance
+		err := s.tx.WithinTx(ctx, func(ctx context.Context) error {
+			if err := s.audit.LockChain(ctx); err != nil {
+				return err
+			}
+			var err error
+			result, err = s.StartWorkflow(ctx, cmd)
+			return err
+		})
+		return result, err
+	}
+	if err := s.audit.LockChain(ctx); err != nil {
+		return nil, err
+	}
 	cmd.DefinitionCode = strings.TrimSpace(cmd.DefinitionCode)
 	cmd.ResourceType = strings.TrimSpace(cmd.ResourceType)
 	cmd.ResourceID = strings.TrimSpace(cmd.ResourceID)
@@ -37,6 +56,9 @@ func (s *workflowService) StartWorkflow(ctx context.Context, cmd ports.StartWork
 	}
 	if cmd.ContextData == nil {
 		cmd.ContextData = map[string]any{}
+	}
+	if err := s.snapshotDocument(ctx, &cmd); err != nil {
+		return nil, err
 	}
 
 	def, err := s.repo.GetDefinitionByCode(ctx, cmd.DefinitionCode)
@@ -112,7 +134,10 @@ func (s *workflowService) StartWorkflow(ctx context.Context, cmd ports.StartWork
 		}
 
 		createdInst.Steps = append(createdInst.Steps, *createdStep)
-		return nil
+		if err := s.linkDocument(txCtx, createdInst); err != nil {
+			return err
+		}
+		return s.recordWorkflow(txCtx, createdInst, cmd.InitiatorID, "workflow.start")
 	})
 	if err != nil {
 		return nil, err
@@ -188,6 +213,9 @@ func (s *workflowService) SubmitDecision(ctx context.Context, cmd ports.SubmitDe
 
 	var persistedDecision *domain.ApprovalDecision
 	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+		if err := s.audit.LockChain(txCtx); err != nil {
+			return err
+		}
 		// Discover the step first, then serialize all decisions for that step. The
 		// lock order (step before request) also avoids a deadlock when one decision
 		// cancels the other pending requests.
@@ -216,6 +244,11 @@ func (s *workflowService) SubmitDecision(ctx context.Context, cmd ports.SubmitDe
 		}
 		if err := domain.ValidateMakerChecker(inst.InitiatorID, cmd.ActorID); err != nil {
 			return err
+		}
+		if cmd.Decision == "APPROVE" {
+			if err := s.validateDocumentAuthority(txCtx, inst, cmd.ActorID); err != nil {
+				return err
+			}
 		}
 
 		if req.AssignedUserID != cmd.ActorID {
@@ -254,6 +287,9 @@ func (s *workflowService) SubmitDecision(ctx context.Context, cmd ports.SubmitDe
 		if err != nil {
 			return fmt.Errorf("failed to record approval decision: %w", err)
 		}
+		if err := s.recordWorkflow(txCtx, inst, cmd.ActorID, "workflow.decision."+cmd.Decision); err != nil {
+			return err
+		}
 		if err := s.repo.UpdateApprovalRequestStatus(txCtx, req.ID, "DECIDED"); err != nil {
 			return fmt.Errorf("failed to close approval request: %w", err)
 		}
@@ -269,7 +305,7 @@ func (s *workflowService) SubmitDecision(ctx context.Context, cmd ports.SubmitDe
 			if err := s.repo.UpdateInstanceStatus(txCtx, inst.ID, "REJECTED", &now); err != nil {
 				return fmt.Errorf("failed to reject workflow instance: %w", err)
 			}
-			return nil
+			return s.completeDocument(txCtx, inst, cmd.ActorID, false)
 		}
 
 		if currentStep.ApprovalType == "ALL" {
@@ -316,7 +352,7 @@ func (s *workflowService) SubmitDecision(ctx context.Context, cmd ports.SubmitDe
 			if err := s.repo.UpdateInstanceStatus(txCtx, inst.ID, "APPROVED", &now); err != nil {
 				return fmt.Errorf("failed to approve workflow instance: %w", err)
 			}
-			return nil
+			return s.completeDocument(txCtx, inst, cmd.ActorID, true)
 		}
 
 		createdNextStep, err := s.repo.CreateInstanceStep(txCtx, &domain.InstanceStep{

@@ -351,18 +351,18 @@ type SupplierAgingSummary struct {
 }
 
 func CalculateLineAmounts(qty, unitPrice, discountPct, taxRate decimal.Decimal) (subtotal, discountAmt, taxAmt, totalAmt decimal.Decimal) {
-	gross := qty.Mul(unitPrice).Round(4)
+	gross := qty.Mul(unitPrice).Round(6)
 	if discountPct.GreaterThan(decimal.Zero) {
-		discountAmt = gross.Mul(discountPct).Div(decimal.NewFromInt(100)).Round(4)
+		discountAmt = gross.Mul(discountPct).Div(decimal.NewFromInt(100)).Round(6)
 	} else {
 		discountAmt = decimal.Zero
 	}
-	subtotal = gross.Sub(discountAmt).Round(4)
+	subtotal = gross.Sub(discountAmt).Round(6)
 	if taxRate.GreaterThan(decimal.Zero) {
-		taxAmt = subtotal.Mul(taxRate).Div(decimal.NewFromInt(100)).Round(4)
+		taxAmt = subtotal.Mul(taxRate).Div(decimal.NewFromInt(100)).Round(6)
 	} else {
 		taxAmt = decimal.Zero
 	}
-	totalAmt = subtotal.Add(taxAmt).Round(4)
+	totalAmt = subtotal.Add(taxAmt).Round(6)
 	return
 }

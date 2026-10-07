@@ -67,10 +67,10 @@ func (s *ledgerService) CreateJournalEntry(ctx context.Context, entry domain.Jou
 
 		// Calculate base amounts if not set
 		if line.BaseDebit.IsZero() && line.TransactionDebit.GreaterThan(decimal.Zero) {
-			line.BaseDebit = line.TransactionDebit.Mul(line.ExchangeRate).Round(4)
+			line.BaseDebit = line.TransactionDebit.Mul(line.ExchangeRate).Round(6)
 		}
 		if line.BaseCredit.IsZero() && line.TransactionCredit.GreaterThan(decimal.Zero) {
-			line.BaseCredit = line.TransactionCredit.Mul(line.ExchangeRate).Round(4)
+			line.BaseCredit = line.TransactionCredit.Mul(line.ExchangeRate).Round(6)
 		}
 
 		// Verify account exists and can post

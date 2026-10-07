@@ -161,24 +161,25 @@ type JournalEntry struct {
 }
 
 type JournalLine struct {
-	ID                uuid.UUID       `json:"id"`
-	JournalEntryID    uuid.UUID       `json:"journal_entry_id"`
-	LegalEntityID     uuid.UUID       `json:"legal_entity_id"`
-	LineNumber        int16           `json:"line_number"`
-	AccountID         uuid.UUID       `json:"account_id"`
-	AccountCode       string          `json:"account_code,omitempty"`
-	AccountNameEn     string          `json:"account_name_en,omitempty"`
-	AccountNameAr     string          `json:"account_name_ar,omitempty"`
-	Description       *string         `json:"description,omitempty"`
-	CurrencyCode      string          `json:"currency_code"`
-	ExchangeRate      decimal.Decimal `json:"exchange_rate"`
-	TransactionDebit  decimal.Decimal `json:"transaction_debit"`
-	TransactionCredit decimal.Decimal `json:"transaction_credit"`
-	BaseDebit         decimal.Decimal `json:"base_debit"`
-	BaseCredit        decimal.Decimal `json:"base_credit"`
-	BranchID          *uuid.UUID      `json:"branch_id,omitempty"`
-	DepartmentID      *uuid.UUID      `json:"department_id,omitempty"`
-	CostCenterID      *uuid.UUID      `json:"cost_center_id,omitempty"`
+	Dimensions        map[uuid.UUID]uuid.UUID `json:"dimensions,omitempty"`
+	ID                uuid.UUID               `json:"id"`
+	JournalEntryID    uuid.UUID               `json:"journal_entry_id"`
+	LegalEntityID     uuid.UUID               `json:"legal_entity_id"`
+	LineNumber        int16                   `json:"line_number"`
+	AccountID         uuid.UUID               `json:"account_id"`
+	AccountCode       string                  `json:"account_code,omitempty"`
+	AccountNameEn     string                  `json:"account_name_en,omitempty"`
+	AccountNameAr     string                  `json:"account_name_ar,omitempty"`
+	Description       *string                 `json:"description,omitempty"`
+	CurrencyCode      string                  `json:"currency_code"`
+	ExchangeRate      decimal.Decimal         `json:"exchange_rate"`
+	TransactionDebit  decimal.Decimal         `json:"transaction_debit"`
+	TransactionCredit decimal.Decimal         `json:"transaction_credit"`
+	BaseDebit         decimal.Decimal         `json:"base_debit"`
+	BaseCredit        decimal.Decimal         `json:"base_credit"`
+	BranchID          *uuid.UUID              `json:"branch_id,omitempty"`
+	DepartmentID      *uuid.UUID              `json:"department_id,omitempty"`
+	CostCenterID      *uuid.UUID              `json:"cost_center_id,omitempty"`
 }
 
 type TrialBalanceRow struct {

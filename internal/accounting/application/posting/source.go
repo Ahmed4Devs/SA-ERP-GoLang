@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"erp/internal/accounting/domain"
 	"erp/internal/accounting/ports"
 	auditports "erp/internal/audit/ports"
 	"erp/internal/platform/database"
 	"erp/internal/platform/transaction"
+	workflowservices "erp/internal/workflow/application/services"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 )
 
@@ -22,6 +25,49 @@ type SourceService struct {
 	engine ports.PostingEngine
 	audit  ports.PostingAuditRecorder
 	tx     transaction.Manager
+}
+
+// AccountForDate resolves an effective posting rule before the legacy account
+// code. Explicit document mappings take precedence. Configured but inactive or
+// not-yet-effective rules fail closed rather than silently using a fallback.
+func (s *SourceService) AccountForDate(ctx context.Context, entity uuid.UUID, selected *uuid.UUID, module, role, fallbackCode string, date time.Time) (uuid.UUID, error) {
+	if selected != nil && *selected != uuid.Nil {
+		return s.Account(ctx, entity, selected, "")
+	}
+	var ruleID uuid.UUID
+	var active bool
+	err := s.db.DBTX(ctx).QueryRow(ctx, `SELECT id,is_active FROM accounting.posting_rules WHERE legal_entity_id=$1 AND source_module=$2 AND code=$3 FOR SHARE`, entity, module, role).Scan(&ruleID, &active)
+	if err == pgx.ErrNoRows {
+		return s.Account(ctx, entity, nil, fallbackCode)
+	}
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if !active || date.IsZero() {
+		return uuid.Nil, fmt.Errorf("posting rule %s/%s is inactive or accounting date is missing", module, role)
+	}
+	var account uuid.UUID
+	err = s.db.DBTX(ctx).QueryRow(ctx, `SELECT account_id FROM accounting.posting_rule_versions WHERE posting_rule_id=$1 AND effective_from <= $2 ORDER BY effective_from DESC,version_number DESC LIMIT 1`, ruleID, date).Scan(&account)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("posting rule %s/%s has no effective version: %w", module, role, err)
+	}
+	return s.Account(ctx, entity, &account, "")
+}
+
+// CheckApprovalLimit uses the persisted document amount and currency. A foreign
+// amount cannot be compared to a base-currency authority without its saved FX rate.
+func (s *SourceService) CheckApprovalLimit(ctx context.Context, entity, actor uuid.UUID, resourceType, currency string, rate, amount decimal.Decimal) error {
+	var base string
+	if err := s.db.DBTX(ctx).QueryRow(ctx, "SELECT base_currency FROM organization.legal_entities WHERE id=$1", entity).Scan(&base); err != nil {
+		return err
+	}
+	if strings.EqualFold(strings.TrimSpace(base), strings.TrimSpace(currency)) {
+		rate = decimal.NewFromInt(1)
+	}
+	if !rate.IsPositive() {
+		return fmt.Errorf("approval requires a saved foreign exchange rate")
+	}
+	return workflowservices.CheckApprovalLimit(ctx, s.db, entity, actor, resourceType, amount.Mul(rate).Round(6))
 }
 
 // RecordSource records non-journal source transitions in the same transaction,
@@ -103,7 +149,7 @@ func (s *SourceService) Post(ctx context.Context, journalType string, request do
 		line := &request.Lines[i]
 		debit = debit.Add(line.TransactionDebit)
 		credit = credit.Add(line.TransactionCredit)
-		nextDebit, nextCredit := debit.Mul(request.ExchangeRate).Round(4), credit.Mul(request.ExchangeRate).Round(4)
+		nextDebit, nextCredit := debit.Mul(request.ExchangeRate).Round(6), credit.Mul(request.ExchangeRate).Round(6)
 		line.BaseDebit, line.BaseCredit = nextDebit.Sub(previousDebit), nextCredit.Sub(previousCredit)
 		previousDebit, previousCredit = nextDebit, nextCredit
 	}

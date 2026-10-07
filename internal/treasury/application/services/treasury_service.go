@@ -15,6 +15,7 @@ import (
 	"erp/internal/treasury/ports"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 type treasuryService struct {
@@ -234,6 +235,9 @@ func (s *treasuryService) ApprovePayment(ctx context.Context, legalEntityID, id 
 		}
 		if payment.Status != domain.PaymentDraft {
 			return domain.ErrInvalidStatusTransition
+		}
+		if err := s.ledger.CheckApprovalLimit(txCtx, legalEntityID, approverID, "TREASURY_PAYMENT", payment.CurrencyCode, decimal.Zero, payment.Amount); err != nil {
+			return err
 		}
 		approved, err = s.repo.UpdatePaymentStatus(txCtx, legalEntityID, id, domain.PaymentApproved, nil, &approverID)
 		if err != nil {

@@ -30,9 +30,9 @@ func TestSupplierPostingFXTaxAndRollback(t *testing.T) {
 	}
 	create := func() *domain.SupplierInvoice {
 		t.Helper()
-		invoice, err := mod.PayableService.CreateSupplierInvoice(ctx, ports.CreateSupplierInvoiceCmd{LegalEntityID: entity, SupplierID: supplier.ID, SupplierInvoiceNumber: uuid.NewString(), InvoiceDate: date.Format("2006-01-02"), CurrencyCode: "USD", ExchangeRate: decimal.RequireFromString("3.751234"), CreatedByUserID: &actor, Lines: []ports.CreateSupplierInvoiceLineCmd{
-			{ExpenseAccountID: expense, Description: "first", Quantity: decimal.NewFromInt(1), UnitPrice: decimal.RequireFromString("19.1234"), TaxCodeID: &code, TaxRate: decimal.NewFromInt(99)},
-			{ExpenseAccountID: expense, Description: "second", Quantity: decimal.NewFromInt(1), UnitPrice: decimal.RequireFromString("13.4321"), TaxCodeID: &code, TaxRate: decimal.NewFromInt(99)},
+		invoice, err := mod.PayableService.CreateSupplierInvoice(ctx, ports.CreateSupplierInvoiceCmd{LegalEntityID: entity, SupplierID: supplier.ID, SupplierInvoiceNumber: uuid.NewString(), InvoiceDate: date.Format("2006-01-02"), CurrencyCode: "USD", ExchangeRate: decimal.RequireFromString("3.751234567891"), CreatedByUserID: &actor, Lines: []ports.CreateSupplierInvoiceLineCmd{
+			{ExpenseAccountID: expense, Description: "first", Quantity: decimal.NewFromInt(1), UnitPrice: decimal.RequireFromString("19.123456"), TaxCodeID: &code, TaxRate: decimal.NewFromInt(99)},
+			{ExpenseAccountID: expense, Description: "second", Quantity: decimal.NewFromInt(1), UnitPrice: decimal.RequireFromString("13.432198"), TaxCodeID: &code, TaxRate: decimal.NewFromInt(99)},
 		}})
 		if err != nil {
 			t.Fatal(err)
@@ -52,7 +52,7 @@ func TestSupplierPostingFXTaxAndRollback(t *testing.T) {
 	if err := db.Pool.QueryRow(ctx, "SELECT total_debit,total_credit,fiscal_period_id,posted_by FROM accounting.journal_entries WHERE id=$1", posted.JournalEntryID).Scan(&debit, &credit, &period, &postedBy); err != nil {
 		t.Fatal(err)
 	}
-	if period != fiscal || postedBy != actor || !debit.Equal(credit) || !debit.Equal(invoice.TotalAmount.Mul(invoice.ExchangeRate).Round(4)) {
+	if period != fiscal || postedBy != actor || !debit.Equal(credit) || !debit.Equal(invoice.TotalAmount.Mul(invoice.ExchangeRate).Round(6)) {
 		t.Fatalf("incorrect posting: %s/%s period=%s actor=%s", debit, credit, period, postedBy)
 	}
 	if err := db.Pool.QueryRow(ctx, "SELECT SUM(l.base_debit) FROM accounting.journal_lines l JOIN accounting.accounts a ON a.id=l.account_id WHERE l.journal_entry_id=$1 AND a.code='114000'", posted.JournalEntryID).Scan(&vat); err != nil {

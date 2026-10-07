@@ -144,9 +144,9 @@ WHERE id = $1;
 
 -- name: SumBudgetLinesByVersion :one
 SELECT 
-    COALESCE(SUM(amount), 0)::NUMERIC(18,4) AS total_budgeted,
-    COALESCE(SUM(actual_amount), 0)::NUMERIC(18,4) AS total_actual,
-    COALESCE(SUM(committed_amount), 0)::NUMERIC(18,4) AS total_committed
+    COALESCE(SUM(amount), 0)::NUMERIC(24,6) AS total_budgeted,
+    COALESCE(SUM(actual_amount), 0)::NUMERIC(24,6) AS total_actual,
+    COALESCE(SUM(committed_amount), 0)::NUMERIC(24,6) AS total_committed
 FROM budgeting.budget_lines
 WHERE budget_version_id = $1;
 

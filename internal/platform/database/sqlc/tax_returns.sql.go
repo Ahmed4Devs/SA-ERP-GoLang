@@ -18,9 +18,9 @@ SELECT
     ttl.tax_rate_percent,
     ttl.exemption_reason_code,
     ttl.zero_rate_reason_code,
-    COALESCE(SUM(ttl.taxable_amount), 0)::NUMERIC(18,4) AS total_taxable,
-    COALESCE(SUM(ttl.tax_amount), 0)::NUMERIC(18,4) AS total_tax,
-    COALESCE(SUM(ttl.gross_amount), 0)::NUMERIC(18,4) AS total_gross
+    COALESCE(SUM(ttl.taxable_amount), 0)::NUMERIC(24,6) AS total_taxable,
+    COALESCE(SUM(ttl.tax_amount), 0)::NUMERIC(24,6) AS total_tax,
+    COALESCE(SUM(ttl.gross_amount), 0)::NUMERIC(24,6) AS total_gross
 FROM tax.tax_transactions tt
 JOIN tax.tax_transaction_lines ttl ON ttl.tax_transaction_id = tt.id
 WHERE tt.tax_period_id = $1

@@ -129,12 +129,12 @@ func (s *CostingService) ExecuteRevaluation(
 	for _, balance := range balances {
 		quantity = quantity.Add(balance.QuantityOnHand)
 		oldTotalValue = oldTotalValue.Add(balance.TotalValue)
-		newTotalValue = newTotalValue.Add(balance.QuantityOnHand.Mul(req.NewUnitCost).Round(4))
+		newTotalValue = newTotalValue.Add(balance.QuantityOnHand.Mul(req.NewUnitCost).Round(6))
 	}
 	if quantity.IsZero() {
 		return nil, domain.ErrZeroQuantityRevaluation
 	}
-	oldUnitCost := oldTotalValue.Div(quantity).Round(4)
+	oldUnitCost := oldTotalValue.Div(quantity).Round(6)
 	varianceAmount := newTotalValue.Sub(oldTotalValue)
 
 	revNum := identifiers.NewDocumentNumber("REV", time.Now())

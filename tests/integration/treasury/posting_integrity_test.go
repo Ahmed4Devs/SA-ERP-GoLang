@@ -74,6 +74,18 @@ func TestTreasuryHTTP_ActorApprovalAndLedger(t *testing.T) {
 	if rec := call(path+"approve"+query, maker, nil); rec.Code != http.StatusBadRequest {
 		t.Fatalf("maker approved own payment: %d", rec.Code)
 	}
+	if _, err := db.Pool.Exec(ctx, `INSERT INTO workflow.approval_limits(legal_entity_id,user_id,resource_type,maximum_base_amount,updated_by) VALUES($1,$2,'TREASURY_PAYMENT',29.999999,$3)`, entity, checker, maker); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = db.Pool.Exec(ctx, `DELETE FROM workflow.approval_limits WHERE legal_entity_id=$1 AND user_id=$2`, entity, checker)
+	})
+	if rec := call(path+"approve"+query, checker, nil); rec.Code != http.StatusBadRequest {
+		t.Fatal("payment exceeded approver's configured limit")
+	}
+	if _, err := db.Pool.Exec(ctx, `UPDATE workflow.approval_limits SET maximum_base_amount=30 WHERE legal_entity_id=$1 AND user_id=$2`, entity, checker); err != nil {
+		t.Fatal(err)
+	}
 	if rec := call(path+"approve"+query, checker, nil); rec.Code != http.StatusOK {
 		t.Fatalf("approve: %d %s", rec.Code, rec.Body.String())
 	}

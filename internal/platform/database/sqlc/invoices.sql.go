@@ -41,7 +41,7 @@ INSERT INTO sales.invoices (
 ) VALUES (
     COALESCE($25, uuidv7()),
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
-) RETURNING id, legal_entity_id, invoice_number, invoice_type, order_id, delivery_id, customer_id, customer_name_ar, customer_name_en, customer_tax_id, customer_cr_number, customer_address_json, issue_date, due_date, payment_terms_id, currency_code, exchange_rate, subtotal, discount_amount, taxable_amount, tax_amount, total_amount, status, journal_entry_id, open_item_id, qr_code_data, notes, created_by_user_id, posted_at, created_at, updated_at
+) RETURNING id, legal_entity_id, invoice_number, invoice_type, order_id, delivery_id, customer_id, customer_name_ar, customer_name_en, customer_tax_id, customer_cr_number, customer_address_json, issue_date, due_date, payment_terms_id, currency_code, exchange_rate, subtotal, discount_amount, taxable_amount, tax_amount, total_amount, status, journal_entry_id, open_item_id, qr_code_data, notes, created_by_user_id, posted_at, created_at, updated_at, approval_instance_id, approved_by, approved_at
 `
 
 type CreateInvoiceParams struct {
@@ -133,6 +133,9 @@ func (q *Queries) CreateInvoice(ctx context.Context, arg CreateInvoiceParams) (S
 		&i.PostedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ApprovalInstanceID,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
@@ -222,7 +225,7 @@ func (q *Queries) CreateInvoiceLine(ctx context.Context, arg CreateInvoiceLinePa
 }
 
 const getInvoice = `-- name: GetInvoice :one
-SELECT id, legal_entity_id, invoice_number, invoice_type, order_id, delivery_id, customer_id, customer_name_ar, customer_name_en, customer_tax_id, customer_cr_number, customer_address_json, issue_date, due_date, payment_terms_id, currency_code, exchange_rate, subtotal, discount_amount, taxable_amount, tax_amount, total_amount, status, journal_entry_id, open_item_id, qr_code_data, notes, created_by_user_id, posted_at, created_at, updated_at FROM sales.invoices
+SELECT id, legal_entity_id, invoice_number, invoice_type, order_id, delivery_id, customer_id, customer_name_ar, customer_name_en, customer_tax_id, customer_cr_number, customer_address_json, issue_date, due_date, payment_terms_id, currency_code, exchange_rate, subtotal, discount_amount, taxable_amount, tax_amount, total_amount, status, journal_entry_id, open_item_id, qr_code_data, notes, created_by_user_id, posted_at, created_at, updated_at, approval_instance_id, approved_by, approved_at FROM sales.invoices
 WHERE id = $1
 `
 
@@ -261,12 +264,15 @@ func (q *Queries) GetInvoice(ctx context.Context, id pgtype.UUID) (SalesInvoices
 		&i.PostedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ApprovalInstanceID,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
 
 const getInvoiceByNumber = `-- name: GetInvoiceByNumber :one
-SELECT id, legal_entity_id, invoice_number, invoice_type, order_id, delivery_id, customer_id, customer_name_ar, customer_name_en, customer_tax_id, customer_cr_number, customer_address_json, issue_date, due_date, payment_terms_id, currency_code, exchange_rate, subtotal, discount_amount, taxable_amount, tax_amount, total_amount, status, journal_entry_id, open_item_id, qr_code_data, notes, created_by_user_id, posted_at, created_at, updated_at FROM sales.invoices
+SELECT id, legal_entity_id, invoice_number, invoice_type, order_id, delivery_id, customer_id, customer_name_ar, customer_name_en, customer_tax_id, customer_cr_number, customer_address_json, issue_date, due_date, payment_terms_id, currency_code, exchange_rate, subtotal, discount_amount, taxable_amount, tax_amount, total_amount, status, journal_entry_id, open_item_id, qr_code_data, notes, created_by_user_id, posted_at, created_at, updated_at, approval_instance_id, approved_by, approved_at FROM sales.invoices
 WHERE legal_entity_id = $1 AND invoice_number = $2
 `
 
@@ -310,6 +316,9 @@ func (q *Queries) GetInvoiceByNumber(ctx context.Context, arg GetInvoiceByNumber
 		&i.PostedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ApprovalInstanceID,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
@@ -358,7 +367,7 @@ func (q *Queries) ListInvoiceLines(ctx context.Context, invoiceID pgtype.UUID) (
 }
 
 const listInvoices = `-- name: ListInvoices :many
-SELECT id, legal_entity_id, invoice_number, invoice_type, order_id, delivery_id, customer_id, customer_name_ar, customer_name_en, customer_tax_id, customer_cr_number, customer_address_json, issue_date, due_date, payment_terms_id, currency_code, exchange_rate, subtotal, discount_amount, taxable_amount, tax_amount, total_amount, status, journal_entry_id, open_item_id, qr_code_data, notes, created_by_user_id, posted_at, created_at, updated_at FROM sales.invoices
+SELECT id, legal_entity_id, invoice_number, invoice_type, order_id, delivery_id, customer_id, customer_name_ar, customer_name_en, customer_tax_id, customer_cr_number, customer_address_json, issue_date, due_date, payment_terms_id, currency_code, exchange_rate, subtotal, discount_amount, taxable_amount, tax_amount, total_amount, status, journal_entry_id, open_item_id, qr_code_data, notes, created_by_user_id, posted_at, created_at, updated_at, approval_instance_id, approved_by, approved_at FROM sales.invoices
 WHERE legal_entity_id = $1
   AND ($2::UUID IS NULL OR customer_id = $2)
   AND ($3::TEXT IS NULL OR invoice_type = $3)
@@ -424,6 +433,9 @@ func (q *Queries) ListInvoices(ctx context.Context, arg ListInvoicesParams) ([]S
 			&i.PostedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ApprovalInstanceID,
+			&i.ApprovedBy,
+			&i.ApprovedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -444,7 +456,7 @@ SET status = 'POSTED',
     qr_code_data = $4,
     updated_at = now()
 WHERE id = $1
-RETURNING id, legal_entity_id, invoice_number, invoice_type, order_id, delivery_id, customer_id, customer_name_ar, customer_name_en, customer_tax_id, customer_cr_number, customer_address_json, issue_date, due_date, payment_terms_id, currency_code, exchange_rate, subtotal, discount_amount, taxable_amount, tax_amount, total_amount, status, journal_entry_id, open_item_id, qr_code_data, notes, created_by_user_id, posted_at, created_at, updated_at
+RETURNING id, legal_entity_id, invoice_number, invoice_type, order_id, delivery_id, customer_id, customer_name_ar, customer_name_en, customer_tax_id, customer_cr_number, customer_address_json, issue_date, due_date, payment_terms_id, currency_code, exchange_rate, subtotal, discount_amount, taxable_amount, tax_amount, total_amount, status, journal_entry_id, open_item_id, qr_code_data, notes, created_by_user_id, posted_at, created_at, updated_at, approval_instance_id, approved_by, approved_at
 `
 
 type PostInvoiceParams struct {
@@ -494,6 +506,9 @@ func (q *Queries) PostInvoice(ctx context.Context, arg PostInvoiceParams) (Sales
 		&i.PostedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ApprovalInstanceID,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
@@ -503,7 +518,7 @@ UPDATE sales.invoices
 SET status = $2,
     updated_at = now()
 WHERE id = $1
-RETURNING id, legal_entity_id, invoice_number, invoice_type, order_id, delivery_id, customer_id, customer_name_ar, customer_name_en, customer_tax_id, customer_cr_number, customer_address_json, issue_date, due_date, payment_terms_id, currency_code, exchange_rate, subtotal, discount_amount, taxable_amount, tax_amount, total_amount, status, journal_entry_id, open_item_id, qr_code_data, notes, created_by_user_id, posted_at, created_at, updated_at
+RETURNING id, legal_entity_id, invoice_number, invoice_type, order_id, delivery_id, customer_id, customer_name_ar, customer_name_en, customer_tax_id, customer_cr_number, customer_address_json, issue_date, due_date, payment_terms_id, currency_code, exchange_rate, subtotal, discount_amount, taxable_amount, tax_amount, total_amount, status, journal_entry_id, open_item_id, qr_code_data, notes, created_by_user_id, posted_at, created_at, updated_at, approval_instance_id, approved_by, approved_at
 `
 
 type UpdateInvoiceStatusParams struct {
@@ -546,6 +561,9 @@ func (q *Queries) UpdateInvoiceStatus(ctx context.Context, arg UpdateInvoiceStat
 		&i.PostedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ApprovalInstanceID,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }

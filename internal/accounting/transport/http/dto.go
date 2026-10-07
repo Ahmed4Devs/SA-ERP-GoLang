@@ -30,15 +30,16 @@ type UpdateAccountRequest struct {
 }
 
 type CreateJournalLineRequest struct {
-	AccountID         uuid.UUID       `json:"account_id"`
-	Description       *string         `json:"description,omitempty"`
-	CurrencyCode      string          `json:"currency_code,omitempty"`
-	ExchangeRate      decimal.Decimal `json:"exchange_rate,omitempty"`
-	TransactionDebit  decimal.Decimal `json:"transaction_debit"`
-	TransactionCredit decimal.Decimal `json:"transaction_credit"`
-	BranchID          *uuid.UUID      `json:"branch_id,omitempty"`
-	DepartmentID      *uuid.UUID      `json:"department_id,omitempty"`
-	CostCenterID      *uuid.UUID      `json:"cost_center_id,omitempty"`
+	Dimensions        map[uuid.UUID]uuid.UUID `json:"dimensions,omitempty"`
+	AccountID         uuid.UUID               `json:"account_id"`
+	Description       *string                 `json:"description,omitempty"`
+	CurrencyCode      string                  `json:"currency_code,omitempty"`
+	ExchangeRate      decimal.Decimal         `json:"exchange_rate,omitempty"`
+	TransactionDebit  decimal.Decimal         `json:"transaction_debit"`
+	TransactionCredit decimal.Decimal         `json:"transaction_credit"`
+	BranchID          *uuid.UUID              `json:"branch_id,omitempty"`
+	DepartmentID      *uuid.UUID              `json:"department_id,omitempty"`
+	CostCenterID      *uuid.UUID              `json:"cost_center_id,omitempty"`
 }
 
 type CreateJournalEntryRequest struct {

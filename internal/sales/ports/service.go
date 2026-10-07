@@ -160,6 +160,7 @@ type SalesService interface {
 	CreateInvoice(ctx context.Context, cmd CreateInvoiceCommand) (*domain.SalesInvoice, error)
 	CreateInvoiceFromOrder(ctx context.Context, orderID uuid.UUID, invoiceType domain.InvoiceType, userID *uuid.UUID) (*domain.SalesInvoice, error)
 	PostInvoice(ctx context.Context, invoiceID, actorID uuid.UUID) (*domain.SalesInvoice, error)
+	SubmitInvoice(ctx context.Context, invoiceID, actorID uuid.UUID) (*domain.SalesInvoice, error)
 	GetInvoice(ctx context.Context, id uuid.UUID) (*domain.SalesInvoice, error)
 	ListInvoices(ctx context.Context, legalEntityID uuid.UUID, customerID *uuid.UUID, invoiceType *domain.InvoiceType, status *domain.InvoiceStatus, limit, offset int) ([]*domain.SalesInvoice, error)
 

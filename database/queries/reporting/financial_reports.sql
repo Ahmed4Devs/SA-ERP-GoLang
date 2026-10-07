@@ -6,12 +6,12 @@ SELECT
     a.name_ar AS account_name_ar,
     a.account_type,
     a.normal_balance,
-    COALESCE(SUM(l.base_debit), 0)::NUMERIC(18, 4) AS total_debit,
-    COALESCE(SUM(l.base_credit), 0)::NUMERIC(18, 4) AS total_credit,
+    COALESCE(SUM(l.base_debit), 0)::NUMERIC(24,6) AS total_debit,
+    COALESCE(SUM(l.base_credit), 0)::NUMERIC(24,6) AS total_credit,
     CASE
         WHEN a.normal_balance = 'DEBIT' THEN (COALESCE(SUM(l.base_debit), 0) - COALESCE(SUM(l.base_credit), 0))
         ELSE (COALESCE(SUM(l.base_credit), 0) - COALESCE(SUM(l.base_debit), 0))
-    END::NUMERIC(18, 4) AS net_balance
+    END::NUMERIC(24,6) AS net_balance
 FROM accounting.accounts a
 LEFT JOIN (
     SELECT jl.account_id, jl.base_debit, jl.base_credit
@@ -64,7 +64,7 @@ SELECT
     CASE
         WHEN a.normal_balance = 'DEBIT' THEN (COALESCE(SUM(l.base_debit), 0) - COALESCE(SUM(l.base_credit), 0))
         ELSE (COALESCE(SUM(l.base_credit), 0) - COALESCE(SUM(l.base_debit), 0))
-    END::NUMERIC(18, 4) AS balance
+    END::NUMERIC(24,6) AS balance
 FROM accounting.accounts a
 LEFT JOIN (
     SELECT jl.account_id, jl.base_debit, jl.base_credit
@@ -91,7 +91,7 @@ SELECT
     CASE
         WHEN a.normal_balance = 'DEBIT' THEN (COALESCE(SUM(l.base_debit), 0) - COALESCE(SUM(l.base_credit), 0))
         ELSE (COALESCE(SUM(l.base_credit), 0) - COALESCE(SUM(l.base_debit), 0))
-    END::NUMERIC(18, 4) AS period_balance
+    END::NUMERIC(24,6) AS period_balance
 FROM accounting.accounts a
 LEFT JOIN (
     SELECT jl.account_id, jl.base_debit, jl.base_credit

@@ -248,7 +248,7 @@ func TestSales_OrderCreditLimitValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create invoice from order 1: %v", err)
 	}
-	_, err = salesSvc.PostInvoice(ctx, inv1.ID, adminID)
+	_, err = salesSvc.PostInvoice(ctx, inv1.ID, approveSalesInvoice(t, ctx, db, salesSvc, inv1.ID))
 	if err != nil {
 		t.Fatalf("failed to post invoice 1: %v", err)
 	}
@@ -510,7 +510,7 @@ func TestSales_StandardInvoicePosting(t *testing.T) {
 	}
 
 	// 3. Post Invoice
-	postedInv, err := salesSvc.PostInvoice(ctx, invoice.ID, adminID)
+	postedInv, err := salesSvc.PostInvoice(ctx, invoice.ID, approveSalesInvoice(t, ctx, db, salesSvc, invoice.ID))
 	if err != nil {
 		t.Fatalf("failed to post invoice: %v", err)
 	}
@@ -614,7 +614,7 @@ func TestSales_SimplifiedInvoicePosting(t *testing.T) {
 		t.Errorf("expected SIMPLIFIED type, got %s", invoice.InvoiceType)
 	}
 
-	posted, err := salesSvc.PostInvoice(ctx, invoice.ID, adminID)
+	posted, err := salesSvc.PostInvoice(ctx, invoice.ID, approveSalesInvoice(t, ctx, db, salesSvc, invoice.ID))
 	if err != nil {
 		t.Fatalf("failed to post simplified invoice: %v", err)
 	}
@@ -676,7 +676,7 @@ func TestSales_CreditNoteLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create invoice: %v", err)
 	}
-	postedInv, err := salesSvc.PostInvoice(ctx, invoice.ID, adminID)
+	postedInv, err := salesSvc.PostInvoice(ctx, invoice.ID, approveSalesInvoice(t, ctx, db, salesSvc, invoice.ID))
 	if err != nil {
 		t.Fatalf("failed to post invoice: %v", err)
 	}

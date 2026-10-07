@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"erp/internal/accounting/domain"
@@ -576,6 +577,7 @@ func (r *accountingRepository) CreateJournalEntry(ctx context.Context, entry dom
 		}
 
 		createdLines = append(createdLines, domain.JournalLine{
+			Dimensions:        l.Dimensions,
 			ID:                toUUID(lineRow.ID),
 			JournalEntryID:    toUUID(lineRow.JournalEntryID),
 			LegalEntityID:     toUUID(lineRow.LegalEntityID),
@@ -592,6 +594,17 @@ func (r *accountingRepository) CreateJournalEntry(ctx context.Context, entry dom
 			DepartmentID:      toUUIDPtr(lineRow.DepartmentID),
 			CostCenterID:      toUUIDPtr(lineRow.CostCenterID),
 		})
+		dimensionIDs := make([]uuid.UUID, 0, len(l.Dimensions))
+		for dimension := range l.Dimensions {
+			dimensionIDs = append(dimensionIDs, dimension)
+		}
+		sort.Slice(dimensionIDs, func(i, j int) bool { return dimensionIDs[i].String() < dimensionIDs[j].String() })
+		tx, _ := transaction.TxFromContext(ctx)
+		for _, dimension := range dimensionIDs {
+			if _, err := tx.Exec(ctx, `INSERT INTO accounting.journal_line_dimensions(journal_line_id,legal_entity_id,dimension_id,dimension_value_id) VALUES($1,$2,$3,$4)`, lineRow.ID, entry.LegalEntityID, dimension, l.Dimensions[dimension]); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	res := toDomainJournalEntry(&entryRow)
@@ -647,6 +660,36 @@ func (r *accountingRepository) GetJournalEntryByID(ctx context.Context, id uuid.
 		})
 	}
 	entry.Lines = lines
+	var executor sqlc.DBTX = r.pool
+	if tx, ok := transaction.TxFromContext(ctx); ok {
+		executor = tx
+	}
+	dimensionRows, err := executor.Query(ctx, `SELECT d.journal_line_id,d.dimension_id,d.dimension_value_id FROM accounting.journal_line_dimensions d JOIN accounting.journal_lines l ON l.id=d.journal_line_id WHERE l.journal_entry_id=$1`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer dimensionRows.Close()
+	byLine := make(map[uuid.UUID]int, len(lines))
+	for i, line := range entry.Lines {
+		byLine[line.ID] = i
+	}
+	for dimensionRows.Next() {
+		var lineID, dimension, value uuid.UUID
+		if err = dimensionRows.Scan(&lineID, &dimension, &value); err != nil {
+			return nil, err
+		}
+		i, ok := byLine[lineID]
+		if !ok {
+			continue
+		}
+		if entry.Lines[i].Dimensions == nil {
+			entry.Lines[i].Dimensions = make(map[uuid.UUID]uuid.UUID)
+		}
+		entry.Lines[i].Dimensions[dimension] = value
+	}
+	if err = dimensionRows.Err(); err != nil {
+		return nil, err
+	}
 	return entry, nil
 }
 
@@ -757,7 +800,7 @@ func (r *accountingRepository) ReverseJournalEntry(
 		if err := r.ValidateLineDimensions(ctx, reversalEntry.LegalEntityID, l); err != nil {
 			return nil, err
 		}
-		_, err := qtx.CreateJournalLine(ctx, sqlc.CreateJournalLineParams{
+		createdLine, err := qtx.CreateJournalLine(ctx, sqlc.CreateJournalLineParams{
 			JournalEntryID:    revRow.ID,
 			LegalEntityID:     toPgUUID(reversalEntry.LegalEntityID),
 			LineNumber:        l.LineNumber,
@@ -775,6 +818,12 @@ func (r *accountingRepository) ReverseJournalEntry(
 		})
 		if err != nil {
 			return nil, err
+		}
+		tx, _ := transaction.TxFromContext(ctx)
+		for dimension, value := range l.Dimensions {
+			if _, err := tx.Exec(ctx, `INSERT INTO accounting.journal_line_dimensions(journal_line_id,legal_entity_id,dimension_id,dimension_value_id) VALUES($1,$2,$3,$4)`, createdLine.ID, reversalEntry.LegalEntityID, dimension, value); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -805,6 +854,21 @@ func (r *accountingRepository) ValidateLineDimensions(ctx context.Context, entit
 	tx, ok := transaction.TxFromContext(ctx)
 	if !ok {
 		return errors.New("journal dimension validation requires a transaction")
+	}
+	ids := make([]uuid.UUID, 0, len(line.Dimensions))
+	for dimension := range line.Dimensions {
+		ids = append(ids, dimension)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i].String() < ids[j].String() })
+	for _, dimension := range ids {
+		var value uuid.UUID
+		err := tx.QueryRow(ctx, `SELECT dv.id FROM accounting.dimension_values dv JOIN accounting.dimensions d ON d.id=dv.dimension_id WHERE dv.id=$1 AND dv.dimension_id=$2 AND dv.legal_entity_id=$3 AND dv.is_active AND d.is_active FOR SHARE OF dv,d`, line.Dimensions[dimension], dimension, entityID).Scan(&value)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrInvalidPostingDimension
+		}
+		if err != nil {
+			return err
+		}
 	}
 	for _, dimension := range []struct {
 		table string

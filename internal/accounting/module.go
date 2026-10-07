@@ -24,6 +24,7 @@ type Module struct {
 	AccountingService ports.AccountingService
 	LedgerService     ports.LedgerService
 	PostingEngine     ports.PostingEngine
+	ReferenceService  *services.ReferenceService
 	Handler           *accountinghttp.AccountingHandler
 }
 
@@ -34,12 +35,15 @@ func NewModule(cfg *config.Config, db *database.DB) *Module {
 	postingEngine := postingapp.NewPostingEngine(postingRepo, transaction.NewManager(db.Pool), audit.NewModule(cfg, db).Service)
 	ledgerSvc := services.NewLedgerService(repo, postingEngine)
 	handler := accountinghttp.NewAccountingHandler(accountingSvc, ledgerSvc)
+	referenceSvc := services.NewReferenceService(db, postingapp.NewSourceService(db, postingEngine, audit.NewModule(cfg, db).Service))
+	handler.ReferenceService = referenceSvc
 
 	return &Module{
 		pool:              db.Pool,
 		AccountingService: accountingSvc,
 		LedgerService:     ledgerSvc,
 		PostingEngine:     postingEngine,
+		ReferenceService:  referenceSvc,
 		Handler:           handler,
 	}
 }

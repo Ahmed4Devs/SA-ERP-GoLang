@@ -49,7 +49,7 @@ func (s *payableService) postInputTax(ctx context.Context, inv *domain.SupplierI
 	}
 	record := &taxdomain.TaxTransaction{LegalEntityID: inv.LegalEntityID, TaxPeriodID: &period.ID, SourceModule: "PAYABLES", SourceType: "SUPPLIER_INVOICE", SourceID: inv.ID, TransactionNumber: "TAX-" + inv.InvoiceNumber, TransactionDate: inv.InvoiceDate, TransactionType: "INPUT", PartnerID: &inv.SupplierID, PartnerName: &inv.SupplierNameEn, PartnerTaxNumber: inv.SupplierTaxID, JournalEntryID: &journalID, CreatedBy: &actor, Status: "POSTED"}
 	var taxable, tax, previousTaxable, previousTax decimal.Decimal
-	baseTaxableTotal := inv.TaxableAmount.Mul(inv.ExchangeRate).Round(4)
+	baseTaxableTotal := inv.TaxableAmount.Mul(inv.ExchangeRate).Round(6)
 	for i, line := range inv.Lines {
 		if line.TaxCodeID == nil {
 			return fmt.Errorf("legacy draft has no tax-code snapshot; recreate it with a configured input tax code")
@@ -63,10 +63,10 @@ func (s *payableService) postInputTax(ctx context.Context, inv *domain.SupplierI
 		}
 		taxable = taxable.Add(line.Subtotal)
 		tax = tax.Add(line.TaxAmount)
-		nextTaxable := taxable.Mul(inv.ExchangeRate).Round(4)
+		nextTaxable := taxable.Mul(inv.ExchangeRate).Round(6)
 		// VAT is the final debit after expenses; use the same cumulative FX
 		// allocation as the posting engine so both ledgers agree exactly.
-		nextTax := inv.TaxableAmount.Add(tax).Mul(inv.ExchangeRate).Round(4).Sub(baseTaxableTotal)
+		nextTax := inv.TaxableAmount.Add(tax).Mul(inv.ExchangeRate).Round(6).Sub(baseTaxableTotal)
 		item := taxdomain.TaxTransactionLine{LineNumber: i + 1, TaxCodeID: code.ID, TaxCategoryCode: code.TaxCategoryCode, TaxRatePercent: line.TaxRate, TaxableAmount: nextTaxable.Sub(previousTaxable), TaxAmount: nextTax.Sub(previousTax), IsRecoverable: code.IsRecoverable}
 		item.GrossAmount = item.TaxableAmount.Add(item.TaxAmount)
 		record.TotalTaxableAmount = record.TotalTaxableAmount.Add(item.TaxableAmount)

@@ -436,6 +436,9 @@ func (s *PayrollService) ApproveRun(ctx context.Context, runID, actor uuid.UUID)
 		if run.Status != domain.RunStatusCalculated && run.Status != domain.RunStatusUnderReview {
 			return domain.ErrPayrollNotCalculated
 		}
+		if err := s.ledger.CheckApprovalLimit(ctx, run.LegalEntityID, actor, "PAYROLL_RUN", "SAR", decimal.Zero, run.TotalGross); err != nil {
+			return err
+		}
 		if _, err = s.db.DBTX(ctx).Exec(ctx, "UPDATE payroll.runs SET approved_by=$2,approved_at=now() WHERE id=$1", runID, actor); err != nil {
 			return err
 		}
@@ -518,12 +521,12 @@ func (s *PayrollService) postRun(ctx context.Context, runID uuid.UUID, postedBy 
 		debit, credit decimal.Decimal
 	}{
 		{"521000", totalGross, decimal.Zero}, {"212000", decimal.Zero, totalNet},
-		{"213000", decimal.Zero, totalGosi}, {"115000", decimal.Zero, totalLoan}, {"521000", decimal.Zero, totalRecovery},
+		{"215000", decimal.Zero, totalGosi}, {"115000", decimal.Zero, totalLoan}, {"521000", decimal.Zero, totalRecovery},
 	} {
 		if part.debit.IsZero() && part.credit.IsZero() {
 			continue
 		}
-		account, err := s.ledger.Account(ctx, run.LegalEntityID, nil, part.code)
+		account, err := s.ledger.AccountForDate(ctx, run.LegalEntityID, nil, "PAYROLL", part.code, part.code, run.RunDate)
 		if err != nil {
 			return nil, err
 		}

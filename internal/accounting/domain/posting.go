@@ -35,7 +35,8 @@ type PostingRequest struct {
 
 // PostingLine represents a single debit or credit line within a posting request.
 type PostingLine struct {
-	AccountID uuid.UUID
+	Dimensions map[uuid.UUID]uuid.UUID
+	AccountID  uuid.UUID
 
 	Description string
 

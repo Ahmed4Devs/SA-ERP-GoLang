@@ -32,6 +32,15 @@ func TestPayrollApprovalAndAtomicPosting(t *testing.T) {
 	if _, err := svc.PostRun(ctx, run.ID, &checker); err == nil {
 		t.Fatal("unapproved payroll posted")
 	}
+	if _, err := db.Pool.Exec(ctx, `INSERT INTO workflow.approval_limits(legal_entity_id,user_id,resource_type,maximum_base_amount,updated_by) VALUES($1,$2,'PAYROLL_RUN',$3,$4)`, entity, checker, run.TotalGross.Sub(decimal.RequireFromString("0.000001")), maker); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ApproveRun(ctx, run.ID, checker); err == nil {
+		t.Fatal("payroll exceeded approver authority")
+	}
+	if _, err := db.Pool.Exec(ctx, `DELETE FROM workflow.approval_limits WHERE legal_entity_id=$1 AND user_id=$2`, entity, checker); err != nil {
+		t.Fatal(err)
+	}
 	run, err = svc.ApproveRun(ctx, run.ID, checker)
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +92,16 @@ func TestPayrollApprovalAndAtomicPosting(t *testing.T) {
 	}
 	if !debit.Equal(credit) || !debit.Equal(run.TotalGross) || actor != checker || entryPeriod != fiscal {
 		t.Fatal("incorrect payroll journal")
+	}
+	var expectedGosi, postedGosi, postedVAT decimal.Decimal
+	if err := db.Pool.QueryRow(ctx, `SELECT COALESCE(sum(gosi_employee_deduction),0) FROM payroll.run_employees WHERE run_id=$1`, run.ID).Scan(&expectedGosi); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Pool.QueryRow(ctx, `SELECT COALESCE(sum(l.base_credit) FILTER(WHERE a.code='215000'),0),COALESCE(sum(l.base_credit) FILTER(WHERE a.code='213000'),0) FROM accounting.journal_lines l JOIN accounting.accounts a ON a.id=l.account_id WHERE l.journal_entry_id=$1`, posted.JournalEntryID).Scan(&postedGosi, &postedVAT); err != nil {
+		t.Fatal(err)
+	}
+	if !expectedGosi.Equal(postedGosi) || !postedVAT.IsZero() {
+		t.Fatalf("employee insurance posted to wrong liability: expected=%s insurance=%s VAT=%s", expectedGosi, postedGosi, postedVAT)
 	}
 	var audits int
 	if err := db.Pool.QueryRow(ctx, "SELECT count(*) FROM audit.events WHERE resource_id=$1 AND action='accounting.journal.post'", posted.JournalEntryID.String()).Scan(&audits); err != nil || audits != 1 {

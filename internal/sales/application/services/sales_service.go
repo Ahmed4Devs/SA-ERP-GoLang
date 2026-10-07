@@ -14,27 +14,30 @@ import (
 	"erp/internal/sales/domain"
 	"erp/internal/sales/ports"
 	taxports "erp/internal/tax/ports"
+	workflowports "erp/internal/workflow/ports"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
 type salesService struct {
-	repo    ports.Repository
-	db      *database.DB
-	tx      transaction.Manager
-	posting accountingports.PostingEngine
-	tax     taxports.TaxRepository
-	audit   accountingports.PostingAuditRecorder
+	repo     ports.Repository
+	db       *database.DB
+	tx       transaction.Manager
+	posting  accountingports.PostingEngine
+	tax      taxports.TaxRepository
+	audit    accountingports.PostingAuditRecorder
+	workflow workflowports.WorkflowService
 }
 
-func NewSalesService(repo ports.Repository, db *database.DB, posting accountingports.PostingEngine, tax taxports.TaxRepository, audit accountingports.PostingAuditRecorder) ports.SalesService {
+func NewSalesService(repo ports.Repository, db *database.DB, posting accountingports.PostingEngine, tax taxports.TaxRepository, audit accountingports.PostingAuditRecorder, workflow workflowports.WorkflowService) ports.SalesService {
 	return &salesService{
-		repo:    repo,
-		db:      db,
-		tx:      transaction.NewManager(db.Pool),
-		posting: posting,
-		tax:     tax,
-		audit:   audit,
+		repo:     repo,
+		db:       db,
+		tx:       transaction.NewManager(db.Pool),
+		posting:  posting,
+		tax:      tax,
+		audit:    audit,
+		workflow: workflow,
 	}
 }
 
@@ -651,8 +654,20 @@ func (s *salesService) postInvoice(ctx context.Context, invoiceID, actorID uuid.
 	if inv.Status == domain.InvoiceStatusPosted {
 		return nil, domain.ErrInvoiceAlreadyPosted
 	}
-	if inv.Status != domain.InvoiceStatusDraft {
-		return nil, errors.New("only draft sales invoices can be posted")
+	if inv.Status != domain.InvoiceStatusApproved {
+		return nil, errors.New("sales invoices require completed approval before posting")
+	}
+	if inv.CreatedByUserID == nil || *inv.CreatedByUserID == actorID {
+		return nil, errors.New("sales invoices require an independent posting actor")
+	}
+	var approvalValid bool
+	if err := dbtx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM sales.invoices i JOIN workflow.instances w ON w.id=i.approval_instance_id
+	 WHERE i.id=$1 AND i.approved_by IS NOT NULL AND i.approved_by<>i.created_by_user_id AND w.status='APPROVED'
+	 AND w.resource_type='SALES_INVOICE' AND w.resource_id=i.id::text AND w.legal_entity_id=i.legal_entity_id)`, invoiceID).Scan(&approvalValid); err != nil {
+		return nil, err
+	}
+	if !approvalValid {
+		return nil, errors.New("a valid completed invoice approval is required")
 	}
 
 	// 1. Create AR Open Item in receivables.open_items
@@ -791,12 +806,12 @@ func (s *salesService) CreateCreditNote(ctx context.Context, cmd ports.CreateCre
 			return nil, errors.New("credit note line must reference an item and tax code from the original invoice")
 		}
 
-		taxable := l.Quantity.Mul(l.UnitPrice).Round(4)
+		taxable := l.Quantity.Mul(l.UnitPrice).Round(6)
 		tax := decimal.Zero
 		if l.TaxRatePercent.GreaterThan(decimal.Zero) {
-			tax = taxable.Mul(l.TaxRatePercent).Div(decimal.NewFromInt(100)).Round(4)
+			tax = taxable.Mul(l.TaxRatePercent).Div(decimal.NewFromInt(100)).Round(6)
 		}
-		total := taxable.Add(tax).Round(4)
+		total := taxable.Add(tax).Round(6)
 
 		cn.Subtotal = cn.Subtotal.Add(taxable)
 		cn.TaxAmount = cn.TaxAmount.Add(tax)
