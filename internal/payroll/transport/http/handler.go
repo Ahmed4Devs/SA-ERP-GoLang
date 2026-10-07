@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	iamhttp "erp/internal/iam/transport/http"
 	"net/http"
 	"time"
 
@@ -275,6 +276,11 @@ func (h *PayrollHandler) ListRuns(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PayrollHandler) CreateRun(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	var req struct {
 		LegalEntityID string `json:"legal_entity_id"`
 		PeriodID      string `json:"period_id"`
@@ -291,7 +297,7 @@ func (h *PayrollHandler) CreateRun(w http.ResponseWriter, r *http.Request) {
 	rDate, _ := time.Parse("2006-01-02", req.RunDate)
 	cDate, _ := time.Parse("2006-01-02", req.CutoffDate)
 
-	created, err := h.svc.CreateRun(r.Context(), leID, pID, req.RunNumber, rDate, cDate, nil)
+	created, err := h.svc.CreateRun(r.Context(), leID, pID, req.RunNumber, rDate, cDate, &actor.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -328,12 +334,17 @@ func (h *PayrollHandler) CalculateRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PayrollHandler) ApproveRun(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	runID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid run id")
 		return
 	}
-	approved, err := h.svc.ApproveRun(r.Context(), runID)
+	approved, err := h.svc.ApproveRun(r.Context(), runID, actor.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -342,12 +353,17 @@ func (h *PayrollHandler) ApproveRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PayrollHandler) PostRun(w http.ResponseWriter, r *http.Request) {
+	actor := iamhttp.UserFromContext(r.Context())
+	if actor == nil || actor.ID == uuid.Nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
 	runID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid run id")
 		return
 	}
-	posted, err := h.svc.PostRun(r.Context(), runID, nil)
+	posted, err := h.svc.PostRun(r.Context(), runID, &actor.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

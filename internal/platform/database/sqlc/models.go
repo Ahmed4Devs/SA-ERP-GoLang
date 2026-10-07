@@ -1858,6 +1858,8 @@ type PayrollRuns struct {
 	PostedBy         pgtype.UUID        `json:"posted_by"`
 	CreatedBy        pgtype.UUID        `json:"created_by"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	ApprovedBy       pgtype.UUID        `json:"approved_by"`
+	ApprovedAt       pgtype.Timestamptz `json:"approved_at"`
 }
 
 type PayrollSalaryComponents struct {

@@ -394,7 +394,8 @@ func (r *Repository) CreateRun(ctx context.Context, run domain.PayrollRun) (*dom
 		PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
 		PostedBy:         toUUIDPtr(row.PostedBy),
 		CreatedBy:        toUUIDPtr(row.CreatedBy),
-		CreatedAt:        fromPgTimestamptz(row.CreatedAt),
+		ApprovedBy:       toUUIDPtr(row.ApprovedBy), ApprovedAt: fromPgTimestamptzPtr(row.ApprovedAt),
+		CreatedAt: fromPgTimestamptz(row.CreatedAt),
 	}, nil
 }
 
@@ -423,7 +424,8 @@ func (r *Repository) GetRunByID(ctx context.Context, id uuid.UUID) (*domain.Payr
 		PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
 		PostedBy:         toUUIDPtr(row.PostedBy),
 		CreatedBy:        toUUIDPtr(row.CreatedBy),
-		CreatedAt:        fromPgTimestamptz(row.CreatedAt),
+		ApprovedBy:       toUUIDPtr(row.ApprovedBy), ApprovedAt: fromPgTimestamptzPtr(row.ApprovedAt),
+		CreatedAt: fromPgTimestamptz(row.CreatedAt),
 	}, nil
 }
 
@@ -454,7 +456,8 @@ func (r *Repository) ListRuns(ctx context.Context, legalEntityID uuid.UUID) ([]d
 			PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
 			PostedBy:         toUUIDPtr(row.PostedBy),
 			CreatedBy:        toUUIDPtr(row.CreatedBy),
-			CreatedAt:        fromPgTimestamptz(row.CreatedAt),
+			ApprovedBy:       toUUIDPtr(row.ApprovedBy), ApprovedAt: fromPgTimestamptzPtr(row.ApprovedAt),
+			CreatedAt: fromPgTimestamptz(row.CreatedAt),
 		})
 	}
 	return res, nil
@@ -489,7 +492,8 @@ func (r *Repository) UpdateRunStatus(ctx context.Context, id uuid.UUID, status d
 		PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
 		PostedBy:         toUUIDPtr(row.PostedBy),
 		CreatedBy:        toUUIDPtr(row.CreatedBy),
-		CreatedAt:        fromPgTimestamptz(row.CreatedAt),
+		ApprovedBy:       toUUIDPtr(row.ApprovedBy), ApprovedAt: fromPgTimestamptzPtr(row.ApprovedAt),
+		CreatedAt: fromPgTimestamptz(row.CreatedAt),
 	}, nil
 }
 
@@ -526,7 +530,8 @@ func (r *Repository) UpdateRunTotals(ctx context.Context, id uuid.UUID, basic, a
 		PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
 		PostedBy:         toUUIDPtr(row.PostedBy),
 		CreatedBy:        toUUIDPtr(row.CreatedBy),
-		CreatedAt:        fromPgTimestamptz(row.CreatedAt),
+		ApprovedBy:       toUUIDPtr(row.ApprovedBy), ApprovedAt: fromPgTimestamptzPtr(row.ApprovedAt),
+		CreatedAt: fromPgTimestamptz(row.CreatedAt),
 	}, nil
 }
 
@@ -558,7 +563,8 @@ func (r *Repository) LinkRunJournalEntry(ctx context.Context, id uuid.UUID, jour
 		PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
 		PostedBy:         toUUIDPtr(row.PostedBy),
 		CreatedBy:        toUUIDPtr(row.CreatedBy),
-		CreatedAt:        fromPgTimestamptz(row.CreatedAt),
+		ApprovedBy:       toUUIDPtr(row.ApprovedBy), ApprovedAt: fromPgTimestamptzPtr(row.ApprovedAt),
+		CreatedAt: fromPgTimestamptz(row.CreatedAt),
 	}, nil
 }
 
@@ -590,7 +596,8 @@ func (r *Repository) UpdateRunWpsStatus(ctx context.Context, id uuid.UUID, fileN
 		PostedAt:         fromPgTimestamptzPtr(row.PostedAt),
 		PostedBy:         toUUIDPtr(row.PostedBy),
 		CreatedBy:        toUUIDPtr(row.CreatedBy),
-		CreatedAt:        fromPgTimestamptz(row.CreatedAt),
+		ApprovedBy:       toUUIDPtr(row.ApprovedBy), ApprovedAt: fromPgTimestamptzPtr(row.ApprovedAt),
+		CreatedAt: fromPgTimestamptz(row.CreatedAt),
 	}, nil
 }
 

@@ -2,6 +2,10 @@ package services
 
 import (
 	"context"
+	"encoding/json"
+	postingapp "erp/internal/accounting/application/posting"
+	accountingdomain "erp/internal/accounting/domain"
+	auditports "erp/internal/audit/ports"
 	"fmt"
 	"time"
 
@@ -16,16 +20,19 @@ import (
 )
 
 type PayrollService struct {
-	repo ports.Repository
-	db   *database.DB
-	tx   transaction.Manager
+	ledger *postingapp.SourceService
+	audit  auditports.AuditService
+	repo   ports.Repository
+	db     *database.DB
+	tx     transaction.Manager
 }
 
-func NewPayrollService(repo ports.Repository, db *database.DB) ports.Service {
+func NewPayrollService(repo ports.Repository, db *database.DB, ledger *postingapp.SourceService, audit auditports.AuditService) ports.Service {
 	return &PayrollService{
-		repo: repo,
-		db:   db,
-		tx:   transaction.NewManager(db.Pool),
+		repo:   repo,
+		ledger: ledger, audit: audit,
+		db: db,
+		tx: transaction.NewManager(db.Pool),
 	}
 }
 
@@ -114,9 +121,9 @@ func (s *PayrollService) CreatePeriod(
 	var fpUUID uuid.UUID
 	err := s.db.Pool.QueryRow(ctx, `
 		SELECT id FROM accounting.fiscal_periods
-		WHERE legal_entity_id = $1 AND period_number = $2 AND status = 'OPEN'
+		WHERE legal_entity_id = $1 AND $2 BETWEEN start_date AND end_date AND status = 'OPEN'
 		LIMIT 1
-	`, legalEntityID, month).Scan(&fpUUID)
+	`, legalEntityID, end).Scan(&fpUUID)
 	if err == nil && fpUUID != uuid.Nil {
 		fpID = &fpUUID
 	}
@@ -151,6 +158,12 @@ func (s *PayrollService) CreateRun(
 	period, err := s.repo.GetPeriodByID(ctx, periodID)
 	if err != nil {
 		return nil, fmt.Errorf("period not found: %w", err)
+	}
+	if period.LegalEntityID != legalEntityID {
+		return nil, fmt.Errorf("payroll period legal entity mismatch")
+	}
+	if createdBy == nil || *createdBy == uuid.Nil {
+		return nil, fmt.Errorf("payroll creator is required")
 	}
 	if period.IsClosed {
 		return nil, domain.ErrPeriodClosed
@@ -206,6 +219,13 @@ func (s *PayrollService) calculateRun(ctx context.Context, runID uuid.UUID) (*do
 	period, err := s.repo.GetPeriodByID(ctx, run.PeriodID)
 	if err != nil {
 		return nil, err
+	}
+
+	if run.Status == domain.RunStatusApproved {
+		return nil, fmt.Errorf("approved payroll cannot be recalculated")
+	}
+	if period.IsClosed {
+		return nil, domain.ErrPeriodClosed
 	}
 
 	// Clean any previous calculation lines for this run
@@ -397,25 +417,49 @@ func (s *PayrollService) calculateRun(ctx context.Context, runID uuid.UUID) (*do
 }
 
 // 4. ApproveRun
-func (s *PayrollService) ApproveRun(ctx context.Context, runID uuid.UUID) (*domain.PayrollRun, error) {
-	run, err := s.repo.GetRunByID(ctx, runID)
-	if err != nil {
-		return nil, err
+func (s *PayrollService) ApproveRun(ctx context.Context, runID, actor uuid.UUID) (*domain.PayrollRun, error) {
+	if actor == uuid.Nil {
+		return nil, fmt.Errorf("approval actor is required")
 	}
-	if run.Status == domain.RunStatusPosted {
-		return nil, domain.ErrPayrollAlreadyPosted
-	}
-	if run.Status != domain.RunStatusCalculated && run.Status != domain.RunStatusUnderReview {
-		return nil, domain.ErrPayrollNotCalculated
-	}
-
-	return s.repo.UpdateRunStatus(ctx, runID, domain.RunStatusApproved, nil)
+	var approved *domain.PayrollRun
+	err := s.ledger.WithinTx(ctx, func(ctx context.Context) error {
+		if err := s.db.DBTX(ctx).QueryRow(ctx, "SELECT id FROM payroll.runs WHERE id=$1 FOR UPDATE", runID).Scan(&runID); err != nil {
+			return err
+		}
+		run, err := s.repo.GetRunByID(ctx, runID)
+		if err != nil {
+			return err
+		}
+		if run.CreatedBy == nil || *run.CreatedBy == actor {
+			return fmt.Errorf("payroll requires an independent approver")
+		}
+		if run.Status != domain.RunStatusCalculated && run.Status != domain.RunStatusUnderReview {
+			return domain.ErrPayrollNotCalculated
+		}
+		if _, err = s.db.DBTX(ctx).Exec(ctx, "UPDATE payroll.runs SET approved_by=$2,approved_at=now() WHERE id=$1", runID, actor); err != nil {
+			return err
+		}
+		approved, err = s.repo.UpdateRunStatus(ctx, runID, domain.RunStatusApproved, nil)
+		if err != nil {
+			return err
+		}
+		payload, err := json.Marshal(approved)
+		if err != nil {
+			return err
+		}
+		_, err = s.audit.RecordEvent(ctx, auditports.RecordEventCommand{UserID: &actor, LegalEntityID: &run.LegalEntityID, Action: "payroll.run.approve", ResourceType: "payroll.run", ResourceID: run.ID.String(), Payload: payload})
+		return err
+	})
+	return approved, err
 }
 
 // 5. PostRun verifies invariants, creates balanced General Ledger entries, generates payslips, and posts payroll.
 func (s *PayrollService) PostRun(ctx context.Context, runID uuid.UUID, postedBy *uuid.UUID) (*domain.PayrollRun, error) {
+	if postedBy == nil || *postedBy == uuid.Nil {
+		return nil, fmt.Errorf("posting actor is required")
+	}
 	var run *domain.PayrollRun
-	err := s.tx.WithinTx(ctx, func(txCtx context.Context) error {
+	err := s.ledger.WithinTx(ctx, func(txCtx context.Context) error {
 		var err error
 		run, err = s.postRun(txCtx, runID, postedBy)
 		return err
@@ -437,7 +481,10 @@ func (s *PayrollService) postRun(ctx context.Context, runID uuid.UUID, postedBy 
 	if run.Status == domain.RunStatusPosted {
 		return nil, domain.ErrDuplicatePayrollPost
 	}
-	if run.Status != domain.RunStatusApproved {
+	if run.CreatedBy == nil || *run.CreatedBy == *postedBy {
+		return nil, fmt.Errorf("payroll requires an independent posting actor")
+	}
+	if run.Status != domain.RunStatusApproved || run.ApprovedBy == nil || run.ApprovedAt == nil {
 		return nil, domain.ErrPayrollNotApproved
 	}
 
@@ -451,159 +498,43 @@ func (s *PayrollService) postRun(ctx context.Context, runID uuid.UUID, postedBy 
 		return nil, err
 	}
 
-	// 1. Post Balanced Journal Entry to General Ledger
-	// Debit: Salaries & Wages Expense (521000) = Total Gross
-	// Credit: Accrued Salaries Payable (212000) = Total Net
-	// Credit: Output/Social GOSI Payable (212000 / 213000) = Total GOSI Deductions
-	// Credit: Employee Loan Recovery (115000 / 212000) = Total Loan Deductions
-	// Credit: Other Deductions / Absence Recovery = Total Absence Deductions
-	// Debit == Credit!
-
-	var totalGosi, totalLoan, totalAbsence decimal.Decimal
+	if period.IsClosed {
+		return nil, domain.ErrPeriodClosed
+	}
+	var totalGosi, totalLoan, totalRecovery, totalNet, totalGross decimal.Decimal
 	for _, re := range runEmployees {
 		totalGosi = totalGosi.Add(re.GosiEmployeeDeduction)
 		totalLoan = totalLoan.Add(re.LoanDeduction)
-		totalAbsence = totalAbsence.Add(re.AbsenceDeduction)
+		totalRecovery = totalRecovery.Add(re.AbsenceDeduction).Add(re.OtherDeductions)
+		totalNet = totalNet.Add(re.NetSalary)
+		totalGross = totalGross.Add(re.GrossSalary)
 	}
-
-	var journalID, fiscalPeriodID, salExpenseAccID, accruedSalAccID, gosiLiabilityAccID, loanAssetAccID uuid.UUID
-	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.journals WHERE legal_entity_id = $1 LIMIT 1", run.LegalEntityID).Scan(&journalID); err != nil {
-		return nil, fmt.Errorf("payroll journal is not configured: %w", err)
+	if !totalGross.Equal(run.TotalGross) || !totalNet.Equal(run.TotalNet) || !totalGross.Equal(totalNet.Add(totalGosi).Add(totalLoan).Add(totalRecovery)) {
+		return nil, fmt.Errorf("payroll employee totals differ from run totals")
 	}
-	if period.FiscalPeriodID != nil {
-		fiscalPeriodID = *period.FiscalPeriodID
-	} else {
-		if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.fiscal_periods WHERE legal_entity_id = $1 AND status = 'OPEN' LIMIT 1", run.LegalEntityID).Scan(&fiscalPeriodID); err != nil {
-			return nil, fmt.Errorf("open fiscal period is not configured: %w", err)
+	lines := []accountingdomain.PostingLine{}
+	for _, part := range []struct {
+		code          string
+		debit, credit decimal.Decimal
+	}{
+		{"521000", totalGross, decimal.Zero}, {"212000", decimal.Zero, totalNet},
+		{"213000", decimal.Zero, totalGosi}, {"115000", decimal.Zero, totalLoan}, {"521000", decimal.Zero, totalRecovery},
+	} {
+		if part.debit.IsZero() && part.credit.IsZero() {
+			continue
 		}
-	}
-
-	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '521000' LIMIT 1", run.LegalEntityID).Scan(&salExpenseAccID); err != nil {
-		return nil, fmt.Errorf("salary expense account 521000 is not configured: %w", err)
-	}
-	if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '212000' LIMIT 1", run.LegalEntityID).Scan(&accruedSalAccID); err != nil {
-		return nil, fmt.Errorf("accrued salary account 212000 is not configured: %w", err)
-	}
-	if totalGosi.GreaterThan(decimal.Zero) {
-		if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '213000' LIMIT 1", run.LegalEntityID).Scan(&gosiLiabilityAccID); err != nil {
-			return nil, fmt.Errorf("GOSI liability account 213000 is not configured: %w", err)
-		}
-	}
-	if totalLoan.GreaterThan(decimal.Zero) {
-		if err := dbtx.QueryRow(ctx, "SELECT id FROM accounting.accounts WHERE legal_entity_id = $1 AND code = '115000' LIMIT 1", run.LegalEntityID).Scan(&loanAssetAccID); err != nil {
-			return nil, fmt.Errorf("employee loan account 115000 is not configured: %w", err)
-		}
-	}
-
-	var jeID uuid.UUID
-	if journalID != uuid.Nil && fiscalPeriodID != uuid.Nil && salExpenseAccID != uuid.Nil && accruedSalAccID != uuid.Nil {
-		jeID = uuid.New()
-		jeNum := fmt.Sprintf("JE-PR-%s", run.RunNumber)
-
-		// 1. Create Journal Entry Header in DRAFT state
-		_, err = dbtx.Exec(ctx, `
-			INSERT INTO accounting.journal_entries (
-				id, legal_entity_id, journal_id, fiscal_period_id, entry_number,
-				accounting_date, status, source_module, source_type, source_id,
-				reference, description, currency_code, exchange_rate,
-				total_debit, total_credit, created_by
-			) VALUES (
-				$1, $2, $3, $4, $5,
-				$6, 'DRAFT', 'PAYROLL', 'PAYROLL_RUN', $7,
-				$8, $9, 'SAR', 1.0,
-				$10, $10, $11
-			)
-		`, jeID, run.LegalEntityID, journalID, fiscalPeriodID, jeNum,
-			run.RunDate, run.ID,
-			run.RunNumber, fmt.Sprintf("استحقاق مسير رواتب - %s", run.RunNumber),
-			run.TotalGross, postedBy)
-
+		account, err := s.ledger.Account(ctx, run.LegalEntityID, nil, part.code)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create payroll journal entry: %w", err)
+			return nil, err
 		}
-		{
-			lineNum := int16(1)
-			// 1. Debit Salaries Expense
-			_, err = dbtx.Exec(ctx, `
-				INSERT INTO accounting.journal_lines (
-					journal_entry_id, legal_entity_id, line_number, account_id,
-					description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
-				) VALUES ($1, $2, $3, $4, 'إجمالي استحقاقات رواتب الموظفين', 'SAR', $5, 0, $5, 0)
-			`, jeID, run.LegalEntityID, lineNum, salExpenseAccID, run.TotalGross)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create salary expense journal line: %w", err)
-			}
-			lineNum++
-
-			// 2. Credit Accrued Salaries Payable (Net)
-			_, err = dbtx.Exec(ctx, `
-				INSERT INTO accounting.journal_lines (
-					journal_entry_id, legal_entity_id, line_number, account_id,
-					description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
-				) VALUES ($1, $2, $3, $4, 'صافي رواتب الموظفين المستحقة للصرف', 'SAR', 0, $5, 0, $5)
-			`, jeID, run.LegalEntityID, lineNum, accruedSalAccID, run.TotalNet)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create accrued salary journal line: %w", err)
-			}
-			lineNum++
-
-			// 3. Credit GOSI Payable (if any)
-			if totalGosi.GreaterThan(decimal.Zero) {
-				_, err = dbtx.Exec(ctx, `
-					INSERT INTO accounting.journal_lines (
-						journal_entry_id, legal_entity_id, line_number, account_id,
-						description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
-					) VALUES ($1, $2, $3, $4, 'استقطاعات التأمينات الاجتماعية (حصة الموظفين)', 'SAR', 0, $5, 0, $5)
-				`, jeID, run.LegalEntityID, lineNum, gosiLiabilityAccID, totalGosi)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create GOSI journal line: %w", err)
-				}
-				lineNum++
-			}
-
-			// 4. Credit Loan Recovery (if any)
-			if totalLoan.GreaterThan(decimal.Zero) {
-				_, err = dbtx.Exec(ctx, `
-					INSERT INTO accounting.journal_lines (
-						journal_entry_id, legal_entity_id, line_number, account_id,
-						description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
-					) VALUES ($1, $2, $3, $4, 'استرداد أقساط سلف وقروض الموظفين', 'SAR', 0, $5, 0, $5)
-				`, jeID, run.LegalEntityID, lineNum, loanAssetAccID, totalLoan)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create loan-recovery journal line: %w", err)
-				}
-				lineNum++
-			}
-
-			// 5. Credit Absence/Other Recovery (if any)
-			if totalAbsence.GreaterThan(decimal.Zero) {
-				_, err = dbtx.Exec(ctx, `
-					INSERT INTO accounting.journal_lines (
-						journal_entry_id, legal_entity_id, line_number, account_id,
-						description, currency_code, transaction_debit, transaction_credit, base_debit, base_credit
-					) VALUES ($1, $2, $3, $4, 'استقطاعات الغياب والإجازات غير مدفوعة الأجر', 'SAR', 0, $5, 0, $5)
-				`, jeID, run.LegalEntityID, lineNum, salExpenseAccID, totalAbsence)
-				if err != nil {
-					return nil, fmt.Errorf("failed to create absence-deduction journal line: %w", err)
-				}
-				lineNum++
-			}
-
-			// 6. Transition Journal Entry to POSTED
-			_, err = dbtx.Exec(ctx, `
-				UPDATE accounting.journal_entries
-				SET status = 'POSTED', posted_by = $1, posted_at = CURRENT_TIMESTAMP
-				WHERE id = $2
-			`, postedBy, jeID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to post payroll journal entry: %w", err)
-			}
-
-			// Link JE to payroll run
-			if _, err := s.repo.LinkRunJournalEntry(ctx, runID, jeID); err != nil {
-				return nil, fmt.Errorf("failed to link payroll journal entry: %w", err)
-			}
-		}
+		lines = append(lines, accountingdomain.PostingLine{AccountID: account, TransactionDebit: part.debit, TransactionCredit: part.credit})
+	}
+	journal, err := s.ledger.Post(ctx, "GENERAL", accountingdomain.PostingRequest{LegalEntityID: run.LegalEntityID, SourceModule: "PAYROLL", SourceType: "PAYROLL_RUN", SourceID: run.ID, AccountingDate: run.RunDate, CurrencyCode: "SAR", Reference: run.RunNumber, ActorID: *postedBy, Lines: lines})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.repo.LinkRunJournalEntry(ctx, runID, journal); err != nil {
+		return nil, err
 	}
 
 	// 2. Generate immutable Payslips for each run employee

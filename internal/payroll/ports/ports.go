@@ -82,7 +82,7 @@ type Service interface {
 	GetRun(ctx context.Context, runID uuid.UUID) (*domain.PayrollRun, error)
 	ListRuns(ctx context.Context, legalEntityID uuid.UUID) ([]domain.PayrollRun, error)
 	CalculateRun(ctx context.Context, runID uuid.UUID) (*domain.PayrollRun, error)
-	ApproveRun(ctx context.Context, runID uuid.UUID) (*domain.PayrollRun, error)
+	ApproveRun(ctx context.Context, runID, actor uuid.UUID) (*domain.PayrollRun, error)
 	PostRun(ctx context.Context, runID uuid.UUID, postedBy *uuid.UUID) (*domain.PayrollRun, error)
 	GenerateWps(ctx context.Context, runID uuid.UUID, employerMolID, bankCode string) (string, string, error)
 

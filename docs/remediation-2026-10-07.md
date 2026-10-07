@@ -56,10 +56,23 @@ HTTP actor forgery, maker/checker rejection, duplicate requests, closed-period
 rollback, and an injected audit failure. Targeted vet passed. Configurable
 approval limits and FX snapshots remain follow-up work.
 
+## Payroll central posting and approvals
+
+Payroll uses the central ledger engine and date-selected fiscal period.
+Authenticated creators, approvers and posting actors are required. Approval
+records its actor/time and audit transactionally (migration 380); approved
+calculations cannot be overwritten, and creators cannot approve/post their run.
+Posting verifies employee totals, creates the journal, balances, audit and
+payslips within one transaction. Existing posted runs are unchanged.
+
+Payroll integration tests pass with the race detector, including approval
+bypass attempts, creator rejection, persisted approver, closed-period rollback,
+balanced ledger amounts and mandatory posting audit. Targeted vet passes.
+
 ## Pending
 
-Transactional posting across treasury, payroll,
-assets and inventory; authenticated actors and approval policies; business UI;
+Transactional posting across assets and inventory; FX snapshots and complete
+configurable approval policies; business UI;
 canonical accounting/inventory tables and precision; expenses/projects;
 compliance adapters; attachment backup and release checks. This document tracks
 work in progress and does not assert production readiness.

@@ -131,7 +131,7 @@ INSERT INTO payroll.runs (
     total_net, employee_count, created_by
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-) RETURNING id, legal_entity_id, period_id, run_number, run_date, cutoff_date, status, total_basic, total_allowances, total_gross, total_deductions, total_net, employee_count, journal_entry_id, wps_file_generated, wps_file_name, posted_at, posted_by, created_by, created_at
+) RETURNING id, legal_entity_id, period_id, run_number, run_date, cutoff_date, status, total_basic, total_allowances, total_gross, total_deductions, total_net, employee_count, journal_entry_id, wps_file_generated, wps_file_name, posted_at, posted_by, created_by, created_at, approved_by, approved_at
 `
 
 type CreatePayrollRunParams struct {
@@ -190,6 +190,8 @@ func (q *Queries) CreatePayrollRun(ctx context.Context, arg CreatePayrollRunPara
 		&i.PostedBy,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
@@ -305,7 +307,7 @@ func (q *Queries) GetPayrollPeriodByID(ctx context.Context, id pgtype.UUID) (Pay
 }
 
 const getPayrollRunByID = `-- name: GetPayrollRunByID :one
-SELECT id, legal_entity_id, period_id, run_number, run_date, cutoff_date, status, total_basic, total_allowances, total_gross, total_deductions, total_net, employee_count, journal_entry_id, wps_file_generated, wps_file_name, posted_at, posted_by, created_by, created_at FROM payroll.runs
+SELECT id, legal_entity_id, period_id, run_number, run_date, cutoff_date, status, total_basic, total_allowances, total_gross, total_deductions, total_net, employee_count, journal_entry_id, wps_file_generated, wps_file_name, posted_at, posted_by, created_by, created_at, approved_by, approved_at FROM payroll.runs
 WHERE id = $1 LIMIT 1
 `
 
@@ -333,6 +335,8 @@ func (q *Queries) GetPayrollRunByID(ctx context.Context, id pgtype.UUID) (Payrol
 		&i.PostedBy,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
@@ -372,7 +376,7 @@ const linkPayrollRunJournalEntry = `-- name: LinkPayrollRunJournalEntry :one
 UPDATE payroll.runs
 SET journal_entry_id = $2
 WHERE id = $1
-RETURNING id, legal_entity_id, period_id, run_number, run_date, cutoff_date, status, total_basic, total_allowances, total_gross, total_deductions, total_net, employee_count, journal_entry_id, wps_file_generated, wps_file_name, posted_at, posted_by, created_by, created_at
+RETURNING id, legal_entity_id, period_id, run_number, run_date, cutoff_date, status, total_basic, total_allowances, total_gross, total_deductions, total_net, employee_count, journal_entry_id, wps_file_generated, wps_file_name, posted_at, posted_by, created_by, created_at, approved_by, approved_at
 `
 
 type LinkPayrollRunJournalEntryParams struct {
@@ -404,6 +408,8 @@ func (q *Queries) LinkPayrollRunJournalEntry(ctx context.Context, arg LinkPayrol
 		&i.PostedBy,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
@@ -565,7 +571,7 @@ func (q *Queries) ListPayrollRunEmployees(ctx context.Context, runID pgtype.UUID
 }
 
 const listPayrollRuns = `-- name: ListPayrollRuns :many
-SELECT r.id, r.legal_entity_id, r.period_id, r.run_number, r.run_date, r.cutoff_date, r.status, r.total_basic, r.total_allowances, r.total_gross, r.total_deductions, r.total_net, r.employee_count, r.journal_entry_id, r.wps_file_generated, r.wps_file_name, r.posted_at, r.posted_by, r.created_by, r.created_at, p.period_name_en, p.period_name_ar, p.period_year, p.period_month
+SELECT r.id, r.legal_entity_id, r.period_id, r.run_number, r.run_date, r.cutoff_date, r.status, r.total_basic, r.total_allowances, r.total_gross, r.total_deductions, r.total_net, r.employee_count, r.journal_entry_id, r.wps_file_generated, r.wps_file_name, r.posted_at, r.posted_by, r.created_by, r.created_at, r.approved_by, r.approved_at, p.period_name_en, p.period_name_ar, p.period_year, p.period_month
 FROM payroll.runs r
 JOIN payroll.periods p ON p.id = r.period_id
 WHERE r.legal_entity_id = $1
@@ -593,6 +599,8 @@ type ListPayrollRunsRow struct {
 	PostedBy         pgtype.UUID        `json:"posted_by"`
 	CreatedBy        pgtype.UUID        `json:"created_by"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	ApprovedBy       pgtype.UUID        `json:"approved_by"`
+	ApprovedAt       pgtype.Timestamptz `json:"approved_at"`
 	PeriodNameEn     string             `json:"period_name_en"`
 	PeriodNameAr     string             `json:"period_name_ar"`
 	PeriodYear       int32              `json:"period_year"`
@@ -629,6 +637,8 @@ func (q *Queries) ListPayrollRuns(ctx context.Context, legalEntityID pgtype.UUID
 			&i.PostedBy,
 			&i.CreatedBy,
 			&i.CreatedAt,
+			&i.ApprovedBy,
+			&i.ApprovedAt,
 			&i.PeriodNameEn,
 			&i.PeriodNameAr,
 			&i.PeriodYear,
@@ -650,7 +660,7 @@ SET status = $2::VARCHAR,
     posted_at = CASE WHEN $2::VARCHAR = 'POSTED' THEN CURRENT_TIMESTAMP ELSE posted_at END,
     posted_by = CASE WHEN $2::VARCHAR = 'POSTED' THEN $3::UUID ELSE posted_by END
 WHERE id = $1
-RETURNING id, legal_entity_id, period_id, run_number, run_date, cutoff_date, status, total_basic, total_allowances, total_gross, total_deductions, total_net, employee_count, journal_entry_id, wps_file_generated, wps_file_name, posted_at, posted_by, created_by, created_at
+RETURNING id, legal_entity_id, period_id, run_number, run_date, cutoff_date, status, total_basic, total_allowances, total_gross, total_deductions, total_net, employee_count, journal_entry_id, wps_file_generated, wps_file_name, posted_at, posted_by, created_by, created_at, approved_by, approved_at
 `
 
 type UpdatePayrollRunStatusParams struct {
@@ -683,6 +693,8 @@ func (q *Queries) UpdatePayrollRunStatus(ctx context.Context, arg UpdatePayrollR
 		&i.PostedBy,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
@@ -697,7 +709,7 @@ SET total_basic = $2,
     employee_count = $7,
     status = 'CALCULATED'
 WHERE id = $1
-RETURNING id, legal_entity_id, period_id, run_number, run_date, cutoff_date, status, total_basic, total_allowances, total_gross, total_deductions, total_net, employee_count, journal_entry_id, wps_file_generated, wps_file_name, posted_at, posted_by, created_by, created_at
+RETURNING id, legal_entity_id, period_id, run_number, run_date, cutoff_date, status, total_basic, total_allowances, total_gross, total_deductions, total_net, employee_count, journal_entry_id, wps_file_generated, wps_file_name, posted_at, posted_by, created_by, created_at, approved_by, approved_at
 `
 
 type UpdatePayrollRunTotalsParams struct {
@@ -742,6 +754,8 @@ func (q *Queries) UpdatePayrollRunTotals(ctx context.Context, arg UpdatePayrollR
 		&i.PostedBy,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
@@ -751,7 +765,7 @@ UPDATE payroll.runs
 SET wps_file_generated = true,
     wps_file_name = $2
 WHERE id = $1
-RETURNING id, legal_entity_id, period_id, run_number, run_date, cutoff_date, status, total_basic, total_allowances, total_gross, total_deductions, total_net, employee_count, journal_entry_id, wps_file_generated, wps_file_name, posted_at, posted_by, created_by, created_at
+RETURNING id, legal_entity_id, period_id, run_number, run_date, cutoff_date, status, total_basic, total_allowances, total_gross, total_deductions, total_net, employee_count, journal_entry_id, wps_file_generated, wps_file_name, posted_at, posted_by, created_by, created_at, approved_by, approved_at
 `
 
 type UpdatePayrollRunWpsStatusParams struct {
@@ -783,6 +797,8 @@ func (q *Queries) UpdatePayrollRunWpsStatus(ctx context.Context, arg UpdatePayro
 		&i.PostedBy,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.ApprovedBy,
+		&i.ApprovedAt,
 	)
 	return i, err
 }

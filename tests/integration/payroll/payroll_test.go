@@ -204,7 +204,7 @@ func TestPayroll_StateTransitionAndPosting(t *testing.T) {
 	}
 
 	// 4. Approve Payroll Run (APPROVED)
-	approved, err := svc.ApproveRun(ctx, run.ID)
+	approved, err := svc.ApproveRun(ctx, run.ID, payrollChecker(t, db, ctx))
 	if err != nil {
 		t.Fatalf("failed to approve run: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestPayroll_StateTransitionAndPosting(t *testing.T) {
 	}
 
 	// 5. Post Payroll Run to General Ledger (POSTED)
-	posted, err := svc.PostRun(ctx, run.ID, &adminID)
+	posted, err := svc.PostRun(ctx, run.ID, ptrChecker(t, db, ctx))
 	if err != nil {
 		t.Fatalf("failed to post run: %v", err)
 	}
@@ -267,7 +267,8 @@ func TestPayroll_StateTransitionAndPosting(t *testing.T) {
 }
 
 func TestPayroll_PostedImmutabilityAndDuplicatePostPrevention(t *testing.T) {
-	payMod, _, _, leID, _, adminID, ctx := setupPayrollTest(t)
+	payMod, _, db, leID, _, adminID, ctx := setupPayrollTest(t)
+	defer db.Close()
 	svc := payMod.PayrollService
 
 	now := time.Now()
@@ -279,8 +280,8 @@ func TestPayroll_PostedImmutabilityAndDuplicatePostPrevention(t *testing.T) {
 	runNum := "PR-IMM-" + uuid.New().String()[:8]
 	run, _ := svc.CreateRun(ctx, leID, period.ID, runNum, now, now, &adminID)
 	_, _ = svc.CalculateRun(ctx, run.ID)
-	_, _ = svc.ApproveRun(ctx, run.ID)
-	posted, err := svc.PostRun(ctx, run.ID, &adminID)
+	_, _ = svc.ApproveRun(ctx, run.ID, payrollChecker(t, db, ctx))
+	posted, err := svc.PostRun(ctx, run.ID, ptrChecker(t, db, ctx))
 	if err != nil {
 		t.Fatalf("failed to post run: %v", err)
 	}
@@ -292,14 +293,15 @@ func TestPayroll_PostedImmutabilityAndDuplicatePostPrevention(t *testing.T) {
 	}
 
 	// Invariant 2: Attempting to post a POSTED run again must fail (Duplicate post prevention)
-	_, err = svc.PostRun(ctx, posted.ID, &adminID)
+	_, err = svc.PostRun(ctx, posted.ID, ptrChecker(t, db, ctx))
 	if err != domain.ErrDuplicatePayrollPost {
 		t.Errorf("expected ErrDuplicatePayrollPost, got %v", err)
 	}
 }
 
 func TestPayroll_WPS_SIF_Generation(t *testing.T) {
-	payMod, _, _, leID, _, adminID, ctx := setupPayrollTest(t)
+	payMod, _, db, leID, _, adminID, ctx := setupPayrollTest(t)
+	defer db.Close()
 	svc := payMod.PayrollService
 
 	now := time.Now()
@@ -401,4 +403,21 @@ func TestPayroll_SeedDefaultData(t *testing.T) {
 	if len(structs) == 0 {
 		t.Fatalf("expected seeded salary structure, got 0")
 	}
+}
+
+func payrollChecker(t *testing.T, db *database.DB, ctx context.Context) uuid.UUID {
+	t.Helper()
+	var id uuid.UUID
+	err := db.Pool.QueryRow(ctx, "INSERT INTO iam.users(username,email,display_name) VALUES ('payroll-checker','payroll-checker@example.test','Payroll Checker') ON CONFLICT DO NOTHING RETURNING id").Scan(&id)
+	if err != nil {
+		err = db.Pool.QueryRow(ctx, "SELECT id FROM iam.users WHERE username='payroll-checker'").Scan(&id)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+func ptrChecker(t *testing.T, db *database.DB, ctx context.Context) *uuid.UUID {
+	id := payrollChecker(t, db, ctx)
+	return &id
 }

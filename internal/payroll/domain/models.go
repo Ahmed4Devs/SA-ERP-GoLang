@@ -126,6 +126,8 @@ type PayrollPeriod struct {
 
 // PayrollRun represents a batch payroll calculation for a period.
 type PayrollRun struct {
+	ApprovedBy       *uuid.UUID
+	ApprovedAt       *time.Time
 	ID               uuid.UUID
 	LegalEntityID    uuid.UUID
 	PeriodID         uuid.UUID
