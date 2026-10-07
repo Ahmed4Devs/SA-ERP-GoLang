@@ -74,6 +74,10 @@ func (r *UserRepository) UpdateLastLogin(ctx context.Context, id uuid.UUID) erro
 	return queries.UpdateUserLastLogin(ctx, pgtype.UUID{Bytes: id, Valid: true})
 }
 
+func (r *UserRepository) InvalidateAuthentication(ctx context.Context, id uuid.UUID) error {
+	return sqlc.New(r.db.DBTX(ctx)).InvalidateUserAuthentication(ctx, pgtype.UUID{Bytes: id, Valid: true})
+}
+
 func toPgText(s *string) pgtype.Text {
 	if s == nil {
 		return pgtype.Text{}

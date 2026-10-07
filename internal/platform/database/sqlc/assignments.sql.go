@@ -51,12 +51,50 @@ func (q *Queries) AssignUserRole(ctx context.Context, arg AssignUserRoleParams) 
 	return i, err
 }
 
+const getUserPermissionsInBranch = `-- name: GetUserPermissionsInBranch :many
+SELECT DISTINCT p.code
+FROM authz.user_role_assignments ura
+JOIN authz.role_permissions rp ON rp.role_id = ura.role_id
+JOIN authz.permissions p ON p.id = rp.permission_id
+WHERE ura.user_id = $1
+  AND (ura.legal_entity_id IS NULL OR ura.legal_entity_id = $2)
+  AND (ura.branch_id IS NULL OR ura.branch_id = $3)
+  AND EXISTS (SELECT 1 FROM organization.branches b WHERE b.id = $3 AND b.legal_entity_id = $2)
+`
+
+type GetUserPermissionsInBranchParams struct {
+	UserID        pgtype.UUID `json:"user_id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+	BranchID      pgtype.UUID `json:"branch_id"`
+}
+
+func (q *Queries) GetUserPermissionsInBranch(ctx context.Context, arg GetUserPermissionsInBranchParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, getUserPermissionsInBranch, arg.UserID, arg.LegalEntityID, arg.BranchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			return nil, err
+		}
+		items = append(items, code)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserPermissionsInScope = `-- name: GetUserPermissionsInScope :many
 SELECT DISTINCT p.code
 FROM authz.user_role_assignments ura
 JOIN authz.role_permissions rp ON rp.role_id = ura.role_id
 JOIN authz.permissions p ON p.id = rp.permission_id
 WHERE ura.user_id = $1
+  AND ura.branch_id IS NULL
   AND (
       ura.legal_entity_id IS NULL -- Global Scope (Super Admin)
       OR ura.legal_entity_id = $2  -- Exact Legal Entity Match
@@ -86,6 +124,22 @@ func (q *Queries) GetUserPermissionsInScope(ctx context.Context, arg GetUserPerm
 		return nil, err
 	}
 	return items, nil
+}
+
+const isBranchInEntity = `-- name: IsBranchInEntity :one
+SELECT EXISTS (SELECT 1 FROM organization.branches WHERE id = $1 AND legal_entity_id = $2)::boolean
+`
+
+type IsBranchInEntityParams struct {
+	BranchID      pgtype.UUID `json:"branch_id"`
+	LegalEntityID pgtype.UUID `json:"legal_entity_id"`
+}
+
+func (q *Queries) IsBranchInEntity(ctx context.Context, arg IsBranchInEntityParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isBranchInEntity, arg.BranchID, arg.LegalEntityID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const listUserAssignments = `-- name: ListUserAssignments :many
@@ -183,4 +237,34 @@ func (q *Queries) RevokeUserRole(ctx context.Context, arg RevokeUserRoleParams) 
 		arg.BranchID,
 	)
 	return err
+}
+
+const wouldRevokeLastAdministrator = `-- name: WouldRevokeLastAdministrator :one
+SELECT (EXISTS (
+    SELECT 1 FROM authz.user_role_assignments a
+    JOIN iam.users u ON u.id = a.user_id
+    JOIN authz.role_permissions rp ON rp.role_id = a.role_id
+    JOIN authz.permissions p ON p.id = rp.permission_id
+    WHERE a.user_id = $1 AND a.role_id = $2
+      AND a.legal_entity_id IS NULL AND a.branch_id IS NULL AND u.status = 'ACTIVE' AND p.code IN ('*', 'authz.*', 'authz.manage')
+) AND NOT EXISTS (
+    SELECT 1 FROM authz.user_role_assignments a
+    JOIN iam.users u ON u.id = a.user_id
+    JOIN authz.role_permissions rp ON rp.role_id = a.role_id
+    JOIN authz.permissions p ON p.id = rp.permission_id
+    WHERE (a.user_id <> $1 OR a.role_id <> $2)
+      AND a.legal_entity_id IS NULL AND a.branch_id IS NULL AND u.status = 'ACTIVE' AND p.code IN ('*', 'authz.*', 'authz.manage')
+))::boolean AS blocked
+`
+
+type WouldRevokeLastAdministratorParams struct {
+	UserID pgtype.UUID `json:"user_id"`
+	RoleID pgtype.UUID `json:"role_id"`
+}
+
+func (q *Queries) WouldRevokeLastAdministrator(ctx context.Context, arg WouldRevokeLastAdministratorParams) (bool, error) {
+	row := q.db.QueryRow(ctx, wouldRevokeLastAdministrator, arg.UserID, arg.RoleID)
+	var blocked bool
+	err := row.Scan(&blocked)
+	return blocked, err
 }

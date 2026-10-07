@@ -45,7 +45,38 @@ FROM authz.user_role_assignments ura
 JOIN authz.role_permissions rp ON rp.role_id = ura.role_id
 JOIN authz.permissions p ON p.id = rp.permission_id
 WHERE ura.user_id = $1
+  AND ura.branch_id IS NULL
   AND (
       ura.legal_entity_id IS NULL -- Global Scope (Super Admin)
       OR ura.legal_entity_id = $2  -- Exact Legal Entity Match
   );
+
+-- name: GetUserPermissionsInBranch :many
+SELECT DISTINCT p.code
+FROM authz.user_role_assignments ura
+JOIN authz.role_permissions rp ON rp.role_id = ura.role_id
+JOIN authz.permissions p ON p.id = rp.permission_id
+WHERE ura.user_id = sqlc.arg(user_id)
+  AND (ura.legal_entity_id IS NULL OR ura.legal_entity_id = sqlc.arg(legal_entity_id))
+  AND (ura.branch_id IS NULL OR ura.branch_id = sqlc.arg(branch_id))
+  AND EXISTS (SELECT 1 FROM organization.branches b WHERE b.id = sqlc.arg(branch_id) AND b.legal_entity_id = sqlc.arg(legal_entity_id));
+
+-- name: IsBranchInEntity :one
+SELECT EXISTS (SELECT 1 FROM organization.branches WHERE id = sqlc.arg(branch_id) AND legal_entity_id = sqlc.arg(legal_entity_id))::boolean;
+
+-- name: WouldRevokeLastAdministrator :one
+SELECT (EXISTS (
+    SELECT 1 FROM authz.user_role_assignments a
+    JOIN iam.users u ON u.id = a.user_id
+    JOIN authz.role_permissions rp ON rp.role_id = a.role_id
+    JOIN authz.permissions p ON p.id = rp.permission_id
+    WHERE a.user_id = sqlc.arg(user_id) AND a.role_id = sqlc.arg(role_id)
+      AND a.legal_entity_id IS NULL AND a.branch_id IS NULL AND u.status = 'ACTIVE' AND p.code IN ('*', 'authz.*', 'authz.manage')
+) AND NOT EXISTS (
+    SELECT 1 FROM authz.user_role_assignments a
+    JOIN iam.users u ON u.id = a.user_id
+    JOIN authz.role_permissions rp ON rp.role_id = a.role_id
+    JOIN authz.permissions p ON p.id = rp.permission_id
+    WHERE (a.user_id <> sqlc.arg(user_id) OR a.role_id <> sqlc.arg(role_id))
+      AND a.legal_entity_id IS NULL AND a.branch_id IS NULL AND u.status = 'ACTIVE' AND p.code IN ('*', 'authz.*', 'authz.manage')
+))::boolean AS blocked;

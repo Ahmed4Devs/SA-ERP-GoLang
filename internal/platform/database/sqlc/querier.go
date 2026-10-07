@@ -24,6 +24,7 @@ type Querier interface {
 	CountDocumentsByStatus(ctx context.Context, legalEntityID pgtype.UUID) (CountDocumentsByStatusRow, error)
 	CountEmployeesByNationality(ctx context.Context, legalEntityID pgtype.UUID) ([]CountEmployeesByNationalityRow, error)
 	CountJournalEntriesByLegalEntity(ctx context.Context, legalEntityID pgtype.UUID) (int64, error)
+	CountOtherActiveAdministrators(ctx context.Context, id pgtype.UUID) (int64, error)
 	CountReceipts(ctx context.Context, arg CountReceiptsParams) (int64, error)
 	CountRecentFailedAttempts(ctx context.Context, arg CountRecentFailedAttemptsParams) (int64, error)
 	CountSupplierInvoices(ctx context.Context, arg CountSupplierInvoicesParams) (int64, error)
@@ -409,6 +410,7 @@ type Querier interface {
 	GetUnitOfMeasureByID(ctx context.Context, id pgtype.UUID) (ProductsUnitsOfMeasure, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (IamUsers, error)
 	GetUserByUsernameOrEmail(ctx context.Context, lower string) (IamUsers, error)
+	GetUserPermissionsInBranch(ctx context.Context, arg GetUserPermissionsInBranchParams) ([]string, error)
 	GetUserPermissionsInScope(ctx context.Context, arg GetUserPermissionsInScopeParams) ([]string, error)
 	GetVATSummaryReport(ctx context.Context, arg GetVATSummaryReportParams) (GetVATSummaryReportRow, error)
 	GetValidationMessagesByResult(ctx context.Context, validationResultID pgtype.UUID) ([]ZatcaValidationMessages, error)
@@ -434,6 +436,9 @@ type Querier interface {
 	InsertOutboxEvent(ctx context.Context, arg InsertOutboxEventParams) (PlatformOutboxEvents, error)
 	InsertSecurityEvent(ctx context.Context, arg InsertSecurityEventParams) (AuditSecurityEvents, error)
 	InsertStockMovement(ctx context.Context, arg InsertStockMovementParams) (InventoryStockMovements, error)
+	InvalidateUserAuthentication(ctx context.Context, id pgtype.UUID) error
+	IsBranchInEntity(ctx context.Context, arg IsBranchInEntityParams) (bool, error)
+	IsGlobalAdministrator(ctx context.Context, userID pgtype.UUID) (bool, error)
 	IssuePurchaseOrder(ctx context.Context, id pgtype.UUID) (PurchasingPurchaseOrders, error)
 	LinkCalculationsToExportBatch(ctx context.Context, arg LinkCalculationsToExportBatchParams) (int64, error)
 	LinkPayrollRunJournalEntry(ctx context.Context, arg LinkPayrollRunJournalEntryParams) (PayrollRuns, error)
@@ -526,6 +531,7 @@ type Querier interface {
 	ListLeaveTypes(ctx context.Context, legalEntityID pgtype.UUID) ([]LeaveTypes, error)
 	ListLegalEntitiesByOrg(ctx context.Context, organizationID pgtype.UUID) ([]OrganizationLegalEntities, error)
 	ListLotsByItem(ctx context.Context, arg ListLotsByItemParams) ([]InventoryLots, error)
+	ListManagedUsers(ctx context.Context, arg ListManagedUsersParams) ([]IamUsers, error)
 	ListMovementsByEntity(ctx context.Context, arg ListMovementsByEntityParams) ([]ListMovementsByEntityRow, error)
 	ListNumberSequencesByEntity(ctx context.Context, legalEntityID pgtype.UUID) ([]OrganizationNumberSequences, error)
 	ListOpenItemsByCustomer(ctx context.Context, arg ListOpenItemsByCustomerParams) ([]ListOpenItemsByCustomerRow, error)
@@ -615,6 +621,7 @@ type Querier interface {
 	LockCashAccountByID(ctx context.Context, arg LockCashAccountByIDParams) (TreasuryCashAccounts, error)
 	LockGosiCalculationsByPeriod(ctx context.Context, arg LockGosiCalculationsByPeriodParams) ([]GosiContributionCalculations, error)
 	LockInstanceStepByID(ctx context.Context, id pgtype.UUID) (WorkflowInstanceSteps, error)
+	LockManagedUser(ctx context.Context, id pgtype.UUID) (IamUsers, error)
 	LockOpenItem(ctx context.Context, id pgtype.UUID) (ReceivablesOpenItems, error)
 	LockPayablesOpenItem(ctx context.Context, id pgtype.UUID) (PayablesOpenItems, error)
 	LockStatementLineByID(ctx context.Context, id pgtype.UUID) (BankingStatementLines, error)
@@ -622,6 +629,7 @@ type Querier interface {
 	LockTreasuryPaymentByID(ctx context.Context, arg LockTreasuryPaymentByIDParams) (TreasuryPayments, error)
 	LockTreasuryReceiptByID(ctx context.Context, arg LockTreasuryReceiptByIDParams) (TreasuryReceipts, error)
 	LockTreasuryTransferByID(ctx context.Context, arg LockTreasuryTransferByIDParams) (TreasuryTransfers, error)
+	LockUserAdministration(ctx context.Context) error
 	MarkJournalEntryReversed(ctx context.Context, arg MarkJournalEntryReversedParams) (AccountingJournalEntries, error)
 	MarkOutboxEventDeadLettered(ctx context.Context, arg MarkOutboxEventDeadLetteredParams) error
 	MarkOutboxEventPublished(ctx context.Context, id pgtype.UUID) error
@@ -685,6 +693,7 @@ type Querier interface {
 	UpdateLegalEntity(ctx context.Context, arg UpdateLegalEntityParams) (OrganizationLegalEntities, error)
 	UpdateLoanInstallmentStatus(ctx context.Context, arg UpdateLoanInstallmentStatusParams) (PayrollLoanInstallments, error)
 	UpdateLoanRemainingBalance(ctx context.Context, arg UpdateLoanRemainingBalanceParams) (PayrollLoans, error)
+	UpdateManagedUserState(ctx context.Context, arg UpdateManagedUserStateParams) (IamUsers, error)
 	UpdateOpenItemAllocation(ctx context.Context, arg UpdateOpenItemAllocationParams) (ReceivablesOpenItems, error)
 	UpdateOrderLineDeliveredQty(ctx context.Context, arg UpdateOrderLineDeliveredQtyParams) (SalesOrderLines, error)
 	UpdateOrderLineInvoicedQty(ctx context.Context, arg UpdateOrderLineInvoicedQtyParams) (SalesOrderLines, error)
@@ -744,6 +753,7 @@ type Querier interface {
 	UpsertEmployeeLeaveBalance(ctx context.Context, arg UpsertEmployeeLeaveBalanceParams) (LeaveEmployeeBalances, error)
 	UpsertItemTaxProfile(ctx context.Context, arg UpsertItemTaxProfileParams) (ProductsItemTaxProfiles, error)
 	UpsertItemUOM(ctx context.Context, arg UpsertItemUOMParams) (ProductsItemUoms, error)
+	WouldRevokeLastAdministrator(ctx context.Context, arg WouldRevokeLastAdministratorParams) (bool, error)
 }
 
 var _ Querier = (*Queries)(nil)

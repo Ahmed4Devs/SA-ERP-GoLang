@@ -60,8 +60,11 @@ type MFAFactor struct {
 }
 
 type MFAChallenge struct {
-	ID           uuid.UUID
-	UserID       uuid.UUID
+	ID     uuid.UUID
+	UserID uuid.UUID
+	// UserVersion is read with the active challenge and checked under the user
+	// lock before a session can be issued.
+	UserVersion  int64
 	TokenHash    string
 	IPAddress    string
 	UserAgent    string

@@ -11,6 +11,9 @@ import (
 type UserRepository interface {
 	Create(ctx context.Context, user *domain.User) (*domain.User, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
+	// Lock serializes credential changes and authentication issuance in a transaction.
+	Lock(ctx context.Context, id uuid.UUID) (*domain.User, error)
+	InvalidateAuthentication(ctx context.Context, id uuid.UUID) error
 	GetByIdentifier(ctx context.Context, identifier string) (*domain.User, error)
 	UpdateLastLogin(ctx context.Context, id uuid.UUID) error
 }
@@ -45,4 +48,5 @@ type MFARepository interface {
 	GetActiveChallenge(ctx context.Context, tokenHash string) (*domain.MFAChallenge, error)
 	IncrementChallengeAttempts(ctx context.Context, id uuid.UUID) error
 	ConsumeChallenge(ctx context.Context, id uuid.UUID) (bool, error)
+	DeleteLoginChallenges(ctx context.Context, userID uuid.UUID) error
 }

@@ -1449,7 +1449,206 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/auth/users:
+    get:
+      tags: [iam]
+      operationId: iam_get_api_v1_auth_users
+      summary: "List Users"
+      parameters:
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 200
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [iam]
+      operationId: iam_post_api_v1_auth_users
+      summary: "Create User"
+      parameters:
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam_CreateUserRequest'
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '201':
+          description: Resource created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/auth/users/{id}/password:
+    post:
+      tags: [iam]
+      operationId: iam_post_api_v1_auth_users_id_password
+      summary: "Reset User Password"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam_ResetUserPasswordRequest'
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '201':
+          description: Resource created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/auth/users/{id}/status:
+    post:
+      tags: [iam]
+      operationId: iam_post_api_v1_auth_users_id_status
+      summary: "Change User Status"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/iam_ChangeUserStatusRequest'
+      responses:
+        '200':
+          description: Operation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '201':
+          description: Resource created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/authz/assignments:
+    get:
+      tags: [authorization]
+      operationId: authorization_get_api_v1_authz_assignments
+      summary: "List Assignments"
+      parameters:
+        - $ref: '#/components/parameters/LegalEntityQuery'
+        - $ref: '#/components/parameters/LegalEntityHeader'
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
     post:
       tags: [authorization]
       operationId: authorization_post_api_v1_authz_assignments
@@ -13224,6 +13423,8 @@ components:
           type: string
         legal_entity_id:
           type: string
+        branch_id:
+          type: string
     authorization_RevokeRoleRequest:
       type: object
       required:
@@ -13963,6 +14164,39 @@ components:
         updated_at:
           type: string
           format: date-time
+    iam_ChangeUserStatusRequest:
+      type: object
+      required:
+        - status
+        - expected_version
+      properties:
+        status:
+          type: string
+        expected_version:
+          type: integer
+          format: int64
+    iam_CreateUserRequest:
+      type: object
+      required:
+        - username
+        - email
+        - display_name
+        - password
+        - preferred_locale
+        - preferred_timezone
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+        display_name:
+          type: string
+        password:
+          type: string
+        preferred_locale:
+          type: string
+        preferred_timezone:
+          type: string
     iam_LoginRequest:
       type: object
       required:
@@ -13983,6 +14217,17 @@ components:
           type: string
         code:
           type: string
+    iam_ResetUserPasswordRequest:
+      type: object
+      required:
+        - password
+        - expected_version
+      properties:
+        password:
+          type: string
+        expected_version:
+          type: integer
+          format: int64
     inventory_AdjustmentLineDTO:
       type: object
       required:

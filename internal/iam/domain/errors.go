@@ -3,6 +3,10 @@ package domain
 import "errors"
 
 var (
+	ErrInvalidUserInput     = errors.New("invalid user details")
+	ErrUserVersionConflict  = errors.New("user was changed by another operation")
+	ErrSelfDeactivation     = errors.New("you cannot deactivate your own account")
+	ErrLastAdministrator    = errors.New("the last active administrator cannot be deactivated")
 	ErrInvalidCredentials   = errors.New("invalid username, email or password")
 	ErrUserNotFound         = errors.New("user not found")
 	ErrUserDisabled         = errors.New("user account is disabled or suspended")

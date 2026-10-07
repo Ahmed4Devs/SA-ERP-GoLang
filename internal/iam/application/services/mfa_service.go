@@ -22,6 +22,7 @@ import (
 
 type MFAService struct {
 	repo          ports.MFARepository
+	users         ports.UserRepository
 	tokens        ports.TokenGenerator
 	secretBox     *iamcrypto.SecretBox
 	txManager     transaction.Manager
@@ -36,8 +37,8 @@ type MFAEnrollment struct {
 	Codes  []string `json:"recovery_codes"`
 }
 
-func NewMFAService(repo ports.MFARepository, tokens ports.TokenGenerator, secretBox *iamcrypto.SecretBox, txManager transaction.Manager, issuer string) *MFAService {
-	return &MFAService{repo: repo, tokens: tokens, secretBox: secretBox, txManager: txManager, issuer: issuer, challengeTTL: 5 * time.Minute, recoveryCount: 10}
+func NewMFAService(repo ports.MFARepository, users ports.UserRepository, tokens ports.TokenGenerator, secretBox *iamcrypto.SecretBox, txManager transaction.Manager, issuer string) *MFAService {
+	return &MFAService{repo: repo, users: users, tokens: tokens, secretBox: secretBox, txManager: txManager, issuer: issuer, challengeTTL: 5 * time.Minute, recoveryCount: 10}
 }
 
 func (s *MFAService) IsEnabled(ctx context.Context, userID uuid.UUID) (bool, error) {
@@ -80,6 +81,12 @@ func (s *MFAService) BeginEnrollment(ctx context.Context, user *domain.User) (*M
 		return nil, err
 	}
 	if err := s.txManager.WithinTx(ctx, func(txCtx context.Context) error {
+		if _, err := s.users.Lock(txCtx, user.ID); err != nil {
+			return err
+		}
+		if err := s.repo.DeleteLoginChallenges(txCtx, user.ID); err != nil {
+			return err
+		}
 		if _, err := s.repo.UpsertTOTPFactor(txCtx, user.ID, encrypted); err != nil {
 			return err
 		}
@@ -91,31 +98,54 @@ func (s *MFAService) BeginEnrollment(ctx context.Context, user *domain.User) (*M
 }
 
 func (s *MFAService) ConfirmEnrollment(ctx context.Context, userID uuid.UUID, code string) error {
-	factor, err := s.repo.GetTOTPFactor(ctx, userID, false)
-	if err != nil || factor.IsVerified {
-		return domain.ErrMFAUnavailable
-	}
-	secret, err := s.secretBox.Decrypt(factor.EncryptedSecret)
-	if err != nil {
-		return err
-	}
-	counter, valid := validateTOTP(code, secret, time.Now())
-	if !valid {
-		return domain.ErrMFAInvalidCode
-	}
-	return s.repo.VerifyTOTPFactor(ctx, userID, counter)
+	return s.txManager.WithinTx(ctx, func(ctx context.Context) error {
+		if _, err := s.users.Lock(ctx, userID); err != nil {
+			return err
+		}
+		// The order is user -> challenges -> factor for all factor changes.
+		if err := s.repo.DeleteLoginChallenges(ctx, userID); err != nil {
+			return err
+		}
+		factor, err := s.repo.GetTOTPFactor(ctx, userID, false)
+		if err != nil || factor.IsVerified {
+			return domain.ErrMFAUnavailable
+		}
+		secret, err := s.secretBox.Decrypt(factor.EncryptedSecret)
+		if err != nil {
+			return err
+		}
+		counter, valid := validateTOTP(code, secret, time.Now())
+		if !valid {
+			return domain.ErrMFAInvalidCode
+		}
+		if err := s.repo.VerifyTOTPFactor(ctx, userID, counter); err != nil {
+			return err
+		}
+		// Password verification performed before enrollment cannot issue a new
+		// password-only session after MFA becomes active.
+		return s.users.InvalidateAuthentication(ctx, userID)
+	})
 }
 
 func (s *MFAService) Disable(ctx context.Context, userID uuid.UUID, code string) error {
 	return s.txManager.WithinTx(ctx, func(txCtx context.Context) error {
+		if _, err := s.users.Lock(txCtx, userID); err != nil {
+			return err
+		}
+		if err := s.repo.DeleteLoginChallenges(txCtx, userID); err != nil {
+			return err
+		}
 		if err := s.verifyCode(txCtx, userID, code); err != nil {
 			return err
 		}
-		return s.repo.DisableMFA(txCtx, userID)
+		if err := s.repo.DisableMFA(txCtx, userID); err != nil {
+			return err
+		}
+		return s.users.InvalidateAuthentication(txCtx, userID)
 	})
 }
 
-func (s *MFAService) CreateLoginChallenge(ctx context.Context, userID uuid.UUID, ip, userAgent string) (string, time.Time, error) {
+func (s *MFAService) createLoginChallenge(ctx context.Context, userID uuid.UUID, ip, userAgent string) (string, time.Time, error) {
 	raw, hash, err := s.tokens.GenerateSessionToken()
 	if err != nil {
 		return "", time.Time{}, err
@@ -127,6 +157,7 @@ func (s *MFAService) CreateLoginChallenge(ctx context.Context, userID uuid.UUID,
 
 func (s *MFAService) CompleteLogin(ctx context.Context, challengeToken, code string) (*domain.MFAChallenge, error) {
 	var challenge *domain.MFAChallenge
+	var authenticationError error
 	err := s.txManager.WithinTx(ctx, func(txCtx context.Context) error {
 		var err error
 		challenge, err = s.repo.GetActiveChallenge(txCtx, iamcrypto.HashToken(challengeToken))
@@ -134,6 +165,13 @@ func (s *MFAService) CompleteLogin(ctx context.Context, challengeToken, code str
 			return domain.ErrMFAChallengeExpired
 		}
 		if err := s.verifyCode(txCtx, challenge.UserID, code); err != nil {
+			if errors.Is(err, domain.ErrMFAInvalidCode) {
+				// Commit the failed attempt while retaining the challenge row lock.
+				// Rollback followed by a separate increment permits concurrent guesses
+				// to all verify using the same remaining attempt.
+				authenticationError = err
+				return s.repo.IncrementChallengeAttempts(txCtx, challenge.ID)
+			}
 			return err
 		}
 		consumed, err := s.repo.ConsumeChallenge(txCtx, challenge.ID)
@@ -146,12 +184,10 @@ func (s *MFAService) CompleteLogin(ctx context.Context, challengeToken, code str
 		return nil
 	})
 	if err != nil {
-		if challenge != nil && errors.Is(err, domain.ErrMFAInvalidCode) {
-			if incrementErr := s.repo.IncrementChallengeAttempts(ctx, challenge.ID); incrementErr != nil {
-				return nil, incrementErr
-			}
-		}
 		return nil, err
+	}
+	if authenticationError != nil {
+		return nil, authenticationError
 	}
 	return challenge, nil
 }

@@ -37,7 +37,7 @@ func RequirePermission(
 				LegalEntityID: scope,
 			})
 			if err != nil {
-				writeForbidden(w, "Failed to evaluate authorization: "+err.Error())
+				writeForbidden(w, "Failed to evaluate authorization")
 				return
 			}
 

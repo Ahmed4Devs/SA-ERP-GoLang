@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	authzports "erp/internal/authorization/ports"
 	"erp/internal/iam/application/services"
 	"erp/internal/iam/domain"
 	"github.com/go-chi/chi/v5"
@@ -18,6 +19,8 @@ type AuthHandler struct {
 	authService  *services.AuthService
 	mfaService   *services.MFAService
 	isProduction bool
+	users        *services.UserManagementService
+	authorizer   authzports.AuthorizationService
 }
 
 func NewAuthHandler(authService *services.AuthService, mfaService *services.MFAService, isProduction bool) *AuthHandler {
@@ -52,6 +55,10 @@ func (h *AuthHandler) Routes(auditMiddleware ...func(http.Handler) http.Handler)
 		protected.Post("/mfa/enroll", h.EnrollMFA)
 		protected.Post("/mfa/confirm", h.ConfirmMFA)
 		protected.Post("/mfa/disable", h.DisableMFA)
+		protected.Get("/users", h.ListUsers)
+		protected.Post("/users", h.CreateUser)
+		protected.Post("/users/{id}/status", h.ChangeUserStatus)
+		protected.Post("/users/{id}/password", h.ResetUserPassword)
 	})
 
 	return r
@@ -86,8 +93,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	session, rawToken, user, err := h.authService.Login(r.Context(), req.Identifier, req.Password, clientIP, userAgent)
 	if err != nil {
 		if errors.Is(err, domain.ErrMFARequired) {
-			challengeToken, expiresAt, challengeErr := h.mfaService.CreateLoginChallenge(r.Context(), user.ID, clientIP, userAgent)
+			challengeToken, expiresAt, challengeErr := h.authService.CreateMFAChallenge(r.Context(), user, clientIP, userAgent)
 			if challengeErr != nil {
+				if errors.Is(challengeErr, domain.ErrInvalidCredentials) || errors.Is(challengeErr, domain.ErrUserDisabled) {
+					writeError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Authentication was invalidated; sign in again")
+					return
+				}
 				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to create MFA challenge")
 				return
 			}
@@ -150,9 +161,9 @@ func (h *AuthHandler) CompleteMFALogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "INVALID_MFA_CODE", "Invalid, expired, or already used MFA code")
 		return
 	}
-	session, rawToken, user, err := h.authService.CreateSessionForUser(r.Context(), challenge.UserID, challenge.IPAddress, challenge.UserAgent)
+	session, rawToken, user, err := h.authService.CreateSessionForUser(r.Context(), challenge.UserID, challenge.UserVersion, challenge.IPAddress, challenge.UserAgent)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to create authenticated session")
+		writeError(w, http.StatusUnauthorized, "INVALID_MFA_CODE", "Authentication was invalidated; sign in again")
 		return
 	}
 	h.setSessionCookie(w, rawToken, session.ExpiresAt)
@@ -225,7 +236,10 @@ func (h *AuthHandler) setSessionCookie(w http.ResponseWriter, rawToken string, e
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	token := extractToken(r)
 	if token != "" {
-		_ = h.authService.Logout(r.Context(), token)
+		if err := h.authService.Logout(r.Context(), token); err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to terminate session")
+			return
+		}
 	}
 
 	// Expire cookie
@@ -252,7 +266,10 @@ func (h *AuthHandler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.authService.LogoutAll(r.Context(), user.ID)
+	if err := h.authService.LogoutAll(r.Context(), user.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to terminate all sessions")
+		return
+	}
 
 	// Expire cookie
 	cookie := &http.Cookie{

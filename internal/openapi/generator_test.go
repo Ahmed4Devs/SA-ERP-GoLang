@@ -18,6 +18,11 @@ func TestGeneratedContractCoversKnownRoutes(t *testing.T) {
 	}
 	for _, expected := range [][]byte{
 		[]byte("/api/v1/auth/login/mfa:"),
+		[]byte("/api/v1/auth/users:"),
+		[]byte("/api/v1/auth/users/{id}/password:"),
+		[]byte("/api/v1/authz/assignments:"),
+		[]byte("/api/v1/authz/assignments/revoke:"),
+		[]byte("$ref: '#/components/schemas/iam_CreateUserRequest'"),
 		[]byte("/api/v1/accounting/journal-entries/{id}/post:"),
 		[]byte("/api/v1/fixedassets/assets:"),
 		[]byte("/api/v1/workflow/instances:"),
@@ -60,5 +65,61 @@ func TestGeneratedContractCoversKnownRoutes(t *testing.T) {
 	}
 	if !bytes.Equal(contract, onDisk) {
 		t.Fatal("api/openapi/openapi.yaml is stale; run go run ./cmd/openapi-gen")
+	}
+}
+
+func TestHandlerSchemasAcrossFilesKeepReceiverScope(t *testing.T) {
+	root := t.TempDir()
+	moduleDir := filepath.Join(root, "internal", "example")
+	routeDir := filepath.Join(moduleDir, "transport", "http")
+	if err := os.MkdirAll(routeDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join(moduleDir, "module.go"): `package example
+func Mount(r Router) { r.Mount("/api/v1/example", handler) }`,
+		filepath.Join(routeDir, "routes.go"): `package http
+func (h *UserHandler) Routes(r Router) { r.Post("/users", h.Create); r.Post("/upload", h.Upload) }
+func (h *RoleHandler) Routes(r Router) { r.Post("/roles", h.Create) }`,
+		filepath.Join(routeDir, "users.go"): `package http
+type CreateUserRequest struct { Username string ` + "`json:\"username\"`" + ` }
+func (h *UserHandler) Create(w Writer, r Request) { var body CreateUserRequest; decoder.Decode(&body) }
+func (h *UserHandler) Upload(w Writer, r Request) { r.FormFile("file") }`,
+		filepath.Join(routeDir, "roles.go"): `package http
+type CreateRoleRequest struct { Code string ` + "`json:\"code\"`" + ` }
+func (h *RoleHandler) Create(w Writer, r Request) { var body CreateRoleRequest; decoder.Decode(&body) }`,
+		filepath.Join(routeDir, "ignored_test.go"): `package http
+func (h *UserHandler) Create(w Writer, r Request) { var body IncorrectTestRequest; decoder.Decode(&body) }`,
+	}
+	for filename, contents := range files {
+		if err := os.WriteFile(filename, []byte(contents), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	operations, err := Discover(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath := make(map[string]Operation)
+	for _, operation := range operations {
+		byPath[operation.Path] = operation
+	}
+	if actual := byPath["/api/v1/example/users"].RequestType; actual != "CreateUserRequest" {
+		t.Errorf("user request type = %q, want CreateUserRequest", actual)
+	}
+	if actual := byPath["/api/v1/example/roles"].RequestType; actual != "CreateRoleRequest" {
+		t.Errorf("role request type = %q, want CreateRoleRequest", actual)
+	}
+	if actual := byPath["/api/v1/example/upload"].BodyKind; actual != "multipart/form-data" {
+		t.Errorf("upload body kind = %q, want multipart/form-data", actual)
+	}
+	contract, err := Generate(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"example_CreateUserRequest", "example_CreateRoleRequest", "MultipartUploadRequest"} {
+		if !bytes.Contains(contract, []byte("$ref: '#/components/schemas/"+name+"'")) {
+			t.Errorf("missing request schema reference for %s", name)
+		}
 	}
 }

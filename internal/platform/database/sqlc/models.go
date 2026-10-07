@@ -3139,6 +3139,7 @@ type ZatcaSubmissions struct {
 	ClearanceStatus pgtype.Text        `json:"clearance_status"`
 	ReportingStatus pgtype.Text        `json:"reporting_status"`
 	SubmittedAt     pgtype.Timestamptz `json:"submitted_at"`
+	Environment     string             `json:"environment"`
 }
 
 type ZatcaValidationMessages struct {

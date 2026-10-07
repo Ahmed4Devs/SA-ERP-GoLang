@@ -120,6 +120,17 @@ func (q *Queries) GetUserByUsernameOrEmail(ctx context.Context, lower string) (I
 	return i, err
 }
 
+const invalidateUserAuthentication = `-- name: InvalidateUserAuthentication :exec
+UPDATE iam.users
+SET version = version + 1, updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) InvalidateUserAuthentication(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, invalidateUserAuthentication, id)
+	return err
+}
+
 const updateUserLastLogin = `-- name: UpdateUserLastLogin :exec
 UPDATE iam.users
 SET last_login_at = now(),

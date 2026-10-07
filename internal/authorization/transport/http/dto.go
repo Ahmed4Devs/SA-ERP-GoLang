@@ -17,4 +17,5 @@ type RevokeRoleRequest struct {
 type CheckPermissionRequest struct {
 	Permission    string  `json:"permission"`
 	LegalEntityID *string `json:"legal_entity_id,omitempty"`
+	BranchID      *string `json:"branch_id,omitempty"`
 }

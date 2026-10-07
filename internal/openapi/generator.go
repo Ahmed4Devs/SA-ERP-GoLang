@@ -27,6 +27,7 @@ type Operation struct {
 	Handler     string
 	RequestType string
 	BodyKind    string
+	handlerKey  string
 }
 
 type ObjectSchema struct {
@@ -85,12 +86,27 @@ func Discover(repositoryRoot string) ([]Operation, error) {
 			}
 			return nil, err
 		}
+		// Routes and their handlers can live in different files of the package.
+		// Resolve request metadata after collecting every handler in the module.
+		requestTypes := make(map[string]string)
+		bodyKinds := make(map[string]string)
+		moduleStart := len(operations)
 		err := filepath.WalkDir(routeDir, func(filename string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
 			}
 			if entry.IsDir() || !strings.HasSuffix(filename, ".go") || strings.HasSuffix(filename, "_test.go") {
 				return nil
+			}
+			parsed, err := parser.ParseFile(token.NewFileSet(), filename, nil, 0)
+			if err != nil {
+				return err
+			}
+			for handler, requestType := range discoverHandlerRequestTypes(parsed) {
+				requestTypes[filepath.Dir(filename)+":"+parsed.Name.Name+":"+handler] = requestType
+			}
+			for handler, bodyKind := range discoverMultipartHandlers(parsed) {
+				bodyKinds[filepath.Dir(filename)+":"+parsed.Name.Name+":"+handler] = bodyKind
 			}
 			routes, err := discoverRoutes(filename, module, prefix)
 			if err != nil {
@@ -101,6 +117,10 @@ func Discover(repositoryRoot string) ([]Operation, error) {
 		})
 		if err != nil {
 			return nil, err
+		}
+		for i := moduleStart; i < len(operations); i++ {
+			operations[i].RequestType = requestTypes[operations[i].handlerKey]
+			operations[i].BodyKind = bodyKinds[operations[i].handlerKey]
 		}
 	}
 
@@ -157,42 +177,70 @@ func discoverRoutes(filename, module, prefix string) ([]Operation, error) {
 	requestTypes := discoverHandlerRequestTypes(parsed)
 	multipartHandlers := discoverMultipartHandlers(parsed)
 	var routes []Operation
-	ast.Inspect(parsed, func(node ast.Node) bool {
-		call, ok := node.(*ast.CallExpr)
-		if !ok || len(call.Args) == 0 {
+	for _, declaration := range parsed.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Body == nil {
+			continue
+		}
+		ast.Inspect(function.Body, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok || len(call.Args) == 0 {
+				return true
+			}
+			selector, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			method, ok := httpMethods[selector.Sel.Name]
+			if !ok {
+				return true
+			}
+			if _, ok := selector.X.(*ast.Ident); !ok {
+				return true
+			}
+			route, ok := stringLiteral(call.Args[0])
+			if !ok || !strings.HasPrefix(route, "/") {
+				return true
+			}
+			fullPath := path.Join(prefix, route)
+			if route == "/" {
+				fullPath = strings.TrimSuffix(prefix, "/")
+			}
+			handler := handlerName(call.Args)
+			key := handler
+			if len(call.Args) > 1 && function.Recv != nil {
+				if selected, ok := call.Args[1].(*ast.SelectorExpr); ok {
+					if receiver, ok := selected.X.(*ast.Ident); ok {
+						for _, field := range function.Recv.List {
+							for _, name := range field.Names {
+								if name.Name == receiver.Name {
+									key = localTypeName(field.Type) + "." + handler
+								}
+							}
+						}
+					}
+				}
+			}
+			routes = append(routes, Operation{
+				Method:      method,
+				Path:        fullPath,
+				Module:      module,
+				Handler:     handler,
+				RequestType: requestTypes[key],
+				BodyKind:    multipartHandlers[key],
+				handlerKey:  filepath.Dir(filename) + ":" + parsed.Name.Name + ":" + key,
+			})
 			return true
-		}
-		selector, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok {
-			return true
-		}
-		method, ok := httpMethods[selector.Sel.Name]
-		if !ok {
-			return true
-		}
-		if _, ok := selector.X.(*ast.Ident); !ok {
-			return true
-		}
-		route, ok := stringLiteral(call.Args[0])
-		if !ok || !strings.HasPrefix(route, "/") {
-			return true
-		}
-		fullPath := path.Join(prefix, route)
-		if route == "/" {
-			fullPath = strings.TrimSuffix(prefix, "/")
-		}
-		handler := handlerName(call.Args)
-		routes = append(routes, Operation{
-			Method:      method,
-			Path:        fullPath,
-			Module:      module,
-			Handler:     handler,
-			RequestType: requestTypes[handler],
-			BodyKind:    multipartHandlers[handler],
 		})
-		return true
-	})
+	}
 	return routes, nil
+}
+
+func functionKey(function *ast.FuncDecl) string {
+	if function.Recv != nil && len(function.Recv.List) > 0 {
+		return localTypeName(function.Recv.List[0].Type) + "." + function.Name.Name
+	}
+	return function.Name.Name
 }
 
 func discoverMultipartHandlers(file *ast.File) map[string]string {
@@ -209,7 +257,7 @@ func discoverMultipartHandlers(file *ast.File) map[string]string {
 			}
 			selector, ok := call.Fun.(*ast.SelectorExpr)
 			if ok && (selector.Sel.Name == "FormFile" || selector.Sel.Name == "ParseMultipartForm") {
-				result[function.Name.Name] = "multipart/form-data"
+				result[functionKey(function)] = "multipart/form-data"
 			}
 			return true
 		})
@@ -279,7 +327,7 @@ func discoverHandlerRequestTypes(file *ast.File) map[string]string {
 					return true
 				}
 				if typeName := localTypeName(variables[name.Name]); typeName != "" {
-					result[function.Name.Name] = typeName
+					result[functionKey(function)] = typeName
 				}
 			}
 			return true
@@ -561,6 +609,14 @@ func writeParameters(output *bytes.Buffer, operation Operation) {
 	if includeTenant {
 		output.WriteString("        - $ref: '#/components/parameters/LegalEntityQuery'\n")
 		output.WriteString("        - $ref: '#/components/parameters/LegalEntityHeader'\n")
+	}
+	if operation.Method == "get" && operation.Path == "/api/v1/authz/assignments" {
+		output.WriteString("        - name: user_id\n          in: query\n          required: true\n          schema:\n            type: string\n            format: uuid\n")
+	}
+	if operation.Method == "get" && operation.Path == "/api/v1/auth/users" {
+		output.WriteString("        - name: search\n          in: query\n          schema:\n            type: string\n            maxLength: 200\n")
+		output.WriteString("        - name: limit\n          in: query\n          schema:\n            type: integer\n            minimum: 1\n            maximum: 100\n            default: 50\n")
+		output.WriteString("        - name: offset\n          in: query\n          schema:\n            type: integer\n            minimum: 0\n            default: 0\n")
 	}
 }
 

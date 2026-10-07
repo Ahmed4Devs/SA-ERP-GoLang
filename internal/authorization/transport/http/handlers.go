@@ -38,14 +38,36 @@ func (h *AuthorizationHandler) Routes(authMiddleware func(http.Handler) http.Han
 		if authMiddleware != nil {
 			r.Use(authMiddleware)
 		}
-		r.Use(RequireModuleAccess(h.authzService, "authz.view", "authz.manage"))
-		r.Get("/roles", h.ListRoles)
-		r.Get("/permissions", h.ListPermissions)
-		r.Post("/assignments", h.AssignRole)
-		r.Post("/assignments/revoke", h.RevokeRole)
+		// Role administration is deployment-wide. Never infer authority from
+		// the target entity carried by the assignment request.
+		r.Group(func(read chi.Router) {
+			read.Use(RequirePermission(h.authzService, "authz.view", nil))
+			read.Get("/roles", h.ListRoles)
+			read.Get("/permissions", h.ListPermissions)
+			read.Get("/assignments", h.ListAssignments)
+		})
+		r.Group(func(write chi.Router) {
+			write.Use(RequirePermission(h.authzService, "authz.manage", nil))
+			write.Post("/assignments", h.AssignRole)
+			write.Post("/assignments/revoke", h.RevokeRole)
+		})
 	})
 
 	return r
+}
+
+func (h *AuthorizationHandler) ListAssignments(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.URL.Query().Get("user_id"))
+	if err != nil || id == uuid.Nil {
+		writeError(w, http.StatusBadRequest, "INVALID_PARAM", "Valid user_id is required")
+		return
+	}
+	assignments, err := h.authzService.ListUserAssignments(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Unable to list assignments")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": assignments})
 }
 
 func (h *AuthorizationHandler) ListRoles(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +114,9 @@ func (h *AuthorizationHandler) GetMyPermissions(w http.ResponseWriter, r *http.R
 	if entityStr := r.URL.Query().Get("legal_entity_id"); entityStr != "" {
 		if parsed, err := uuid.Parse(entityStr); err == nil {
 			leID = &parsed
+		} else {
+			writeError(w, http.StatusBadRequest, "INVALID_PARAM", "Invalid legal_entity_id")
+			return
 		}
 	}
 
@@ -118,15 +143,28 @@ func (h *AuthorizationHandler) CheckPermission(w http.ResponseWriter, r *http.Re
 
 	var leID *uuid.UUID
 	if req.LegalEntityID != nil && *req.LegalEntityID != "" {
-		if parsed, err := uuid.Parse(*req.LegalEntityID); err == nil {
+		if parsed, err := uuid.Parse(*req.LegalEntityID); err == nil && parsed != uuid.Nil {
 			leID = &parsed
+		} else {
+			writeError(w, http.StatusBadRequest, "INVALID_PARAM", "Invalid legal_entity_id")
+			return
 		}
 	}
 
+	var brID *uuid.UUID
+	if req.BranchID != nil && *req.BranchID != "" {
+		parsed, err := uuid.Parse(*req.BranchID)
+		if err != nil || parsed == uuid.Nil {
+			writeError(w, http.StatusBadRequest, "INVALID_PARAM", "Invalid branch_id")
+			return
+		}
+		brID = &parsed
+	}
 	decision, err := h.authzService.Authorize(r.Context(), domain.AuthorizationRequest{
 		UserID:        user.ID,
 		Permission:    req.Permission,
 		LegalEntityID: leID,
+		BranchID:      brID,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
@@ -157,15 +195,21 @@ func (h *AuthorizationHandler) AssignRole(w http.ResponseWriter, r *http.Request
 
 	var leID *uuid.UUID
 	if req.LegalEntityID != nil && *req.LegalEntityID != "" {
-		if parsed, err := uuid.Parse(*req.LegalEntityID); err == nil {
+		if parsed, err := uuid.Parse(*req.LegalEntityID); err == nil && parsed != uuid.Nil {
 			leID = &parsed
+		} else {
+			writeError(w, http.StatusBadRequest, "INVALID_PARAM", "Invalid legal_entity_id")
+			return
 		}
 	}
 
 	var brID *uuid.UUID
 	if req.BranchID != nil && *req.BranchID != "" {
-		if parsed, err := uuid.Parse(*req.BranchID); err == nil {
+		if parsed, err := uuid.Parse(*req.BranchID); err == nil && parsed != uuid.Nil {
 			brID = &parsed
+		} else {
+			writeError(w, http.StatusBadRequest, "INVALID_PARAM", "Invalid branch_id")
+			return
 		}
 	}
 
@@ -199,15 +243,21 @@ func (h *AuthorizationHandler) RevokeRole(w http.ResponseWriter, r *http.Request
 
 	var leID *uuid.UUID
 	if req.LegalEntityID != nil && *req.LegalEntityID != "" {
-		if parsed, err := uuid.Parse(*req.LegalEntityID); err == nil {
+		if parsed, err := uuid.Parse(*req.LegalEntityID); err == nil && parsed != uuid.Nil {
 			leID = &parsed
+		} else {
+			writeError(w, http.StatusBadRequest, "INVALID_PARAM", "Invalid legal_entity_id")
+			return
 		}
 	}
 
 	var brID *uuid.UUID
 	if req.BranchID != nil && *req.BranchID != "" {
-		if parsed, err := uuid.Parse(*req.BranchID); err == nil {
+		if parsed, err := uuid.Parse(*req.BranchID); err == nil && parsed != uuid.Nil {
 			brID = &parsed
+		} else {
+			writeError(w, http.StatusBadRequest, "INVALID_PARAM", "Invalid branch_id")
+			return
 		}
 	}
 

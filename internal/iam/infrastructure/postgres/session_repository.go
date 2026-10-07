@@ -99,5 +99,8 @@ func (r *SessionRepository) DeleteByTokenHash(ctx context.Context, tokenHash str
 
 func (r *SessionRepository) DeleteAllForUser(ctx context.Context, userID uuid.UUID) error {
 	queries := sqlc.New(r.db.DBTX(ctx))
+	if _, err := r.db.DBTX(ctx).Exec(ctx, "DELETE FROM iam.mfa_login_challenges WHERE user_id = $1", userID); err != nil {
+		return err
+	}
 	return queries.DeleteAllSessionsForUser(ctx, pgtype.UUID{Bytes: userID, Valid: true})
 }

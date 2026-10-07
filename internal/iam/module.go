@@ -3,6 +3,7 @@ package iam
 import (
 	"net/http"
 
+	authzports "erp/internal/authorization/ports"
 	"erp/internal/iam/application/services"
 	"erp/internal/iam/infrastructure/crypto"
 	"erp/internal/iam/infrastructure/postgres"
@@ -14,6 +15,7 @@ import (
 )
 
 type Module struct {
+	UserService *services.UserManagementService
 	AuthService *services.AuthService
 	MFAService  *services.MFAService
 	Handler     *iamhttp.AuthHandler
@@ -42,17 +44,23 @@ func NewModule(cfg *config.Config, db *database.DB, txManager transaction.Manage
 	if cfg.Security.MFAKey != "" {
 		secretBox, _ = crypto.NewSecretBox(cfg.Security.MFAKey)
 	}
-	mfaService := services.NewMFAService(mfaRepo, tokenGen, secretBox, txManager, cfg.AppName)
+	mfaService := services.NewMFAService(mfaRepo, userRepo, tokenGen, secretBox, txManager, cfg.AppName)
 	authService.SetMFAService(mfaService)
+	users := services.NewUserManagementService(postgres.NewManagedUserRepository(db), passwordRepo, sessionRepo, hasher, txManager)
 
 	isProd := cfg.Environment == config.EnvProduction
 	handler := iamhttp.NewAuthHandler(authService, mfaService, isProd)
 
 	return &Module{
+		UserService: users,
 		AuthService: authService,
 		MFAService:  mfaService,
 		Handler:     handler,
 	}
+}
+
+func (m *Module) ConfigureUserManagement(authorizer authzports.AuthorizationService) {
+	m.Handler.ConfigureUserManagement(m.UserService, authorizer)
 }
 
 func (m *Module) RegisterRoutes(r chi.Router, auditMiddleware ...func(http.Handler) http.Handler) {

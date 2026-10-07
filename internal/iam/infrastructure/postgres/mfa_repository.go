@@ -112,16 +112,18 @@ func (r *MFARepository) CreateChallenge(ctx context.Context, challenge *domain.M
 	row := r.db.DBTX(ctx).QueryRow(ctx, `
 		INSERT INTO iam.mfa_login_challenges (user_id, token_hash, ip_address, user_agent, expires_at)
 		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5)
-		RETURNING id, user_id, token_hash, COALESCE(ip_address, ''), COALESCE(user_agent, ''), attempt_count, expires_at`,
+		RETURNING id, user_id, token_hash, COALESCE(ip_address, ''), COALESCE(user_agent, ''), attempt_count, expires_at,
+		(SELECT version FROM iam.users WHERE id = $1)`,
 		challenge.UserID, challenge.TokenHash, challenge.IPAddress, challenge.UserAgent, challenge.ExpiresAt)
 	return scanChallenge(row)
 }
 
 func (r *MFARepository) GetActiveChallenge(ctx context.Context, tokenHash string) (*domain.MFAChallenge, error) {
 	challenge, err := scanChallenge(r.db.DBTX(ctx).QueryRow(ctx, `
-		SELECT id, user_id, token_hash, COALESCE(ip_address, ''), COALESCE(user_agent, ''), attempt_count, expires_at
-		FROM iam.mfa_login_challenges
-		WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > now() AND attempt_count < 5`, tokenHash))
+		SELECT c.id, c.user_id, c.token_hash, COALESCE(c.ip_address, ''), COALESCE(c.user_agent, ''), c.attempt_count, c.expires_at, u.version
+		FROM iam.mfa_login_challenges c JOIN iam.users u ON u.id = c.user_id
+		WHERE c.token_hash = $1 AND c.consumed_at IS NULL AND c.expires_at > now() AND c.attempt_count < 5 AND u.status = 'ACTIVE'
+		FOR UPDATE OF c`, tokenHash))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrMFAChallengeExpired
 	}
@@ -130,6 +132,11 @@ func (r *MFARepository) GetActiveChallenge(ctx context.Context, tokenHash string
 
 func (r *MFARepository) IncrementChallengeAttempts(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.DBTX(ctx).Exec(ctx, `UPDATE iam.mfa_login_challenges SET attempt_count = attempt_count + 1 WHERE id = $1 AND consumed_at IS NULL AND attempt_count < 5`, id)
+	return err
+}
+
+func (r *MFARepository) DeleteLoginChallenges(ctx context.Context, userID uuid.UUID) error {
+	_, err := r.db.DBTX(ctx).Exec(ctx, "DELETE FROM iam.mfa_login_challenges WHERE user_id=$1", userID)
 	return err
 }
 
@@ -159,7 +166,7 @@ func scanFactor(row rowScanner) (*domain.MFAFactor, error) {
 
 func scanChallenge(row rowScanner) (*domain.MFAChallenge, error) {
 	var challenge domain.MFAChallenge
-	if err := row.Scan(&challenge.ID, &challenge.UserID, &challenge.TokenHash, &challenge.IPAddress, &challenge.UserAgent, &challenge.AttemptCount, &challenge.ExpiresAt); err != nil {
+	if err := row.Scan(&challenge.ID, &challenge.UserID, &challenge.TokenHash, &challenge.IPAddress, &challenge.UserAgent, &challenge.AttemptCount, &challenge.ExpiresAt, &challenge.UserVersion); err != nil {
 		return nil, err
 	}
 	return &challenge, nil

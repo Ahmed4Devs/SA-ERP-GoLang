@@ -36,3 +36,8 @@ SET status = $2,
     updated_at = now(),
     version = version + 1
 WHERE id = $1;
+
+-- name: InvalidateUserAuthentication :exec
+UPDATE iam.users
+SET version = version + 1, updated_at = now()
+WHERE id = $1;

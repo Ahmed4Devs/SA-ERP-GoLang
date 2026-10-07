@@ -149,6 +149,7 @@ func main() {
 
 		// C. Authorization Module
 		authzModule := authorization.NewModule(cfg, db)
+		iamModule.ConfigureUserManagement(authzModule.Service)
 		authMiddleware := iamModule.AuthMiddleware()
 		moduleAccess := func(viewPermission, managePermission string) func(http.Handler) http.Handler {
 			authorize := authzModule.RequireModuleAccess(viewPermission, managePermission)

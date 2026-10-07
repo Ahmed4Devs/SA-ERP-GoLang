@@ -28,7 +28,7 @@ func NewAuthorizationService(
 	}
 }
 
-// Authorize implements the canonical Section 34 contract with fast caching and legal entity scope enforcement.
+// Authorize enforces current database grants in legal-entity and branch scope.
 func (s *AuthorizationService) Authorize(ctx context.Context, request domain.AuthorizationRequest) (domain.AuthorizationDecision, error) {
 	if request.UserID == uuid.Nil {
 		return domain.AuthorizationDecision{
@@ -45,9 +45,21 @@ func (s *AuthorizationService) Authorize(ctx context.Context, request domain.Aut
 		}, nil
 	}
 
-	// 1. Try cache lookup
-	permissions, found := s.cache.Get(ctx, request.UserID, request.LegalEntityID)
-	if !found {
+	// Enforcement reads PostgreSQL each time: process-local cache invalidation
+	// cannot make role revocation immediate across API replicas.
+	var permissions []string
+	if request.BranchID != nil {
+		if request.LegalEntityID == nil || *request.LegalEntityID == uuid.Nil || *request.BranchID == uuid.Nil {
+			return domain.AuthorizationDecision{Allowed: false, Reason: "branch requires a legal entity"}, nil
+		}
+		// The entity cache cannot represent a branch grant. Query this scope
+		// directly so a grant in one branch never contaminates another.
+		var err error
+		permissions, err = s.assignmentRepo.GetPermissionsInBranch(ctx, request.UserID, *request.LegalEntityID, *request.BranchID)
+		if err != nil {
+			return domain.AuthorizationDecision{Allowed: false}, err
+		}
+	} else {
 		// 2. Query database for permissions in this user + legal entity scope
 		var err error
 		permissions, err = s.assignmentRepo.GetPermissionsInScope(ctx, request.UserID, request.LegalEntityID)
@@ -114,11 +126,6 @@ func (s *AuthorizationService) RevokeRole(ctx context.Context, userID, roleID uu
 }
 
 func (s *AuthorizationService) GetUserPermissions(ctx context.Context, userID uuid.UUID, legalEntityID *uuid.UUID) ([]string, error) {
-	// Try cache first
-	if perms, found := s.cache.Get(ctx, userID, legalEntityID); found {
-		return perms, nil
-	}
-
 	perms, err := s.assignmentRepo.GetPermissionsInScope(ctx, userID, legalEntityID)
 	if err != nil {
 		return nil, err

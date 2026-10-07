@@ -21,6 +21,7 @@ type AssignmentRepository interface {
 	Revoke(ctx context.Context, userID, roleID uuid.UUID, legalEntityID, branchID *uuid.UUID) error
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]*domain.RoleAssignment, error)
 	GetPermissionsInScope(ctx context.Context, userID uuid.UUID, legalEntityID *uuid.UUID) ([]string, error)
+	GetPermissionsInBranch(ctx context.Context, userID, legalEntityID, branchID uuid.UUID) ([]string, error)
 }
 
 type PolicyCache interface {

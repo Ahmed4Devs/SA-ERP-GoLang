@@ -96,51 +96,80 @@ func (s *AuthService) Login(ctx context.Context, identifier, password, ip, userA
 		}
 	}
 
-	// 5. Record Success & Update Last Login
-	_ = s.attemptRepo.Record(ctx, identifier, ip, true)
-	_ = s.userRepo.UpdateLastLogin(ctx, user.ID)
-
-	// 6. Generate Session Token and Hash
-	rawToken, tokenHash, err := s.tokens.GenerateSessionToken()
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("failed to generate session token: %w", err)
+	session, rawToken, currentUser, err := s.CreateSessionForUser(ctx, user.ID, user.Version, ip, userAgent)
+	if err == nil {
+		_ = s.attemptRepo.Record(ctx, identifier, ip, true)
 	}
-
-	// 7. Create Session
-	session := &domain.Session{
-		UserID:    user.ID,
-		TokenHash: tokenHash,
-		IPAddress: ip,
-		UserAgent: userAgent,
-		ExpiresAt: time.Now().Add(s.sessionTTL),
-	}
-
-	createdSession, err := s.sessionRepo.Create(ctx, session)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("failed to persist session: %w", err)
-	}
-
-	return createdSession, rawToken, user, nil
+	return session, rawToken, currentUser, err
 }
 
-func (s *AuthService) CreateSessionForUser(ctx context.Context, userID uuid.UUID, ip, userAgent string) (*domain.Session, string, *domain.User, error) {
-	user, err := s.userRepo.GetByID(ctx, userID)
-	if err != nil {
-		return nil, "", nil, err
+// CreateMFAChallenge rejects a password verification superseded by a password
+// reset or status change, including changes while password hashing was running.
+func (s *AuthService) CreateMFAChallenge(ctx context.Context, verifiedUser *domain.User, ip, userAgent string) (string, time.Time, error) {
+	if verifiedUser == nil || verifiedUser.Version < 1 {
+		return "", time.Time{}, domain.ErrInvalidCredentials
 	}
-	if !user.CanLogin() {
-		return nil, "", nil, domain.ErrUserDisabled
-	}
-	_ = s.userRepo.UpdateLastLogin(ctx, user.ID)
-	rawToken, tokenHash, err := s.tokens.GenerateSessionToken()
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("failed to generate session token: %w", err)
-	}
-	createdSession, err := s.sessionRepo.Create(ctx, &domain.Session{
-		UserID: user.ID, TokenHash: tokenHash, IPAddress: ip, UserAgent: userAgent, ExpiresAt: time.Now().Add(s.sessionTTL),
+	var token string
+	var expires time.Time
+	err := s.txManager.WithinTx(ctx, func(ctx context.Context) error {
+		user, err := s.userRepo.Lock(ctx, verifiedUser.ID)
+		if err != nil {
+			return err
+		}
+		if !user.CanLogin() {
+			return domain.ErrUserDisabled
+		}
+		if user.Version != verifiedUser.Version {
+			return domain.ErrInvalidCredentials
+		}
+		if s.mfa == nil {
+			return domain.ErrMFAUnavailable
+		}
+		token, expires, err = s.mfa.createLoginChallenge(ctx, user.ID, ip, userAgent)
+		return err
 	})
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("failed to persist session: %w", err)
+		return "", time.Time{}, err
+	}
+	return token, expires, nil
+}
+
+// CreateSessionForUser requires the user version observed during authentication.
+// The user lock orders issuance against password reset and account suspension.
+func (s *AuthService) CreateSessionForUser(ctx context.Context, userID uuid.UUID, expectedVersion int64, ip, userAgent string) (*domain.Session, string, *domain.User, error) {
+	var user *domain.User
+	var createdSession *domain.Session
+	var rawToken string
+	err := s.txManager.WithinTx(ctx, func(ctx context.Context) error {
+		var err error
+		user, err = s.userRepo.Lock(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if !user.CanLogin() {
+			return domain.ErrUserDisabled
+		}
+		if expectedVersion < 1 || user.Version != expectedVersion {
+			return domain.ErrInvalidCredentials
+		}
+		if err := s.userRepo.UpdateLastLogin(ctx, user.ID); err != nil {
+			return err
+		}
+		var tokenHash string
+		rawToken, tokenHash, err = s.tokens.GenerateSessionToken()
+		if err != nil {
+			return fmt.Errorf("failed to generate session token: %w", err)
+		}
+		createdSession, err = s.sessionRepo.Create(ctx, &domain.Session{
+			UserID: user.ID, TokenHash: tokenHash, IPAddress: ip, UserAgent: userAgent, ExpiresAt: time.Now().Add(s.sessionTTL),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to persist session: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, "", nil, err
 	}
 	return createdSession, rawToken, user, nil
 }
@@ -182,7 +211,15 @@ func (s *AuthService) Logout(ctx context.Context, rawToken string) error {
 }
 
 func (s *AuthService) LogoutAll(ctx context.Context, userID uuid.UUID) error {
-	return s.sessionRepo.DeleteAllForUser(ctx, userID)
+	return s.txManager.WithinTx(ctx, func(ctx context.Context) error {
+		if _, err := s.userRepo.Lock(ctx, userID); err != nil {
+			return err
+		}
+		if err := s.userRepo.InvalidateAuthentication(ctx, userID); err != nil {
+			return err
+		}
+		return s.sessionRepo.DeleteAllForUser(ctx, userID)
+	})
 }
 
 func (s *AuthService) SeedAdmin(ctx context.Context, username, email, displayName, password string) (*domain.User, error) {
